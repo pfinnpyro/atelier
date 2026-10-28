@@ -9,12 +9,12 @@ Windows is the first target. Linux and macOS come later.
 ## Status
 
 Phases 1 and 2 are done; phase 3 (drawing pages) is under way. Pages render
-with paths, strokes, clipping, colour and uncompressed or Flate images. Text,
-JPEG images, shadings and patterns are not drawn yet.
+with paths, strokes, clipping, colour, and uncompressed, Flate and JPEG images.
+Text, shadings and patterns are not drawn yet.
 
 | Crate | What it does |
 | --- | --- |
-| `atelier-filters` | Our own Flate (inflate and a compressor), LZW, ASCII85, ASCIIHex and RunLength, plus PNG and TIFF predictors |
+| `atelier-filters` | Our own Flate (inflate and a compressor), LZW, ASCII85, ASCIIHex and RunLength, PNG and TIFF predictors, and a JPEG decoder (baseline and progressive) |
 | `atelier-syntax` | Lexer, object model, xref tables, xref streams, object streams, incremental updates, broken-file repair, page tree, content stream parsing |
 | `atelier-raster` | Our rasterizer: exact-area anti-aliased fills (non-zero and even-odd), strokes with joins, caps and dashes, clip masks, image drawing |
 | `atelier-render` | Content stream interpreter, graphics state, colour spaces, Form XObjects, images |
@@ -47,7 +47,7 @@ atelier render <file.pdf> <page|all> [--dpi N] [-o out.png]
 ## Comparing against a reference renderer
 
 `tools/make_samples.py DIR` writes small test PDFs that exercise fills, strokes,
-clipping, colour, images and forms. `tools/refdiff.py FILE...` renders them with
+clipping, colour, images, JPEG images and forms. `tools/refdiff.py FILE...` renders them with
 Atelier and with poppler's `pdftoppm` and prints how many pixels differ.
 
 ## Roadmap

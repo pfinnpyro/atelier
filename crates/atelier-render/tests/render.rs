@@ -280,3 +280,64 @@ fn random_content_never_panics() {
         );
     }
 }
+
+fn near(a: [u8; 3], b: [u8; 3]) -> bool {
+    a.iter().zip(b).all(|(&x, y)| x.abs_diff(y) <= 8)
+}
+
+#[test]
+fn jpeg_image_with_jpeg_soft_mask() {
+    // 16x16 JPEG: red left half, blue right half. Its soft mask is a gray
+    // JPEG, opaque on top and clear at the bottom. The dictionary's wrong
+    // Width and missing ColorSpace are overridden by the JPEG itself.
+    let jpeg = include_bytes!("data/red_blue.jpg");
+    let mask = include_bytes!("data/half_mask.jpg");
+    let image = stream(
+        "/Type /XObject /Subtype /Image /Width 3 /Height 16 /BitsPerComponent 8 \
+         /Filter /DCTDecode /SMask 6 0 R",
+        jpeg,
+    );
+    let smask = stream(
+        "/Type /XObject /Subtype /Image /Width 16 /Height 16 /ColorSpace /DeviceGray \
+         /BitsPerComponent 8 /Filter /DCTDecode",
+        mask,
+    );
+    let p = render_with(
+        "",
+        b"q 100 0 0 100 0 0 cm /I Do Q",
+        "<< /XObject << /I 5 0 R >> >>",
+        &[image, smask],
+    );
+    assert!(near(at(&p, 20, 80), RED), "{:?}", at(&p, 20, 80));
+    assert!(near(at(&p, 80, 80), BLUE), "{:?}", at(&p, 80, 80));
+    assert!(near(at(&p, 20, 20), WHITE), "{:?}", at(&p, 20, 20));
+    assert!(near(at(&p, 80, 20), WHITE), "{:?}", at(&p, 80, 20));
+}
+
+#[test]
+fn broken_jpeg_is_skipped_with_a_warning() {
+    let image = stream(
+        "/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB \
+         /BitsPerComponent 8 /Filter /DCTDecode",
+        b"\xff\xd8not a jpeg",
+    );
+    let doc = Document::open(build(
+        "",
+        b"q 100 0 0 100 0 0 cm /I Do Q",
+        "<< /XObject << /I 5 0 R >> >>",
+        &[image],
+    ))
+    .unwrap();
+    let page = &doc.pages().unwrap()[0];
+    let options = RenderOptions {
+        scale: 1.0,
+        ..RenderOptions::default()
+    };
+    let r = render_page(&doc, page, &options).unwrap();
+    assert!(
+        r.warnings.iter().any(|w| w.contains("JPEG")),
+        "{:?}",
+        r.warnings
+    );
+    assert_eq!(at(&r.pixmap, 50, 50), WHITE);
+}
