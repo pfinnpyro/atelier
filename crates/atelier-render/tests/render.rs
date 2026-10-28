@@ -529,3 +529,145 @@ fn separation_uses_its_tint_transform() {
     assert_eq!(at(&p, 25, 50), RED);
     assert_eq!(at(&p, 75, 50), BLUE);
 }
+
+#[test]
+fn multiply_blend_mode_darkens() {
+    // Red, then 50% grey multiplied over half of it.
+    let p = render_with(
+        "",
+        b"1 0 0 rg 0 0 100 100 re f /M gs 0.5 g 50 0 50 100 re f",
+        "<< /ExtGState << /M << /BM /Multiply >> >> >>",
+        &[],
+    );
+    assert_eq!(at(&p, 25, 50), RED);
+    assert!(near(at(&p, 75, 50), [128, 0, 0]), "{:?}", at(&p, 75, 50));
+}
+
+#[test]
+fn blend_mode_array_and_q_restore() {
+    // The first known mode in the array wins; Q goes back to Normal.
+    let p = render_with(
+        "",
+        b"0 0 1 rg 0 0 100 100 re f q /S gs 1 0 0 rg 0 0 50 100 re f Q 1 0 0 rg 50 0 50 50 re f",
+        "<< /ExtGState << /S << /BM [/NoSuchMode /Screen] >> >> >>",
+        &[],
+    );
+    assert_eq!(at(&p, 25, 50), [255, 0, 255]);
+    assert_eq!(at(&p, 75, 25), RED);
+    assert_eq!(at(&p, 75, 75), BLUE);
+}
+
+#[test]
+fn luminosity_soft_mask_fades_painting() {
+    // The mask group is white on the left half, black on the right, and
+    // 50% grey in the top right corner.
+    let group = stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 100 100] \
+         /Group << /S /Transparency /CS /DeviceGray >>",
+        b"1 g 0 0 50 100 re f 0.5 g 50 50 50 50 re f",
+    );
+    let p = render_with(
+        "",
+        b"/SM gs 0 0 1 rg 0 0 100 100 re f",
+        "<< /ExtGState << /SM << /SMask << /S /Luminosity /G 5 0 R >> >> >> >>",
+        &[group],
+    );
+    assert_eq!(at(&p, 25, 50), BLUE);
+    assert_eq!(at(&p, 75, 25), WHITE);
+    assert!(
+        near(at(&p, 75, 75), [127, 127, 255]),
+        "{:?}",
+        at(&p, 75, 75)
+    );
+}
+
+#[test]
+fn alpha_soft_mask_and_none_turns_it_off() {
+    let group = stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency >>",
+        b"0 0 0 rg 0 0 100 50 re f",
+    );
+    let p = render_with(
+        "",
+        b"q /SM gs 1 0 0 rg 0 0 100 100 re f Q /Off gs 0 0 1 rg 0 0 20 20 re f",
+        "<< /ExtGState << /SM << /SMask << /S /Alpha /G 5 0 R >> >> \
+           /Off << /SMask /None >> >> >>",
+        &[group],
+    );
+    assert_eq!(at(&p, 50, 25), RED);
+    assert_eq!(at(&p, 50, 75), WHITE);
+    assert_eq!(at(&p, 10, 10), BLUE);
+}
+
+#[test]
+fn group_opacity_applies_to_the_group_as_a_whole() {
+    // Two overlapping opaque squares in a group drawn at 50%: the overlap
+    // is no darker than the rest.
+    let group = stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency >>",
+        b"0 0 1 rg 10 10 50 50 re f 40 40 50 50 re f",
+    );
+    let p = render_with(
+        "",
+        b"/H gs /G Do",
+        "<< /ExtGState << /H << /ca 0.5 >> >> /XObject << /G 5 0 R >> >>",
+        &[group],
+    );
+    let half = at(&p, 20, 20);
+    assert!(near(half, [127, 127, 255]), "{half:?}");
+    assert_eq!(at(&p, 50, 50), half);
+    assert_eq!(at(&p, 80, 80), half);
+    assert_eq!(at(&p, 80, 20), WHITE);
+}
+
+#[test]
+fn isolated_group_blends_against_nothing() {
+    // Inside an isolated group, Difference has nothing to mix with, so the
+    // green square keeps its colour over the red page.
+    let group = stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 100 100] \
+         /Group << /S /Transparency /I true >> /Resources << /ExtGState << /D << /BM /Difference >> >> >>",
+        b"/D gs 0 1 0 rg 20 20 60 60 re f",
+    );
+    let p = render_with(
+        "",
+        b"1 0 0 rg 0 0 100 100 re f /G Do",
+        "<< /XObject << /G 5 0 R >> >>",
+        &[group],
+    );
+    assert_eq!(at(&p, 50, 50), [0, 255, 0]);
+    assert_eq!(at(&p, 10, 10), RED);
+}
+
+#[test]
+fn group_is_clipped_by_the_page_clip() {
+    let group = stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency >>",
+        b"0 0 1 rg 0 0 100 100 re f",
+    );
+    let p = render_with(
+        "",
+        b"0 0 50 100 re W n /H gs /G Do",
+        "<< /ExtGState << /H << /ca 0.5 >> >> /XObject << /G 5 0 R >> >>",
+        &[group],
+    );
+    assert!(near(at(&p, 25, 50), [127, 127, 255]));
+    assert_eq!(at(&p, 75, 50), WHITE);
+}
+
+#[test]
+fn soft_mask_that_uses_itself_terminates() {
+    // The mask group sets the same soft mask while it is being drawn.
+    let group = stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency >> \
+         /Resources << /ExtGState << /SM 6 0 R >> >>",
+        b"/SM gs 0 g 0 0 100 100 re f",
+    );
+    let p = render_with(
+        "",
+        b"/SM gs 1 0 0 rg 0 0 100 100 re f",
+        "<< /ExtGState << /SM 6 0 R >> >>",
+        &[group, b"<< /SMask << /S /Alpha /G 5 0 R >> >>".to_vec()],
+    );
+    assert_eq!(at(&p, 50, 50), RED);
+}

@@ -477,6 +477,37 @@ SAMPLES["spot"] = single_page(
 )
 
 
+SAMPLES["transparency"] = single_page(
+    b"""
+1 0.8 0 rg 20 20 360 360 re f
+q /Mul gs 0 0.6 1 rg 40 220 150 150 re f Q
+q /Scr gs 0.8 0 0.4 rg 210 220 150 150 re f Q
+q /Lum gs 0.1 0.3 0.8 rg 40 40 150 150 re f Q
+q /Half gs /G Do Q
+""",
+    resources=b"<< /ExtGState << /Mul << /BM /Multiply >> /Scr << /BM /Screen >>"
+    b" /Half << /ca 0.5 /BM /HardLight >>"
+    b" /Lum << /SMask << /S /Luminosity /G 6 0 R >> >> >>"
+    b" /XObject << /G 5 0 R >> >>",
+    extra_objects=[
+        # 5: a group of two overlapping discs, composited as one at 50%.
+        stream(
+            b"/Type /XObject /Subtype /Form /BBox [200 30 380 200] /Group << /S /Transparency >>",
+            b"0 0.5 0 rg 270 115 m 270 160 250 190 220 190 c 220 40 l 250 40 270 70 270 115 c f"
+            b" 0 0 0.6 rg 220 60 140 120 re f",
+        ),
+        # 6: a soft mask fading from left to right, with a hole.
+        stream(
+            b"/Type /XObject /Subtype /Form /BBox [0 0 400 400]"
+            b" /Group << /S /Transparency /CS /DeviceGray >>"
+            b" /Resources << /Shading << /S << /ShadingType 2 /ColorSpace /DeviceGray"
+            b" /Coords [40 0 190 0] /Function << /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >> >> >> >>",
+            b"q 40 40 150 150 re W n /S sh Q 0 g 90 90 50 50 re f",
+        ),
+    ],
+)
+
+
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else "samples"
     os.makedirs(out_dir, exist_ok=True)

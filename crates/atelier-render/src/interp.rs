@@ -4,8 +4,9 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use atelier_raster::{
-    Color, FillRule, ImageSampling, LineCap, LineJoin, Mask, Path, PathBuilder, Pixmap, Point,
-    StrokeStyle, Transform, draw_image, fill_path, rasterize_in, stroke_to_path,
+    BlendMode, Color, Coverage, FillRule, ImageSampling, LineCap, LineJoin, Mask, Path,
+    PathBuilder, Pixmap, Point, StrokeStyle, Transform, draw_image, fill_path, rasterize_in,
+    stroke_to_path,
 };
 use atelier_syntax::{
     ContentParser, Dict, Document, Name, ObjRef, Object, Operation, Page, Result, Stream,
@@ -13,6 +14,7 @@ use atelier_syntax::{
 
 use crate::colorspace::{self, ColorSpace};
 use crate::font::PdfFont;
+use crate::function::Functions;
 use crate::image;
 use crate::pattern::{Cell, Pattern, PatternKind};
 use crate::shading::Shading;
@@ -206,6 +208,9 @@ struct GraphicsState {
     stroke_pattern: Option<Rc<Pattern>>,
     /// Inside an uncoloured tiling pattern's cell every colour is this one.
     forced: Option<Color>,
+    blend: BlendMode,
+    /// The soft mask from the ExtGState, in device pixels.
+    soft_mask: Option<Rc<Coverage>>,
 }
 
 impl GraphicsState {
@@ -224,6 +229,8 @@ impl GraphicsState {
             fill_pattern: None,
             stroke_pattern: None,
             forced: None,
+            blend: BlendMode::Normal,
+            soft_mask: None,
         }
     }
 
@@ -267,6 +274,8 @@ struct Interpreter<'a> {
     base_ctm: Transform,
     /// How many pattern cells deep this interpreter is.
     pattern_depth: usize,
+    /// Soft masks already rendered, by mask group and transform.
+    soft_masks: HashMap<(ObjRef, [u64; 6]), Rc<Coverage>>,
 }
 
 fn nums(ops: &[Object]) -> Vec<f64> {
@@ -294,6 +303,7 @@ impl<'a> Interpreter<'a> {
             text: None,
             base_ctm: ctm,
             pattern_depth: 0,
+            soft_masks: HashMap::new(),
         }
     }
 
@@ -326,6 +336,7 @@ impl<'a> Interpreter<'a> {
         let o = &op.operands;
         let n = nums(o);
         let p = |i: usize| Point::new(n[i], n[i + 1]);
+        self.pixmap.set_blend(self.gs.blend);
         match op.operator {
             // Graphics state
             b"q" => {
@@ -648,10 +659,15 @@ impl<'a> Interpreter<'a> {
     /// The area drawing can reach: the clip's bounds, or the whole pixmap.
     fn drawable_area(&self) -> Area {
         let size = self.pixmap.bounds();
-        self.gs
+        let area = self
+            .gs
             .clip
             .as_ref()
-            .map_or((0, 0, size.0, size.1), |c| c.area)
+            .map_or((0, 0, size.0, size.1), |c| c.area);
+        match &self.gs.soft_mask {
+            Some(m) => intersect_area(area, (m.x, m.y, m.width, m.height)),
+            None => area,
+        }
     }
 
     fn paint_pattern(&mut self, pattern: &Pattern, device: &Path, rule: FillRule, alpha: f32) {
@@ -817,9 +833,19 @@ impl<'a> Interpreter<'a> {
     /// The clip mask for drawing a device-space shape, or `None` when
     /// nothing is clipped.
     fn clip_mask(&self, device: &Path) -> Option<Mask> {
-        let clip = self.gs.clip.as_ref()?;
         let size = self.pixmap.bounds();
-        Some(clip.mask(path_area(device, size), size))
+        let mut mask = self
+            .gs
+            .clip
+            .as_ref()
+            .map(|c| c.mask(path_area(device, size), size));
+        if let Some(soft) = &self.gs.soft_mask {
+            match &mut mask {
+                Some(m) => m.intersect(Some(soft)),
+                None => mask = Some(Mask::from_coverage(Some(soft), size.0, size.1)),
+            }
+        }
+        mask
     }
 
     /// Intersects the clip with a device-space path.
@@ -863,20 +889,26 @@ impl<'a> Interpreter<'a> {
                 b"CA" => self.gs.stroke_alpha = num.unwrap_or(1.0).clamp(0.0, 1.0) as f32,
                 b"ca" => self.gs.fill_alpha = num.unwrap_or(1.0).clamp(0.0, 1.0) as f32,
                 b"BM" => {
-                    let normal = match &value {
-                        Object::Name(n) => *n == b"Normal" || *n == b"Compatible",
+                    // An array lists modes in order of preference.
+                    let names: Vec<&[u8]> = match &value {
+                        Object::Name(n) => vec![n.as_bytes()],
                         Object::Array(a) => a
-                            .first()
-                            .and_then(Object::as_name)
-                            .is_some_and(|n| *n == b"Normal"),
-                        _ => true,
+                            .iter()
+                            .filter_map(Object::as_name)
+                            .map(|n| n.as_bytes())
+                            .collect(),
+                        _ => Vec::new(),
                     };
-                    if !normal {
-                        self.warn("blend modes are not supported yet; using Normal");
-                    }
+                    self.gs.blend = names
+                        .iter()
+                        .find_map(|n| BlendMode::from_name(n))
+                        .unwrap_or_default();
                 }
-                b"SMask" if !matches!(&value, Object::Name(n) if *n == b"None") => {
-                    self.warn("soft masks are not supported yet");
+                b"SMask" => {
+                    self.gs.soft_mask = match &value {
+                        Object::Dict(d) => self.soft_mask(d, resources),
+                        _ => None,
+                    };
                 }
                 _ => {}
             }
@@ -918,9 +950,247 @@ impl<'a> Interpreter<'a> {
             self.warn("form XObjects nest too deeply or recursively");
             return;
         }
-        if stream.dict.get(b"Group").is_some() {
-            self.warn("transparency groups are drawn as plain forms");
+        let doc = self.doc;
+        let group = doc
+            .get_key(&stream.dict, b"Group")
+            .ok()
+            .and_then(|g| g.as_dict().cloned())
+            .filter(|g| {
+                doc.get_key(g, b"S")
+                    .ok()
+                    .and_then(|s| s.as_name().map(|n| *n == b"Transparency"))
+                    .unwrap_or(false)
+            });
+        if let Some(group) = group {
+            let isolated = doc
+                .get_key(&group, b"I")
+                .ok()
+                .is_some_and(|v| matches!(v, Object::Bool(true)));
+            // A group composited normally onto its backdrop looks the same
+            // as drawing its content straight onto the page.
+            let plain = self.gs.blend == BlendMode::Normal
+                && self.gs.fill_alpha >= 1.0
+                && self.gs.soft_mask.is_none()
+                && !isolated;
+            if self.draw && !plain {
+                self.group(stream, r, parent_resources, depth);
+                return;
+            }
         }
+        self.form_content(stream, r, parent_resources, depth);
+    }
+
+    /// A form's matrix and its bounding box in device space.
+    fn form_geometry(&self, stream: &Stream) -> (Transform, Option<Path>) {
+        let matrix = self
+            .doc
+            .get_key(&stream.dict, b"Matrix")
+            .ok()
+            .and_then(|m| {
+                let v = nums(m.as_array()?);
+                (v.len() == 6).then(|| Transform::from_array([v[0], v[1], v[2], v[3], v[4], v[5]]))
+            })
+            .unwrap_or(Transform::IDENTITY);
+        let ctm = matrix.then(&self.gs.ctm);
+        let bbox = self.doc.get_key(&stream.dict, b"BBox").ok().and_then(|b| {
+            let v = nums(b.as_array()?);
+            (v.len() == 4).then(|| {
+                Path::rect(
+                    v[0].min(v[2]),
+                    v[1].min(v[3]),
+                    (v[2] - v[0]).abs(),
+                    (v[3] - v[1]).abs(),
+                )
+                .transform(&ctm)
+            })
+        });
+        (matrix, bbox)
+    }
+
+    /// A sub-interpreter drawing into `pixmap` with `ctm`, sharing this
+    /// one's limits and recursion guards.
+    fn sub_interpreter<'b>(&self, pixmap: &'b mut Pixmap, ctm: Transform) -> Interpreter<'b>
+    where
+        'a: 'b,
+    {
+        let mut sub = Interpreter::new(self.doc, pixmap, ctm);
+        sub.forms = self.forms.clone();
+        sub.operations = self.operations;
+        sub.pattern_depth = self.pattern_depth;
+        sub
+    }
+
+    /// Takes back what a sub-interpreter learned: its warnings and how much
+    /// work it did.
+    fn absorb(&mut self, operations: usize, warnings: Vec<String>) {
+        self.operations = operations;
+        for w in warnings {
+            self.warn(w);
+        }
+    }
+
+    /// Draws a transparency group: its content goes into a layer of its own,
+    /// which is then composited with the current alpha, blend mode and soft
+    /// mask.
+    fn group(&mut self, stream: &Stream, r: Option<ObjRef>, resources: &Dict, depth: usize) {
+        let size = self.pixmap.bounds();
+        let (_, bbox) = self.form_geometry(stream);
+        let mut area = self.drawable_area();
+        if let Some(b) = &bbox {
+            area = intersect_area(area, path_area(b, size));
+        }
+        if area.2 == 0 || area.3 == 0 {
+            return;
+        }
+        let mut layer = Pixmap::new(area.2, area.3);
+        let shift = Transform::translate(-(area.0 as f64), -(area.1 as f64));
+        let ctm = self.gs.ctm.then(&shift);
+        let (operations, warnings) = {
+            let mut sub = self.sub_interpreter(&mut layer, ctm);
+            // The group starts with a fresh compositing state; the clip is
+            // applied when the layer is composited.
+            sub.gs = GraphicsState {
+                ctm,
+                clip: None,
+                soft_mask: None,
+                blend: BlendMode::Normal,
+                fill_alpha: 1.0,
+                stroke_alpha: 1.0,
+                ..self.gs.clone()
+            };
+            sub.fonts = std::mem::take(&mut self.fonts);
+            sub.form_content(stream, r, resources, depth);
+            self.fonts = std::mem::take(&mut sub.fonts);
+            (sub.operations, sub.warnings)
+        };
+        self.absorb(operations, warnings);
+        let rect = Path::rect(area.0 as f64, area.1 as f64, area.2 as f64, area.3 as f64);
+        let clip = self.clip_mask(&rect);
+        self.pixmap.set_blend(self.gs.blend);
+        self.pixmap
+            .composite(&layer, (area.0, area.1), clip.as_ref(), self.gs.fill_alpha);
+    }
+
+    /// Renders an ExtGState soft mask (ISO 32000-2, 11.6.5.2) for the
+    /// current transform.
+    fn soft_mask(&mut self, dict: &Dict, resources: &Dict) -> Option<Rc<Coverage>> {
+        let doc = self.doc;
+        let g = dict.get(b"G")?;
+        let r = g.as_reference()?;
+        if self.forms.contains(&r) || self.forms.len() >= MAX_FORM_DEPTH {
+            return None;
+        }
+        let Ok(Object::Stream(stream)) = doc.resolve(g) else {
+            return None;
+        };
+        let key = (r, self.gs.ctm.to_array().map(f64::to_bits));
+        if let Some(mask) = self.soft_masks.get(&key) {
+            return Some(mask.clone());
+        }
+        let luminosity = doc
+            .get_key(dict, b"S")
+            .ok()
+            .and_then(|s| s.as_name().map(|n| *n == b"Luminosity"))
+            .unwrap_or(false);
+        let (w, h) = self.pixmap.bounds();
+        let mut pixmap = if luminosity {
+            // The backdrop is in the group's colour space; black by default.
+            let bc: Vec<f32> = doc
+                .get_key(dict, b"BC")
+                .ok()
+                .and_then(|b| {
+                    b.as_array().map(|a| {
+                        a.iter()
+                            .filter_map(Object::as_f64)
+                            .map(|v| v as f32)
+                            .collect()
+                    })
+                })
+                .unwrap_or_default();
+            let space = doc
+                .get_key(&stream.dict, b"Group")
+                .ok()
+                .and_then(|g| g.as_dict().and_then(|g| g.get(b"CS").cloned()))
+                .and_then(|cs| colorspace::parse(doc, &cs, resources));
+            let backdrop = match space {
+                Some(space) if bc.len() == space.components() => space.to_rgb(&bc),
+                _ => None,
+            }
+            .unwrap_or(Color::BLACK);
+            Pixmap::filled(w, h, backdrop)
+        } else {
+            Pixmap::new(w, h)
+        };
+        let transfer = match doc.get_key(dict, b"TR") {
+            Ok(Object::Name(_)) | Err(_) => None,
+            Ok(obj) => Functions::parse(doc, &obj),
+        };
+        let ctm = self.gs.ctm;
+        let (operations, warnings) = {
+            let mut sub = self.sub_interpreter(&mut pixmap, ctm);
+            sub.form_content(&stream, Some(r), resources, self.forms.len());
+            (sub.operations, sub.warnings)
+        };
+        self.absorb(operations, warnings);
+
+        let table: Vec<u8> = (0..256)
+            .map(|i| {
+                let v = i as f32 / 255.0;
+                let v = transfer
+                    .as_ref()
+                    .map_or(v, |f| f.eval(&[v]).first().copied().unwrap_or(v));
+                (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
+            })
+            .collect();
+        let data = pixmap.data();
+        let values: Vec<u8> = data
+            .chunks_exact(4)
+            .map(|px| {
+                let v = if luminosity {
+                    (77 * u32::from(px[0]) + 151 * u32::from(px[1]) + 28 * u32::from(px[2]) + 128)
+                        >> 8
+                } else {
+                    u32::from(px[3])
+                };
+                table[v.min(255) as usize]
+            })
+            .collect();
+        // Keep only the rows and columns the mask lets anything through.
+        let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
+        for y in 0..h {
+            let row = &values[y * w..(y + 1) * w];
+            if let Some(first) = row.iter().position(|&v| v != 0) {
+                let last = row.iter().rposition(|&v| v != 0).unwrap_or(first);
+                x0 = x0.min(first);
+                x1 = x1.max(last + 1);
+                y0 = y0.min(y);
+                y1 = y + 1;
+            }
+        }
+        let (cw, ch) = (x1.saturating_sub(x0), y1.saturating_sub(y0));
+        let mut cropped = Vec::with_capacity(cw * ch);
+        for y in y0..y1 {
+            cropped.extend_from_slice(&values[y * w + x0..y * w + x1]);
+        }
+        let mask = Rc::new(Coverage {
+            x: if cw == 0 { 0 } else { x0 },
+            y: if ch == 0 { 0 } else { y0 },
+            width: cw,
+            height: ch,
+            data: cropped,
+        });
+        self.soft_masks.insert(key, mask.clone());
+        Some(mask)
+    }
+
+    /// Runs a form's content with its matrix and bounding box.
+    fn form_content(
+        &mut self,
+        stream: &Stream,
+        r: Option<ObjRef>,
+        parent_resources: &Dict,
+        depth: usize,
+    ) {
         let content = match self.doc.decode_stream(stream) {
             Ok(d) => d.data,
             Err(e) => {
@@ -932,30 +1202,12 @@ impl<'a> Interpreter<'a> {
             Ok(Object::Dict(d)) => d,
             _ => parent_resources.clone(),
         };
-        let matrix = self
-            .doc
-            .get_key(&stream.dict, b"Matrix")
-            .ok()
-            .and_then(|m| {
-                let v = nums(m.as_array()?);
-                (v.len() == 6).then(|| Transform::from_array([v[0], v[1], v[2], v[3], v[4], v[5]]))
-            })
-            .unwrap_or(Transform::IDENTITY);
-
+        let (matrix, bbox) = self.form_geometry(stream);
         let saved = self.gs.clone();
         let saved_path = std::mem::take(&mut self.path);
         self.gs.ctm = matrix.then(&self.gs.ctm);
-        if let Ok(bbox) = self.doc.get_key(&stream.dict, b"BBox") {
-            let v = nums(bbox.as_array().unwrap_or(&[]));
-            if v.len() == 4 {
-                let rect = Path::rect(
-                    v[0].min(v[2]),
-                    v[1].min(v[3]),
-                    (v[2] - v[0]).abs(),
-                    (v[3] - v[1]).abs(),
-                );
-                self.clip_device(&rect.transform(&self.gs.ctm), FillRule::NonZero);
-            }
+        if let Some(bbox) = bbox {
+            self.clip_device(&bbox, FillRule::NonZero);
         }
         if let Some(r) = r {
             self.forms.push(r);

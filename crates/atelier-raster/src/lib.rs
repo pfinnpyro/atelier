@@ -6,6 +6,7 @@
 //! turned into polygons and filled. Clipping uses coverage masks, and all
 //! drawing composites premultiplied RGBA.
 
+mod blend;
 mod geom;
 mod image;
 mod path;
@@ -13,6 +14,7 @@ mod pixmap;
 mod raster;
 mod stroke;
 
+pub use blend::BlendMode;
 pub use geom::{Point, Transform};
 pub use image::{ImageSampling, RgbaImage, draw_image};
 pub use path::{Path, PathBuilder, Verb};
