@@ -11,6 +11,8 @@ name = "atelier"
 path = "src/main.rs"
 
 [dependencies]
+atelier-filters.workspace = true
+atelier-render.workspace = true
 atelier-syntax.workspace = true
 
 [lints]
