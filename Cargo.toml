@@ -9,6 +9,7 @@ rust-version = "1.85"
 publish = false
 
 [workspace.dependencies]
+atelier-crypto = { path = "crates/atelier-crypto" }
 atelier-filters = { path = "crates/atelier-filters" }
 atelier-font = { path = "crates/atelier-font" }
 atelier-syntax = { path = "crates/atelier-syntax" }

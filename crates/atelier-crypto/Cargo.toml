@@ -1,0 +1,12 @@
+[package]
+name = "atelier-crypto"
+description = "The hashes and ciphers PDF encryption uses: MD5, SHA-2, RC4 and AES"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

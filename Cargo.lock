@@ -386,6 +386,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "atelier-crypto"
+version = "0.1.0"
+
+[[package]]
 name = "atelier-filters"
 version = "0.1.0"
 dependencies = [
@@ -418,6 +422,7 @@ dependencies = [
 name = "atelier-syntax"
 version = "0.1.0"
 dependencies = [
+ "atelier-crypto",
  "atelier-filters",
  "miniz_oxide 0.8.9",
 ]

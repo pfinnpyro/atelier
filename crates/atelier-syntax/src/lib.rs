@@ -5,6 +5,7 @@
 //! and each object is parsed the first time something asks for it.
 
 mod content;
+mod crypt;
 mod decode;
 mod document;
 mod error;
@@ -15,6 +16,7 @@ mod parser;
 mod xref;
 
 pub use content::{ContentParser, Operation};
+pub use crypt::Access;
 pub use decode::{DecodedStream, ImageFilter};
 pub use document::Document;
 pub use error::{Error, Result};

@@ -1,6 +1,6 @@
 //! End-to-end tests on small PDFs built byte by byte, including broken ones.
 
-use atelier_syntax::{Document, Error, ObjRef, Object, Rect};
+use atelier_syntax::{Access, Document, Error, ObjRef, Object, Rect};
 use miniz_oxide::deflate::compress_to_vec_zlib;
 
 /// Writes a PDF while tracking object offsets.
@@ -324,17 +324,81 @@ fn reference_to_missing_object_is_null() {
 }
 
 #[test]
-fn encrypted_files_are_detected() {
+fn encrypted_file_without_the_password() {
     let mut b = two_page_file();
-    b.obj(8, "<< /Filter /Standard /V 2 /R 3 >>");
     let pos = b.buf.windows(6).rposition(|w| w == b"\nxref\n").unwrap() + 1;
     b.buf.truncate(pos);
+    b.obj(
+        8,
+        "<< /Filter /Standard /V 2 /R 3 /Length 128 /O <00> /U <00> /P -4 >>",
+    );
     b.xref(None, "/Root 1 0 R /Encrypt 8 0 R");
+    assert_eq!(Document::open(b.buf.clone()).err(), Some(Error::Password));
+
+    // An /Encrypt entry pointing nowhere is ignored.
+    let mut b = two_page_file();
+    let pos = b.buf.windows(6).rposition(|w| w == b"\nxref\n").unwrap() + 1;
+    b.buf.truncate(pos);
+    b.xref(None, "/Root 1 0 R /Encrypt 9 0 R");
     let doc = b.open();
-    assert!(doc.is_encrypted());
+    assert!(!doc.is_encrypted());
+    assert!(doc.pages().unwrap()[0].contents(&doc).is_ok());
+}
+
+fn encrypted(name: &str) -> Vec<u8> {
+    let path = format!(
+        "{}/tests/data/encrypted/{name}.pdf",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    std::fs::read(path).unwrap()
+}
+
+/// Checks a decrypted test file: the title string and the page content.
+fn check_decrypted(doc: &Document) {
+    let title = doc.get_key(&doc.info().unwrap(), b"Title").unwrap();
+    assert_eq!(title.as_string().unwrap().bytes, b"Secret title");
+    let content = doc.pages().unwrap()[0].contents(doc).unwrap();
+    let text = String::from_utf8_lossy(&content);
+    assert!(text.contains("(Hidden) Tj"), "{text}");
+}
+
+#[test]
+fn opens_every_standard_encryption() {
+    // Written by pypdf: tools/make_encrypted.py.
+    for (name, user) in [
+        ("rc4-40", ""),
+        ("rc4-128", "user"),
+        ("aes-128", "user"),
+        ("aes-256-r5", "user"),
+        ("aes-256", "pässwörd"),
+    ] {
+        let data = encrypted(name);
+        let doc = Document::open_with_password(data.clone(), user.as_bytes())
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert!(doc.is_encrypted());
+        assert_eq!(doc.access(), Some(Access::User), "{name}");
+        check_decrypted(&doc);
+
+        let doc = Document::open_with_password(data.clone(), b"owner").unwrap();
+        assert_eq!(doc.access(), Some(Access::Owner), "{name}");
+        check_decrypted(&doc);
+
+        assert_eq!(
+            Document::open_with_password(data, b"wrong").err(),
+            Some(Error::Password),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn empty_user_password_opens_without_asking() {
+    let doc = Document::open(encrypted("rc4-40")).unwrap();
+    assert_eq!(doc.access(), Some(Access::User));
+    check_decrypted(&doc);
     assert_eq!(
-        doc.pages().unwrap()[0].contents(&doc),
-        Err(Error::Encrypted)
+        Document::open(encrypted("aes-256")).err(),
+        Some(Error::Password)
     );
 }
 

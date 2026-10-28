@@ -74,16 +74,8 @@ pub(crate) fn decode(
             b"ASCII85Decode" | b"A85" => filters::decode_ascii85(&current),
             b"ASCIIHexDecode" | b"AHx" => filters::decode_ascii_hex(&current),
             b"RunLengthDecode" | b"RL" => filters::decode_run_length(&current),
-            b"Crypt" => {
-                let identity = params
-                    .get(b"Name")
-                    .and_then(Object::as_name)
-                    .is_none_or(|n| *n == b"Identity");
-                if identity {
-                    continue;
-                }
-                return Err(Error::Encrypted);
-            }
+            // Decryption happens when the object is read.
+            b"Crypt" => continue,
             _ => return Err(Error::Unsupported(format!("filter {name}"))),
         };
         current = recover(result, &name, warn)?;
