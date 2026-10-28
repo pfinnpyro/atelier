@@ -10,7 +10,6 @@ pub enum ImageFilter {
     Dct,
     Jpx,
     Jbig2,
-    CcittFax,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -50,7 +49,6 @@ pub(crate) fn decode(
             b"DCTDecode" | b"DCT" => Some(ImageFilter::Dct),
             b"JPXDecode" => Some(ImageFilter::Jpx),
             b"JBIG2Decode" => Some(ImageFilter::Jbig2),
-            b"CCITTFaxDecode" | b"CCF" => Some(ImageFilter::CcittFax),
             _ => None,
         };
         if let Some(image) = image {
@@ -74,6 +72,32 @@ pub(crate) fn decode(
             b"ASCII85Decode" | b"A85" => filters::decode_ascii85(&current),
             b"ASCIIHexDecode" | b"AHx" => filters::decode_ascii_hex(&current),
             b"RunLengthDecode" | b"RL" => filters::decode_run_length(&current),
+            b"CCITTFaxDecode" | b"CCF" => {
+                let int = |k: &[u8]| params.get(k).and_then(Object::as_i64);
+                let flag = |k: &[u8], default: bool| {
+                    params.get(k).and_then(Object::as_bool).unwrap_or(default)
+                };
+                // Without /Rows, the image height says how many rows to expect.
+                let height = dict
+                    .get(b"Height")
+                    .or_else(|| dict.get(b"H"))
+                    .map(resolve)
+                    .and_then(|h| h.as_i64());
+                let p = filters::CcittParams {
+                    k: int(b"K").unwrap_or(0),
+                    encoded_byte_align: flag(b"EncodedByteAlign", false),
+                    columns: int(b"Columns")
+                        .and_then(|c| usize::try_from(c).ok())
+                        .unwrap_or(1728),
+                    rows: int(b"Rows")
+                        .or(height)
+                        .and_then(|r| usize::try_from(r).ok())
+                        .unwrap_or(0),
+                    end_of_block: flag(b"EndOfBlock", true),
+                    black_is_1: flag(b"BlackIs1", false),
+                };
+                filters::decode_ccitt(&current, &p)
+            }
             // Decryption happens when the object is read.
             b"Crypt" => continue,
             _ => return Err(Error::Unsupported(format!("filter {name}"))),

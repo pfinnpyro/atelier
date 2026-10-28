@@ -671,3 +671,25 @@ fn soft_mask_that_uses_itself_terminates() {
     );
     assert_eq!(at(&p, 50, 50), RED);
 }
+
+#[test]
+fn ccitt_group_4_image() {
+    // 8 x 2 pixels, both rows white-white-black-black-black-white-white-
+    // white: H(2 white, 3 black) V0 on the first row, V0 V0 V0 on the
+    // second.
+    let image = stream(
+        "/Type /XObject /Subtype /Image /Width 8 /Height 2 /ColorSpace /DeviceGray \
+         /BitsPerComponent 1 /Filter /CCITTFaxDecode /DecodeParms << /K -1 /Columns 8 >>",
+        &[0b0010_1111, 0b0111_1000],
+    );
+    let p = render_with(
+        "",
+        b"100 0 0 100 0 0 cm /Im Do",
+        "<< /XObject << /Im 5 0 R >> >>",
+        &[image],
+    );
+    assert_eq!(at(&p, 10, 50), WHITE);
+    assert_eq!(at(&p, 40, 25), [0, 0, 0]);
+    assert_eq!(at(&p, 40, 75), [0, 0, 0]);
+    assert_eq!(at(&p, 80, 50), WHITE);
+}
