@@ -19,6 +19,7 @@ JPEG images, shadings and patterns are not drawn yet.
 | `atelier-raster` | Our rasterizer: exact-area anti-aliased fills (non-zero and even-odd), strokes with joins, caps and dashes, clip masks, image drawing |
 | `atelier-render` | Content stream interpreter, graphics state, colour spaces, Form XObjects, images |
 | `atelier-cli` | The `atelier` command for inspecting and rendering files |
+| `atelier-ffi` | C interface to the engine, built as `atelier.dll` for other languages |
 
 Damaged files are read the way other viewers read them: a wrong `/Length`, wrong
 object offsets, a broken `startxref` or a missing xref table are repaired by
@@ -30,6 +31,11 @@ scanning the file, and truncated Flate data keeps whatever decoded.
 cargo test --workspace
 cargo run --release -p atelier-cli -- info some.pdf
 ```
+
+## Using the engine from .NET
+
+`dotnet/` holds `Atelier.Net`, a NuGet package that calls the engine in-process
+through P/Invoke. See [dotnet/README.md](dotnet/README.md).
 
 ## The `atelier` command
 

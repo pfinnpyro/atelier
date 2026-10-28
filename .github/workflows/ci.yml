@@ -26,3 +26,25 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets
       - run: cargo test --workspace
+
+  dotnet:
+    # Builds atelier.dll, runs the .NET tests against it and packs the NuGet
+    # package. The package is kept as a build artifact for each run.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: ./dotnet/build-native.ps1
+        shell: pwsh
+      - name: C# bindings match the Rust code
+        run: git diff --exit-code -- dotnet/src/Atelier.Net/Interop/NativeMethods.g.cs
+      - run: dotnet test dotnet -c Release
+      - run: dotnet pack dotnet/src/Atelier.Net -c Release -o out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Atelier.Net-nupkg
+          path: out/*.nupkg

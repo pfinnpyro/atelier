@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- The machine's own runtime identifier in portable form (win-x64, linux-x64,
+         osx-arm64), used to find the native library built by build-native. -->
+    <AtelierHostOs Condition="$([MSBuild]::IsOSPlatform('Windows'))">win</AtelierHostOs>
+    <AtelierHostOs Condition="$([MSBuild]::IsOSPlatform('Linux'))">linux</AtelierHostOs>
+    <AtelierHostOs Condition="$([MSBuild]::IsOSPlatform('OSX'))">osx</AtelierHostOs>
+    <AtelierHostRid>$(AtelierHostOs)-$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant())</AtelierHostRid>
+    <AtelierNativeRoot>$(MSBuildThisFileDirectory)native/</AtelierNativeRoot>
+  </PropertyGroup>
+</Project>
