@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Atelier</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsAotCompatible>true</IsAotCompatible>
+
+    <PackageId>Atelier.Net</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>pfinnpyro</Authors>
+    <Description>.NET bindings for the Atelier PDF engine: open PDFs and render pages to bitmaps with Atelier's own Rust engine.</Description>
+    <PackageTags>pdf;render;rasterizer;native</PackageTags>
+    <RepositoryUrl>https://github.com/pfinnpyro/atelier</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <!-- Native engine builds, one folder per runtime identifier (native/win-x64/atelier.dll
+       and so on), made by build-native.ps1 or build-native.sh. Every one found goes
+       into the package under runtimes/<rid>/native, where .NET picks the right one. -->
+  <ItemGroup>
+    <AtelierNative Include="$(AtelierNativeRoot)**/atelier.dll;$(AtelierNativeRoot)**/libatelier.so;$(AtelierNativeRoot)**/libatelier.dylib" />
+    <None Include="@(AtelierNative)" Pack="true" PackagePath="runtimes/%(RecursiveDir)native/%(Filename)%(Extension)" Visible="false" />
+    <!-- For tests and local runs: the build for this machine next to the assembly. -->
+    <None Include="$(AtelierNativeRoot)$(AtelierHostRid)/*" Pack="false" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <Target Name="AtelierCheckNative" BeforeTargets="GenerateNuspec" Condition="'@(AtelierNative)' == ''">
+    <Error Text="No native engine found under $(AtelierNativeRoot). Run build-native.ps1 (Windows) or build-native.sh first." />
+  </Target>
+
+</Project>

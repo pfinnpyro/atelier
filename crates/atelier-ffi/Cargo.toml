@@ -1,0 +1,29 @@
+[package]
+name = "atelier-ffi"
+description = "C interface to the Atelier engine, used by the .NET package"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+# Builds atelier.dll on Windows, libatelier.so on Linux, libatelier.dylib on macOS.
+name = "atelier"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+atelier-raster.workspace = true
+atelier-render.workspace = true
+atelier-syntax.workspace = true
+
+[build-dependencies]
+csbindgen = "1.9"
+
+# The only crate allowed to use `unsafe`: it is the boundary with foreign code.
+# Every other crate keeps the workspace's `unsafe_code = "forbid"`.
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "warn"
