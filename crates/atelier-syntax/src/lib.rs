@@ -4,6 +4,7 @@
 //! Objects are loaded lazily: opening a file reads only the cross-reference data,
 //! and each object is parsed the first time something asks for it.
 
+mod content;
 mod decode;
 mod document;
 mod error;
@@ -13,6 +14,7 @@ mod page;
 mod parser;
 mod xref;
 
+pub use content::{ContentParser, Operation};
 pub use decode::{DecodedStream, ImageFilter};
 pub use document::Document;
 pub use error::{Error, Result};

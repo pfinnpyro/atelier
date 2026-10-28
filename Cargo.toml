@@ -11,6 +11,8 @@ publish = false
 [workspace.dependencies]
 atelier-filters = { path = "crates/atelier-filters" }
 atelier-syntax = { path = "crates/atelier-syntax" }
+atelier-raster = { path = "crates/atelier-raster" }
+atelier-render = { path = "crates/atelier-render" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -43,7 +43,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn object_from(&mut self, tok: Token<'a>, depth: usize) -> Result<Object> {
+    /// Builds an object from a token already read from this parser's lexer.
+    pub fn object_from(&mut self, tok: Token<'a>, depth: usize) -> Result<Object> {
         if depth > MAX_DEPTH {
             return Err(Error::TooDeep);
         }

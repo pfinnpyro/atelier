@@ -1,4 +1,4 @@
-//! Stream filters for PDF (ISO 32000-2, section 7.4).
+//! Stream filters for PDF (ISO 32000-2, section 7.4), plus a Flate encoder.
 //!
 //! Every decoder here is written from scratch. Decoders are lenient: PDF files in
 //! the wild often carry truncated or slightly corrupt streams, so on failure we
@@ -7,6 +7,7 @@
 
 mod ascii85;
 mod asciihex;
+mod deflate;
 mod flate;
 mod lzw;
 mod predictor;
@@ -14,6 +15,7 @@ mod runlength;
 
 pub use ascii85::decode_ascii85;
 pub use asciihex::decode_ascii_hex;
+pub use deflate::{adler32, encode_flate};
 pub use flate::{decode_flate, inflate};
 pub use lzw::decode_lzw;
 pub use predictor::{Predictor, apply_predictor};

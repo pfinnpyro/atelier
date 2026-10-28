@@ -1,6 +1,11 @@
-//! `atelier`: inspect PDF files with the Atelier engine.
+//! `atelier`: inspect and render PDF files with the Atelier engine.
+
+mod png;
 
 use std::io::Write;
+use std::time::Instant;
+
+use atelier_render::{RenderOptions, render_page};
 use std::process::ExitCode;
 
 use atelier_syntax::{Document, ObjRef, Object, XrefEntry};
@@ -12,7 +17,10 @@ Usage:
   atelier objects <file.pdf>               every object number and where it lives
   atelier obj <file.pdf> <num> [gen]       print one object
   atelier stream <file.pdf> <num> [gen]    write a stream's decoded bytes to stdout
-  atelier content <file.pdf> <page>        write a page's decoded content (page from 1)";
+  atelier content <file.pdf> <page>        write a page's decoded content (page from 1)
+  atelier render <file.pdf> <page|all> [--dpi N] [-o out.png]
+                                           render pages to PNG (default 150 dpi; with
+                                           `all`, -o is a prefix: out-1.png, out-2.png...)";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -40,6 +48,7 @@ fn run(args: &[String]) -> Result<(), String> {
         "obj" => object(&doc, obj_ref(&args[2..])?, &mut out),
         "stream" => stream(&doc, obj_ref(&args[2..])?, &mut out),
         "content" => content(&doc, &args[2..], &mut out),
+        "render" => render(&doc, path, &args[2..], &mut out),
         other => return Err(format!("unknown command `{other}`\n\n{USAGE}")),
     };
     for warning in doc.warnings() {
@@ -175,4 +184,74 @@ fn content(doc: &Document, args: &[String], out: &mut Out) -> Result<(), String>
     ))?;
     let data = page.contents(doc).map_err(|e| e.to_string())?;
     out.write_all(&data).map_err(io)
+}
+
+fn render(doc: &Document, path: &str, args: &[String], out: &mut Out) -> Result<(), String> {
+    let which = args.first().ok_or("missing page number (or `all`)")?;
+    let mut dpi = 150.0;
+    let mut output: Option<String> = None;
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--dpi" => {
+                dpi = args
+                    .get(i + 1)
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .filter(|v| *v > 0.0 && *v <= 2400.0)
+                    .ok_or("--dpi needs a number between 1 and 2400")?;
+                i += 2;
+            }
+            "-o" => {
+                output = Some(args.get(i + 1).ok_or("-o needs a file name")?.clone());
+                i += 2;
+            }
+            other => return Err(format!("unknown option `{other}`")),
+        }
+    }
+    let pages = doc.pages().map_err(|e| e.to_string())?;
+    let numbers: Vec<usize> = if which == "all" {
+        (1..=pages.len()).collect()
+    } else {
+        vec![
+            which
+                .parse()
+                .map_err(|_| "page must be a number or `all`")?,
+        ]
+    };
+    let stem = std::path::Path::new(path)
+        .file_stem()
+        .map_or("page".to_string(), |s| s.to_string_lossy().into_owned());
+    let options = RenderOptions {
+        scale: dpi / 72.0,
+        ..RenderOptions::default()
+    };
+    for n in numbers {
+        let page = n.checked_sub(1).and_then(|i| pages.get(i)).ok_or(format!(
+            "page {n} does not exist (the file has {})",
+            pages.len()
+        ))?;
+        let start = Instant::now();
+        let rendered = render_page(doc, page, &options).map_err(|e| e.to_string())?;
+        let elapsed = start.elapsed();
+        let file = match (&output, which == "all") {
+            (Some(o), false) => o.clone(),
+            (Some(o), true) => format!("{o}-{n}.png"),
+            (None, _) => format!("{stem}-{n}.png"),
+        };
+        let pm = &rendered.pixmap;
+        let png = png::encode_rgba(pm.width(), pm.height(), &pm.to_rgba());
+        std::fs::write(&file, png).map_err(|e| format!("cannot write {file}: {e}"))?;
+        writeln!(
+            out,
+            "page {n}: {}x{} px in {:.1} ms -> {file}",
+            pm.width(),
+            pm.height(),
+            elapsed.as_secs_f64() * 1000.0
+        )
+        .map_err(io)?;
+        for w in rendered.warnings {
+            eprintln!("  page {n}: {w}");
+        }
+    }
+    Ok(())
 }
