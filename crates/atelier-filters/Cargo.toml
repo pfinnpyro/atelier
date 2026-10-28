@@ -1,0 +1,16 @@
+[package]
+name = "atelier-filters"
+description = "PDF stream filters: Flate, LZW, ASCII85, ASCIIHex, RunLength and predictors"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+# Only used to produce compressed test data for our own inflate.
+miniz_oxide = "0.8"
+
+[lints]
+workspace = true

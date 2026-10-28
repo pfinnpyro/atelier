@@ -1,0 +1,16 @@
+[package]
+name = "atelier-syntax"
+description = "PDF file structure: lexer, objects, cross-reference tables, object streams, repair and the page tree"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+atelier-filters.workspace = true
+
+[dev-dependencies]
+miniz_oxide = "0.8"
+
+[lints]
+workspace = true
