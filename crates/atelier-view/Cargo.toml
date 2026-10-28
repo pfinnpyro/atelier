@@ -1,0 +1,15 @@
+[package]
+name = "atelier-view"
+description = "Viewer logic without a window: page layout, tiles, text selection and search"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+atelier-raster.workspace = true
+atelier-render.workspace = true
+atelier-syntax.workspace = true
+
+[lints]
+workspace = true

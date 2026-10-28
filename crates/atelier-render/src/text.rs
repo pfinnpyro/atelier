@@ -32,9 +32,19 @@ impl PageText {
     /// new line starts when the baseline moves off the current line, and a
     /// space is added at gaps wider than a fraction of the font size.
     pub fn plain_text(&self) -> String {
+        self.plain_text_range(0, self.glyphs.len()).0
+    }
+
+    /// The plain text of glyphs `start..end`, and for each character of it
+    /// the glyph it came from (`None` for spaces and line breaks added
+    /// between glyphs).
+    pub fn plain_text_range(&self, start: usize, end: usize) -> (String, Vec<Option<usize>>) {
         let mut out = String::new();
+        let mut map = Vec::new();
         let mut prev: Option<&TextGlyph> = None;
-        for g in &self.glyphs {
+        let end = end.min(self.glyphs.len());
+        for (i, g) in self.glyphs.iter().enumerate().take(end).skip(start) {
+            // Glyphs without text do not count, so a gap is measured across them.
             if g.text.is_empty() {
                 continue;
             }
@@ -51,17 +61,19 @@ impl PageText {
                 let size = p.size.max(g.size).max(1e-6);
                 if across > size * 0.5 || along < -size * 2.0 {
                     out.push('\n');
+                    map.push(None);
                 } else if along > size * 0.15 && !out.ends_with(' ') && !g.text.starts_with(' ') {
                     out.push(' ');
+                    map.push(None);
                 }
             }
-            out.push_str(&g.text);
-            // Glyphs without text do not count, so a gap is measured across them.
-            if !g.text.is_empty() {
-                prev = Some(g);
+            for c in g.text.chars() {
+                out.push(c);
+                map.push(Some(i));
             }
+            prev = Some(g);
         }
-        out
+        (out, map)
     }
 }
 

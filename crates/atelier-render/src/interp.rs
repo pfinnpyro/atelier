@@ -63,8 +63,22 @@ pub fn page_transform(page: &Page, scale: f64) -> (Transform, usize, usize) {
 
 /// Renders one page.
 pub fn render_page(doc: &Document, page: &Page, options: &RenderOptions) -> Result<Rendered> {
-    let (ctm, width, height) = page_transform(page, options.scale);
-    let mut pixmap = Pixmap::filled(width, height, options.background);
+    let (_, width, height) = page_transform(page, options.scale);
+    render_region(doc, page, options, (0, 0, width, height))
+}
+
+/// Renders part of a page: the device-pixel rectangle `(x, y, width,
+/// height)` of the page as `render_page` would draw it at this scale. The
+/// viewer draws pages in tiles this way.
+pub fn render_region(
+    doc: &Document,
+    page: &Page,
+    options: &RenderOptions,
+    (x, y, width, height): (usize, usize, usize, usize),
+) -> Result<Rendered> {
+    let (page_ctm, _, _) = page_transform(page, options.scale);
+    let ctm = page_ctm.then(&Transform::translate(-(x as f64), -(y as f64)));
+    let mut pixmap = Pixmap::filled(width.max(1), height.max(1), options.background);
     let content = page.contents(doc)?;
     let mut interp = Interpreter::new(doc, &mut pixmap, ctm);
     interp.run(&content, &page.resources, 0);

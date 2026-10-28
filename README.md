@@ -8,10 +8,16 @@ Windows is the first target. Linux and macOS come later.
 
 ## Status
 
-Phases 1 to 4 are done. Pages render with paths, strokes, clipping, colour,
+Phases 1 to 5 are done. Pages render with paths, strokes, clipping, colour,
 uncompressed, Flate and JPEG images, and text in every PDF font type, and the
 text of a page can be extracted with each glyph's position. Shadings and
 patterns are not drawn yet.
+
+The viewer opens a file (from the Open button, Ctrl+O, by dropping it on the
+window, or on the command line), scrolls through all pages, zooms, selects and
+copies text, and searches. Pages are drawn by our renderer in 1024-pixel tiles
+on background threads; the window only puts finished tiles on screen, so
+moving or resizing it never touches the document.
 
 Fonts a file does not embed are drawn with the system's metric-compatible
 fonts: Arial, Times New Roman and Courier New on Windows and macOS, and
@@ -25,6 +31,8 @@ search.
 | `atelier-font` | Our font readers: TrueType and OpenType, CFF (including CID-keyed) and Type 1 outlines, character maps and metrics, plus the standard encodings, the Adobe Glyph List and the 14 standard fonts' widths |
 | `atelier-raster` | Our rasterizer: exact-area anti-aliased fills (non-zero and even-odd), strokes with joins, caps and dashes, clip masks, image drawing |
 | `atelier-render` | Content stream interpreter, graphics state, colour spaces, Form XObjects, images, PDF fonts (simple, CID, Type 3, CMaps, ToUnicode), text drawing and extraction |
+| `atelier-view` | Viewer logic without a window: page layout, the tile grid and cache, text selection and search |
+| `atelier-app` | The viewer window (`atelier-viewer`), built on eframe (winit, wgpu and egui) |
 | `atelier-cli` | The `atelier` command for inspecting and rendering files |
 
 Damaged files are read the way other viewers read them: a wrong `/Length`, wrong
@@ -35,8 +43,21 @@ scanning the file, and truncated Flate data keeps whatever decoded.
 
 ```
 cargo test --workspace
+cargo run --release -p atelier-app -- some.pdf
 cargo run --release -p atelier-cli -- info some.pdf
 ```
+
+The viewer needs Rust 1.95 or newer; the library crates build with 1.85.
+
+## Viewer keys
+
+| Key | Does |
+| --- | --- |
+| Ctrl+O | Open a file |
+| Ctrl+wheel, Ctrl+= and Ctrl+−, Ctrl+0 | Zoom around the pointer, zoom in and out, 100% |
+| Page Up, Page Down, Space, Home, End, arrows | Move through the document |
+| Drag | Select text; Ctrl+C copies it, Esc clears it |
+| Ctrl+F, Enter, Shift+Enter, F3 | Search, next match, previous match |
 
 ## The `atelier` command
 
