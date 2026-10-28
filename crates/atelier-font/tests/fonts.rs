@@ -36,10 +36,18 @@ fn check(font: &FontProgram, expected: &str, gid_for: impl Fn(&str) -> u32) {
         let gid = gid_for(f[0]);
         let adv: f64 = f[1].parse().unwrap();
         let got_adv = font.advance(gid).unwrap();
-        assert!((got_adv - adv).abs() < 1e-3, "{expected} {}: advance {got_adv} vs {adv}", f[0]);
+        assert!(
+            (got_adv - adv).abs() < 1e-3,
+            "{expected} {}: advance {got_adv} vs {adv}",
+            f[0]
+        );
         let got = measure(font, gid);
         if f[2] == "empty" {
-            assert!(got.is_none_or(|(a, _)| a.abs() < 1e-6), "{expected} {}: not empty", f[0]);
+            assert!(
+                got.is_none_or(|(a, _)| a.abs() < 1e-6),
+                "{expected} {}: not empty",
+                f[0]
+            );
             continue;
         }
         let area: f64 = f[2].parse().unwrap();
@@ -51,7 +59,11 @@ fn check(font: &FontProgram, expected: &str, gid_for: impl Fn(&str) -> u32) {
             f[0]
         );
         for k in 0..4 {
-            assert!((b[k] - bounds[k]).abs() < 2e-3, "{expected} {}: bounds {b:?} vs {bounds:?}", f[0]);
+            assert!(
+                (b[k] - bounds[k]).abs() < 2e-3,
+                "{expected} {}: bounds {b:?} vs {bounds:?}",
+                f[0]
+            );
         }
         checked += 1;
     }
@@ -162,7 +174,13 @@ fn character_maps() {
 
 #[test]
 fn damaged_fonts_do_not_panic() {
-    for name in ["liberation.ttf", "inter.otf", "inter.cff", "unifont_cid.otf", "charter.pfb"] {
+    for name in [
+        "liberation.ttf",
+        "inter.otf",
+        "inter.cff",
+        "unifont_cid.otf",
+        "charter.pfb",
+    ] {
         let data = read(name);
         let mut seed = 0x2545_F491_4F6C_DD1Du64;
         for round in 0..200 {

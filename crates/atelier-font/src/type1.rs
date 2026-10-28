@@ -104,8 +104,9 @@ fn split(data: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
         let mut pos = 0;
         while pos + 6 <= data.len() && data[pos] == 0x80 {
             let kind = data[pos + 1];
-            let len = u32::from_le_bytes([data[pos + 2], data[pos + 3], data[pos + 4], data[pos + 5]])
-                as usize;
+            let len =
+                u32::from_le_bytes([data[pos + 2], data[pos + 3], data[pos + 4], data[pos + 5]])
+                    as usize;
             let start = pos + 6;
             let end = start.saturating_add(len).min(data.len());
             match kind {
@@ -154,7 +155,9 @@ fn decrypt(data: &[u8], mut r: u16, skip: usize) -> Vec<u8> {
     let mut out = Vec::with_capacity(data.len());
     for &c in data {
         out.push(c ^ (r >> 8) as u8);
-        r = (u16::from(c).wrapping_add(r)).wrapping_mul(52845).wrapping_add(22719);
+        r = (u16::from(c).wrapping_add(r))
+            .wrapping_mul(52845)
+            .wrapping_add(22719);
     }
     out.drain(..skip.min(out.len()));
     out
@@ -169,7 +172,11 @@ fn is_space(b: u8) -> bool {
 }
 
 fn is_delim(b: u8) -> bool {
-    is_space(b) || matches!(b, b'/' | b'[' | b']' | b'{' | b'}' | b'(' | b')' | b'<' | b'>')
+    is_space(b)
+        || matches!(
+            b,
+            b'/' | b'[' | b']' | b'{' | b'}' | b'(' | b')' | b'<' | b'>'
+        )
 }
 
 /// A minimal PostScript token reader over the font's text.
@@ -320,8 +327,7 @@ fn read_charstrings(private: &[u8]) -> Vec<(String, Vec<u8>)> {
         p: at + 12,
     };
     let mut out = Vec::new();
-    loop {
-        let Some(tok) = t.next() else { break };
+    while let Some(tok) = t.next() {
         if tok == b"end" {
             break;
         }
@@ -445,11 +451,13 @@ impl<'a> T1State<'a> {
                 32..=246 => self.stack.push(f64::from(i32::from(b) - 139)),
                 247..=250 => {
                     let b1 = i32::from(byte());
-                    self.stack.push(f64::from((i32::from(b) - 247) * 256 + b1 + 108));
+                    self.stack
+                        .push(f64::from((i32::from(b) - 247) * 256 + b1 + 108));
                 }
                 251..=254 => {
                     let b1 = i32::from(byte());
-                    self.stack.push(f64::from(-(i32::from(b) - 251) * 256 - b1 - 108));
+                    self.stack
+                        .push(f64::from(-(i32::from(b) - 251) * 256 - b1 - 108));
                 }
                 255 => {
                     let v = i32::from_be_bytes([byte(), byte(), byte(), byte()]);
@@ -475,7 +483,14 @@ impl<'a> T1State<'a> {
             5 => self.line_to(self.a(0), self.a(1)),
             6 => self.line_to(self.a(0), 0.0),
             7 => self.line_to(0.0, self.a(0)),
-            8 => self.curve_to([self.a(0), self.a(1), self.a(2), self.a(3), self.a(4), self.a(5)]),
+            8 => self.curve_to([
+                self.a(0),
+                self.a(1),
+                self.a(2),
+                self.a(3),
+                self.a(4),
+                self.a(5),
+            ]),
             9 => {
                 if self.open {
                     self.builder.close();
@@ -485,7 +500,10 @@ impl<'a> T1State<'a> {
             10 => {
                 let Some(n) = self.stack.pop() else { return };
                 let font = self.font;
-                if let Some(sub) = usize::try_from(n as i64).ok().and_then(|n| font.subrs.get(n)) {
+                if let Some(sub) = usize::try_from(n as i64)
+                    .ok()
+                    .and_then(|n| font.subrs.get(n))
+                {
                     self.exec(sub, depth + 1);
                 }
                 return;
@@ -621,7 +639,9 @@ mod tests {
             .iter()
             .map(|&p| {
                 let c = p ^ (r >> 8) as u8;
-                r = (u16::from(c).wrapping_add(r)).wrapping_mul(52845).wrapping_add(22719);
+                r = (u16::from(c).wrapping_add(r))
+                    .wrapping_mul(52845)
+                    .wrapping_add(22719);
                 c
             })
             .collect();

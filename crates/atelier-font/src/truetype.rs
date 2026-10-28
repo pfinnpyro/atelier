@@ -133,8 +133,7 @@ impl TrueType {
         let n = r.u16().unwrap_or(0);
         let mut out = Vec::new();
         for _ in 0..n {
-            let (Some(platform), Some(encoding), Some(offset)) = (r.u16(), r.u16(), r.u32())
-            else {
+            let (Some(platform), Some(encoding), Some(offset)) = (r.u16(), r.u16(), r.u32()) else {
                 break;
             };
             if (offset as usize) < cmap.len() {
@@ -200,7 +199,9 @@ impl TrueType {
 
     /// Whether the font has a Microsoft Unicode cmap.
     pub fn has_unicode_cmap(&self) -> bool {
-        self.has_cmap(3, 1) || self.has_cmap(3, 10) || self.cmaps.iter().any(|(i, _)| i.platform == 0)
+        self.has_cmap(3, 1)
+            || self.has_cmap(3, 10)
+            || self.cmaps.iter().any(|(i, _)| i.platform == 0)
     }
 
     /// Whether the font has a (3,0) symbol cmap.
@@ -211,13 +212,34 @@ impl TrueType {
     pub fn glyph_by_unicode(&self, c: char) -> Option<u32> {
         let code = c as u32;
         let ids = [
-            CmapId { platform: 3, encoding: 10 },
-            CmapId { platform: 3, encoding: 1 },
-            CmapId { platform: 0, encoding: 4 },
-            CmapId { platform: 0, encoding: 3 },
-            CmapId { platform: 0, encoding: 6 },
-            CmapId { platform: 0, encoding: 1 },
-            CmapId { platform: 0, encoding: 0 },
+            CmapId {
+                platform: 3,
+                encoding: 10,
+            },
+            CmapId {
+                platform: 3,
+                encoding: 1,
+            },
+            CmapId {
+                platform: 0,
+                encoding: 4,
+            },
+            CmapId {
+                platform: 0,
+                encoding: 3,
+            },
+            CmapId {
+                platform: 0,
+                encoding: 6,
+            },
+            CmapId {
+                platform: 0,
+                encoding: 1,
+            },
+            CmapId {
+                platform: 0,
+                encoding: 0,
+            },
         ];
         ids.iter().find_map(|&id| self.cmap_lookup(id, code))
     }
@@ -226,16 +248,33 @@ impl TrueType {
     /// may map codes at 0xF000, 0xF100 or 0xF200 + code, or the (1,0) Mac cmap.
     pub fn glyph_by_symbol_code(&self, code: u8) -> Option<u32> {
         let c = u32::from(code);
-        let sym = CmapId { platform: 3, encoding: 0 };
+        let sym = CmapId {
+            platform: 3,
+            encoding: 0,
+        };
         [c, 0xF000 + c, 0xF100 + c, 0xF200 + c]
             .iter()
             .find_map(|&v| self.cmap_lookup(sym, v))
-            .or_else(|| self.cmap_lookup(CmapId { platform: 1, encoding: 0 }, c))
+            .or_else(|| {
+                self.cmap_lookup(
+                    CmapId {
+                        platform: 1,
+                        encoding: 0,
+                    },
+                    c,
+                )
+            })
     }
 
     /// The glyph for a Mac Roman code through the (1,0) cmap.
     pub fn glyph_by_mac_code(&self, code: u8) -> Option<u32> {
-        self.cmap_lookup(CmapId { platform: 1, encoding: 0 }, u32::from(code))
+        self.cmap_lookup(
+            CmapId {
+                platform: 1,
+                encoding: 0,
+            },
+            u32::from(code),
+        )
     }
 
     pub fn glyph_by_name(&self, name: &str) -> Option<u32> {
@@ -362,7 +401,9 @@ impl TrueType {
 }
 
 fn simple_glyph(r: &mut Reader, contours: usize, m: &[f64; 6], b: &mut PathBuilder) {
-    let ends: Vec<usize> = (0..contours).map_while(|_| r.u16().map(usize::from)).collect();
+    let ends: Vec<usize> = (0..contours)
+        .map_while(|_| r.u16().map(usize::from))
+        .collect();
     let Some(&last) = ends.last() else {
         return;
     };
@@ -407,7 +448,12 @@ fn simple_glyph(r: &mut Reader, contours: usize, m: &[f64; 6], b: &mut PathBuild
         if end < start || end >= n {
             break;
         }
-        emit_contour(&(start..=end).map(|i| (pt(i), flags[i] & 1 != 0)).collect::<Vec<_>>(), b);
+        emit_contour(
+            &(start..=end)
+                .map(|i| (pt(i), flags[i] & 1 != 0))
+                .collect::<Vec<_>>(),
+            b,
+        );
         start = end + 1;
     }
 }

@@ -174,6 +174,127 @@ q 180 0 0 112 210 20 cm /J6 Do Q
     ],
 )
 
+def font_fixture(name):
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "crates", "atelier-font", "tests", "data", name), "rb") as f:
+        return f.read()
+
+
+def pfb_parts(data):
+    """Splits a PFB into the clear and binary parts PDF's FontFile wants."""
+    parts, pos = [], 0
+    while pos + 6 <= len(data) and data[pos] == 0x80 and data[pos + 1] != 3:
+        n = int.from_bytes(data[pos + 2:pos + 6], "little")
+        parts.append(data[pos + 6:pos + 6 + n])
+        pos += 6 + n
+    return parts[0], parts[1]
+
+
+def font_stream(key_extra, data):
+    return stream(b"/Length1 %d " % len(data) + key_extra, data)
+
+
+def hex_utf16(text):
+    return b"<" + text.encode("utf-16-be").hex().upper().encode() + b">"
+
+
+def to_unicode(pairs):
+    """A ToUnicode CMap for 2-byte codes: [(code, text)]."""
+    body = b"".join(b"<%04X> %s\n" % (c, hex_utf16(t)) for c, t in pairs)
+    return (b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n"
+            b"/CMapName /Test-UCS def 1 begincodespacerange <0000> <FFFF> endcodespacerange\n"
+            + b"%d beginbfchar\n" % len(pairs) + body + b"endbfchar\nendcmap end end\n")
+
+
+def text_fonts():
+    from fontTools.ttLib import TTFont
+    import io
+    clear, binary = pfb_parts(font_fixture("charter.pfb"))
+    lib = font_fixture("liberation.ttf")
+    tt = TTFont(io.BytesIO(lib))
+    cmap = tt.getBestCmap()
+    order = tt.getGlyphOrder()
+    cid_text = "Qfi\u00e9\u20ac"  # glyphs present in the subset
+    gids = [order.index(cmap[ord(c)]) for c in cid_text]
+    cid_hex = b"<" + b"".join(b"%04X" % g for g in gids) + b">"
+    uni = font_fixture("unifont_cid.otf")
+    content = b"""
+BT /F1 18 Tf 20 360 Td (Helvetica: Quick brown fox) Tj ET
+BT /F2 18 Tf 20 335 Td (Times-Bold, \\(escaped\\)) Tj ET
+BT /F3 14 Tf 20 312 Td (Courier: monospace 0123) Tj ET
+BT /F4 22 Tf 20 280 Td (Charter Type 1: Quality!) Tj ET
+BT /F5 22 Tf 20 250 Td (\x80 AQ fi gh jk 0123 W&M@%) Tj ET
+BT /F6 22 Tf 20 220 Td (QWM 0123 gh, jk; q!) Tj ET
+BT /F7 22 Tf 20 190 Td """ + cid_hex + b""" Tj ET
+BT /F8 24 Tf 20 150 Td <004200410042> Tj 0 -30 Td <6F23>Tj ET
+BT /F9 30 Tf 220 130 Td (abc) Tj ET
+BT /F1 12 Tf 20 60 Td [(T) 120 (ype) -500 (kerned) 250 (TJ)] TJ 0 -16 Td 3 Tc 2 Tw (spaced out text) Tj
+ 0 Tc 0 Tw 0 -16 Td 150 Tz (wide) Tj 50 Tz ( narrow) Tj 100 Tz 5 Ts (rise) Tj ET
+"""
+    resources = (b"<< /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R /F4 8 0 R /F5 10 0 R /F6 12 0 R"
+                 b" /F7 14 0 R /F8 18 0 R /F9 22 0 R >> >>")
+    widths = lambda font, n: b"[" + b" ".join(b"%d" % font for _ in range(n)) + b"]"
+    objs = [
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",  # 5
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >>",  # 6
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>",  # 7
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /CharterBT-Roman /FontDescriptor 9 0 R >>",  # 8
+        b"<< /Type /FontDescriptor /FontName /CharterBT-Roman /Flags 34 /FontBBox [-200 -250 1100 950]"
+        b" /ItalicAngle 0 /Ascent 900 /Descent -250 /CapHeight 700 /StemV 80 /FontFile 24 0 R >>",  # 9
+        b"<< /Type /Font /Subtype /TrueType /BaseFont /ABCDEF+LiberationSans /Encoding /WinAnsiEncoding"
+        b" /FontDescriptor 11 0 R >>",  # 10
+        b"<< /Type /FontDescriptor /FontName /ABCDEF+LiberationSans /Flags 32 /FontBBox [-200 -300 1200 1000]"
+        b" /ItalicAngle 0 /Ascent 900 /Descent -210 /CapHeight 700 /StemV 80 /FontFile2 25 0 R >>",  # 11
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+Inter /FontDescriptor 13 0 R"
+        b" /Encoding << /Differences [32 /space 33 /exclam] >> >>",  # 12
+        b"<< /Type /FontDescriptor /FontName /ABCDEF+Inter /Flags 32 /FontBBox [-200 -300 1200 1000]"
+        b" /ItalicAngle 0 /Ascent 900 /Descent -210 /CapHeight 700 /StemV 80 /FontFile3 26 0 R >>",  # 13
+        b"<< /Type /Font /Subtype /Type0 /BaseFont /ABCDEF+LiberationSans /Encoding /Identity-H"
+        b" /DescendantFonts [15 0 R] /ToUnicode 17 0 R >>",  # 14
+        b"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ABCDEF+LiberationSans /CIDSystemInfo"
+        b" << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 16 0 R /DW 600"
+        b" /CIDToGIDMap /Identity >>",  # 15
+        b"<< /Type /FontDescriptor /FontName /ABCDEF+LiberationSans /Flags 4 /FontBBox [-200 -300 1200 1000]"
+        b" /ItalicAngle 0 /Ascent 900 /Descent -210 /CapHeight 700 /StemV 80 /FontFile2 25 0 R >>",  # 16
+        stream(b"", to_unicode(list(zip(gids, cid_text)))),  # 17
+        b"<< /Type /Font /Subtype /Type0 /BaseFont /Unifont /Encoding /Identity-H"
+        b" /DescendantFonts [19 0 R] >>",  # 18
+        b"<< /Type /Font /Subtype /CIDFontType0 /BaseFont /Unifont /CIDSystemInfo"
+        b" << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 20 0 R"
+        b" /DW 1000 /W [66 [500 500]] >>",  # 19
+        b"<< /Type /FontDescriptor /FontName /Unifont /Flags 4 /FontBBox [0 -125 1000 875]"
+        b" /ItalicAngle 0 /Ascent 875 /Descent -125 /CapHeight 700 /StemV 80 /FontFile3 21 0 R >>",  # 20
+        stream(b"/Subtype /OpenType", uni),  # 21
+        b"<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1000 1000] /FontMatrix [0.001 0 0 0.001 0 0]"
+        b" /CharProcs 23 0 R /Encoding << /Type /Encoding /Differences [97 /square /triangle /diamond] >>"
+        b" /FirstChar 97 /LastChar 99 /Widths [1000 1000 1000] /Resources << >> >>",  # 22
+        b"<< /square %d 0 R /triangle %d 0 R /diamond %d 0 R >>" % (27, 28, 29),  # 23
+        stream(b"/Length1 %d /Length2 %d /Length3 0" % (len(clear), len(binary)), clear + binary),  # 24
+        font_stream(b"", lib),  # 25
+        stream(b"/Subtype /Type1C", font_fixture("inter.cff")),  # 26
+        stream(b"", b"1000 0 d0 0 0.6 0 rg 100 100 800 800 re f"),  # 27
+        stream(b"", b"1000 0 0 0 1000 1000 d1 100 100 m 900 100 l 500 900 l f"),  # 28
+        stream(b"", b"1000 0 d0 1 0 0 RG 60 w 500 100 m 900 500 l 500 900 l 100 500 l s"),  # 29
+    ]
+    return single_page(content, resources=resources, extra_objects=objs)
+
+
+SAMPLES["text_fonts"] = text_fonts()
+
+SAMPLES["text_modes"] = single_page(
+    b"""
+BT /F1 36 Tf 20 330 Td 0 Tr 0 0 1 rg (Fill) Tj ET
+BT /F1 36 Tf 20 280 Td 1 Tr 1 w 1 0 0 RG (Stroke) Tj ET
+BT /F1 36 Tf 20 230 Td 2 Tr 0 1 0 rg 0 0 0 RG (Both) Tj ET
+BT /F1 36 Tf 20 180 Td 3 Tr (Invisible) Tj ET
+q BT /F1 60 Tf 20 90 Td 7 Tr (CLIP) Tj ET 1 0.5 0 rg 0 80 400 30 re f 0 0.5 1 rg 0 110 400 40 re f Q
+BT /F1 20 Tf 0 Tr 0 g 20 40 Td 1 0 0.3 1 0 0 Tm 20 40 Td (Skewed text) Tj ET
+BT /F1 20 Tf 0.7071 0.7071 -0.7071 0.7071 300 200 Tm (Rotated) Tj ET
+""",
+    resources=b"<< /Font << /F1 5 0 R >> >>",
+    extra_objects=[b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"],
+)
+
 SAMPLES["forms"] = single_page(
     b"""
 q 1 0 0 1 50 50 cm /F1 Do Q

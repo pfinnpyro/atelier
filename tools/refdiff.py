@@ -44,8 +44,12 @@ def main():
         with tempfile.TemporaryDirectory() as tmp:
             ours = os.path.join(tmp, "ours")
             subprocess.run([EXE, "render", path, "all", "--dpi", str(args.dpi), "-o", ours],
-                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(["pdftoppm", "-r", str(args.dpi), "-png", path, os.path.join(tmp, "ref")], check=True)
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            ref_run = subprocess.run(["pdftoppm", "-r", str(args.dpi), "-png", path, os.path.join(tmp, "ref")],
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if ref_run.returncode != 0:
+                print("%-28s   poppler cannot open it" % os.path.basename(path))
+                continue
             refs = sorted(glob.glob(os.path.join(tmp, "ref-*.png")))
             for n, ref in enumerate(refs, start=1):
                 mine = "%s-%d.png" % (ours, n)
@@ -59,6 +63,10 @@ def main():
                     os.makedirs(args.keep, exist_ok=True)
                     stem = "%s-%d" % (os.path.splitext(os.path.basename(path))[0], n)
                     diff.point(lambda v: min(255, v * 4)).save(os.path.join(args.keep, stem + "-diff.png"))
+                    side = Image.new("RGB", (diff.width * 2, diff.height), "white")
+                    side.paste(Image.open(mine).convert("RGB"), (0, 0))
+                    side.paste(Image.open(ref).convert("RGB"), (diff.width, 0))
+                    side.save(os.path.join(args.keep, stem + "-side.png"))
     return 0
 
 

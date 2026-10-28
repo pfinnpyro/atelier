@@ -176,8 +176,8 @@ pub struct Cff {
     names: HashMap<String, u32>,
     cids: HashMap<u16, u32>,
     /// Built-in encoding: code to glyph, when the font has a custom one.
-    encoding: Option<[u32; 256]>,
-    sfnt: Option<TrueType>,
+    encoding: Option<Box<[u32; 256]>>,
+    sfnt: Option<Box<TrueType>>,
 }
 
 impl Cff {
@@ -254,7 +254,7 @@ impl Cff {
 
     /// Keeps the OpenType wrapper for its cmap and metrics.
     pub(crate) fn attach_sfnt(&mut self, tt: TrueType) {
-        self.sfnt = Some(tt);
+        self.sfnt = Some(Box::new(tt));
     }
 
     pub fn glyph_count(&self) -> usize {
@@ -274,8 +274,8 @@ impl Cff {
         std::str::from_utf8(s).ok()
     }
 
-    fn read_encoding(&self, off: usize) -> Option<[u32; 256]> {
-        let mut map = [0u32; 256];
+    fn read_encoding(&self, off: usize) -> Option<Box<[u32; 256]>> {
+        let mut map = Box::new([0u32; 256]);
         let mut r = Reader::at(&self.data, off);
         let format = r.u8()?;
         match format & 0x7F {
@@ -324,7 +324,9 @@ impl Cff {
         if !self.is_cid {
             return Some(cid);
         }
-        u16::try_from(cid).ok().and_then(|c| self.cids.get(&c).copied())
+        u16::try_from(cid)
+            .ok()
+            .and_then(|c| self.cids.get(&c).copied())
     }
 
     pub fn glyph_by_unicode(&self, c: char) -> Option<u32> {
@@ -357,7 +359,8 @@ impl Cff {
             let g = map[usize::from(code)];
             return (g != 0).then_some(g);
         }
-        self.builtin_encoding(code).and_then(|n| self.glyph_by_name(n))
+        self.builtin_encoding(code)
+            .and_then(|n| self.glyph_by_name(n))
     }
 
     fn private_for(&self, gid: u32) -> (&Private, [f64; 6]) {
@@ -581,11 +584,13 @@ impl T2State<'_> {
                 32..=246 => self.stack.push(f64::from(i32::from(b) - 139)),
                 247..=250 => {
                     let b1 = i32::from(r.u8().unwrap_or(0));
-                    self.stack.push(f64::from((i32::from(b) - 247) * 256 + b1 + 108));
+                    self.stack
+                        .push(f64::from((i32::from(b) - 247) * 256 + b1 + 108));
                 }
                 251..=254 => {
                     let b1 = i32::from(r.u8().unwrap_or(0));
-                    self.stack.push(f64::from(-(i32::from(b) - 251) * 256 - b1 - 108));
+                    self.stack
+                        .push(f64::from(-(i32::from(b) - 251) * 256 - b1 - 108));
                 }
                 255 => {
                     let v = r.u32().unwrap_or(0) as i32;

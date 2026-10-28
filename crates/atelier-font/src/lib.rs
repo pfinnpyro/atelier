@@ -124,9 +124,7 @@ impl FontProgram {
         match self {
             Self::TrueType(f) => f.glyph_by_symbol_code(code),
             Self::Cff(f) => f.glyph_by_code(code),
-            Self::Type1(f) => f
-                .builtin_encoding(code)
-                .and_then(|n| f.glyph_by_name(n)),
+            Self::Type1(f) => f.builtin_encoding(code).and_then(|n| f.glyph_by_name(n)),
         }
     }
 

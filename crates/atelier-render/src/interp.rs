@@ -1,6 +1,6 @@
 //! The content stream interpreter (ISO 32000-2, chapter 8).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use atelier_raster::{
@@ -12,7 +12,9 @@ use atelier_syntax::{
 };
 
 use crate::colorspace::{self, ColorSpace};
+use crate::font::PdfFont;
 use crate::image;
+use crate::text::{PageText, TextGlyph};
 
 /// Form XObjects nested deeper than this are skipped.
 const MAX_FORM_DEPTH: usize = 32;
@@ -70,9 +72,52 @@ pub fn render_page(doc: &Document, page: &Page, options: &RenderOptions) -> Resu
     Ok(Rendered { pixmap, warnings })
 }
 
+/// The text of a page, with each glyph's position in default user space.
+/// Runs the page's content without drawing anything.
+pub fn extract_text(doc: &Document, page: &Page) -> Result<PageText> {
+    let mut pixmap = Pixmap::filled(1, 1, Color::WHITE);
+    let content = page.contents(doc)?;
+    let mut interp = Interpreter::new(doc, &mut pixmap, Transform::IDENTITY);
+    interp.draw = false;
+    interp.text = Some(Vec::new());
+    interp.run(&content, &page.resources, 0);
+    Ok(PageText {
+        glyphs: interp.text.unwrap_or_default(),
+    })
+}
+
+#[derive(Clone)]
+struct TextState {
+    char_spacing: f64,
+    word_spacing: f64,
+    /// Horizontal scaling as a factor (Tz / 100).
+    scale: f64,
+    leading: f64,
+    font: Option<Rc<PdfFont>>,
+    size: f64,
+    render: u8,
+    rise: f64,
+}
+
+impl Default for TextState {
+    fn default() -> Self {
+        Self {
+            char_spacing: 0.0,
+            word_spacing: 0.0,
+            scale: 1.0,
+            leading: 0.0,
+            font: None,
+            size: 0.0,
+            render: 0,
+            rise: 0.0,
+        }
+    }
+}
+
 #[derive(Clone)]
 struct GraphicsState {
     ctm: Transform,
+    text: TextState,
     clip: Option<Rc<Mask>>,
     stroke: StrokeStyle,
     fill_space: ColorSpace,
@@ -87,6 +132,7 @@ impl GraphicsState {
     fn new(ctm: Transform) -> Self {
         Self {
             ctm,
+            text: TextState::default(),
             clip: None,
             stroke: StrokeStyle::default(),
             fill_space: ColorSpace::Gray,
@@ -122,6 +168,17 @@ struct Interpreter<'a> {
     operations: usize,
     warnings: Vec<String>,
     seen: HashSet<String>,
+    /// Text matrix and text line matrix.
+    tm: Transform,
+    tlm: Transform,
+    /// Device-space outlines of glyphs shown with a clipping render mode in
+    /// the current text object.
+    text_clip: Option<PathBuilder>,
+    fonts: HashMap<ObjRef, Rc<PdfFont>>,
+    /// False when only collecting text.
+    draw: bool,
+    /// Collected glyphs, when extracting text.
+    text: Option<Vec<TextGlyph>>,
 }
 
 fn nums(ops: &[Object]) -> Vec<f64> {
@@ -141,6 +198,12 @@ impl<'a> Interpreter<'a> {
             operations: 0,
             warnings: Vec::new(),
             seen: HashSet::new(),
+            tm: Transform::IDENTITY,
+            tlm: Transform::IDENTITY,
+            text_clip: None,
+            fonts: HashMap::new(),
+            draw: true,
+            text: None,
         }
     }
 
@@ -294,8 +357,80 @@ impl<'a> Interpreter<'a> {
             }
 
             b"sh" => self.warn("shadings are not drawn yet"),
-            b"BT" | b"ET" => {}
-            b"Tj" | b"TJ" | b"'" | b"\"" => self.warn("text is not drawn yet"),
+
+            // Text
+            b"BT" => {
+                self.tm = Transform::IDENTITY;
+                self.tlm = Transform::IDENTITY;
+                self.text_clip = None;
+            }
+            b"ET" => {
+                if let Some(mut clip) = self.text_clip.take() {
+                    self.clip_device(&clip.finish(), FillRule::NonZero);
+                }
+            }
+            b"Tc" if !n.is_empty() => self.gs.text.char_spacing = n[0],
+            b"Tw" if !n.is_empty() => self.gs.text.word_spacing = n[0],
+            b"Tz" if !n.is_empty() => self.gs.text.scale = n[0] / 100.0,
+            b"TL" if !n.is_empty() => self.gs.text.leading = n[0],
+            b"Ts" if !n.is_empty() => self.gs.text.rise = n[0],
+            b"Tr" if !n.is_empty() => self.gs.text.render = (n[0] as i64).clamp(0, 7) as u8,
+            b"Tf" => {
+                if let (Some(name), Some(size)) = (
+                    o.first().and_then(Object::as_name),
+                    o.get(1).and_then(Object::as_f64),
+                ) {
+                    self.gs.text.font = self.font(name, resources);
+                    self.gs.text.size = size;
+                }
+            }
+            b"Td" if n.len() >= 2 => self.next_line(n[0], n[1]),
+            b"TD" if n.len() >= 2 => {
+                self.gs.text.leading = -n[1];
+                self.next_line(n[0], n[1]);
+            }
+            b"Tm" if n.len() >= 6 => {
+                let m = Transform::from_array([n[0], n[1], n[2], n[3], n[4], n[5]]);
+                if m.is_finite() {
+                    self.tm = m;
+                    self.tlm = m;
+                }
+            }
+            b"T*" => self.next_line(0.0, -self.gs.text.leading),
+            b"Tj" => {
+                if let Some(s) = o.first().and_then(Object::as_string) {
+                    self.show(&s.bytes, resources, depth);
+                }
+            }
+            b"'" => {
+                self.next_line(0.0, -self.gs.text.leading);
+                if let Some(s) = o.first().and_then(Object::as_string) {
+                    self.show(&s.bytes, resources, depth);
+                }
+            }
+            b"\"" if o.len() >= 3 => {
+                self.gs.text.word_spacing = o[0].as_f64().unwrap_or(0.0);
+                self.gs.text.char_spacing = o[1].as_f64().unwrap_or(0.0);
+                self.next_line(0.0, -self.gs.text.leading);
+                if let Some(s) = o[2].as_string() {
+                    self.show(&s.bytes, resources, depth);
+                }
+            }
+            b"TJ" => {
+                if let Some(items) = o.first().and_then(Object::as_array) {
+                    for item in items {
+                        match item {
+                            Object::String(s) => self.show(&s.bytes, resources, depth),
+                            other => {
+                                if let Some(adj) = other.as_f64() {
+                                    self.adjust(adj);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            b"d0" | b"d1" => {}
             _ => {}
         }
     }
@@ -314,7 +449,7 @@ impl<'a> Interpreter<'a> {
     /// clip, and starts a new path.
     fn paint(&mut self, fill: Option<FillRule>, stroke: bool) {
         let path = self.path.finish();
-        if !path.is_empty() {
+        if !path.is_empty() && self.draw {
             let clip = self.gs.clip.clone();
             if let Some(rule) = fill {
                 if let Some(color) = self.gs.fill_color() {
@@ -487,6 +622,9 @@ impl<'a> Interpreter<'a> {
     }
 
     fn image_xobject(&mut self, stream: &Stream, resources: &Dict) {
+        if !self.draw {
+            return;
+        }
         let decoded = match self.doc.decode_stream(stream) {
             Ok(d) => d,
             Err(e) => {
@@ -499,6 +637,9 @@ impl<'a> Interpreter<'a> {
     }
 
     fn inline_image(&mut self, dict: &Dict, data: &[u8], resources: &Dict) {
+        if !self.draw {
+            return;
+        }
         // Expand the abbreviated filter keys so the normal decoder applies.
         let mut full = dict.clone();
         if let Some(f) = dict.get(b"F") {
@@ -561,6 +702,196 @@ impl<'a> Interpreter<'a> {
             self.gs.fill_alpha,
             clip.as_deref(),
         );
+    }
+
+    fn next_line(&mut self, tx: f64, ty: f64) {
+        self.tlm = Transform::translate(tx, ty).then(&self.tlm);
+        self.tm = self.tlm;
+    }
+
+    /// A TJ number: moves the next glyph back by n / 1000 of the font size.
+    fn adjust(&mut self, n: f64) {
+        let t = &self.gs.text;
+        let vertical = t.font.as_ref().is_some_and(|f| f.is_vertical());
+        let d = -n / 1000.0 * t.size;
+        self.tm = if vertical {
+            Transform::translate(0.0, d)
+        } else {
+            Transform::translate(d * t.scale, 0.0)
+        }
+        .then(&self.tm);
+    }
+
+    fn font(&mut self, name: &Name, resources: &Dict) -> Option<Rc<PdfFont>> {
+        let Some((Object::Dict(dict), r)) = self.lookup(resources, b"Font", name) else {
+            self.warn(format!("font {} is missing", name.as_str_lossy()));
+            return None;
+        };
+        if let Some(f) = r.and_then(|r| self.fonts.get(&r)) {
+            return Some(f.clone());
+        }
+        let mut warnings = Vec::new();
+        let font = Rc::new(PdfFont::load(self.doc, &dict, &mut |w| warnings.push(w)));
+        for w in warnings {
+            self.warn(w);
+        }
+        if let Some(r) = r {
+            self.fonts.insert(r, font.clone());
+        }
+        Some(font)
+    }
+
+    /// Shows a string with the current font (Tj).
+    fn show(&mut self, bytes: &[u8], resources: &Dict, depth: usize) {
+        let Some(font) = self.gs.text.font.clone() else {
+            self.warn("text shown without a font");
+            return;
+        };
+        let vertical = font.is_vertical();
+        for g in font.decode(bytes) {
+            let t = &self.gs.text;
+            let (size, scale, rise, render) = (t.size, t.scale, t.rise, t.render);
+            // Glyph space (1.0 = font size) to user space.
+            let mut glyph_m = Transform::new(size * scale, 0.0, 0.0, size, 0.0, rise);
+            if let Some((_, vx, vy)) = g.vertical {
+                glyph_m = glyph_m.then(&Transform::translate(-vx * size * scale, -vy * size));
+            }
+            let to_user = glyph_m.then(&self.tm);
+
+            if font.is_type3() {
+                self.type3_glyph(&font, g.code, &to_user, resources, depth);
+            } else if render >= 4 || (render != 3 && self.draw) {
+                if let Some(outline) = g.gid.and_then(|gid| font.outline(gid)) {
+                    self.paint_glyph(&outline, &to_user, render);
+                }
+            }
+
+            let advance = if vertical {
+                g.vertical.map_or(-1.0, |v| v.0)
+            } else {
+                g.width
+            };
+            self.record_glyph(&font, &g, &to_user, advance, vertical, render == 3);
+
+            let t = &self.gs.text;
+            let spacing = t.char_spacing + if g.is_space { t.word_spacing } else { 0.0 };
+            self.tm = if vertical {
+                Transform::translate(0.0, advance * t.size + spacing)
+            } else {
+                Transform::translate((g.width * t.size + spacing) * t.scale, 0.0)
+            }
+            .then(&self.tm);
+        }
+    }
+
+    fn paint_glyph(&mut self, outline: &Path, to_user: &Transform, render: u8) {
+        let user = outline.transform(to_user);
+        if render >= 4 {
+            let device = user.transform(&self.gs.ctm);
+            self.text_clip
+                .get_or_insert_with(PathBuilder::new)
+                .append(&device);
+        }
+        if !self.draw {
+            return;
+        }
+        let clip = self.gs.clip.clone();
+        if matches!(render, 0 | 2 | 4 | 6) {
+            if let Some(color) = self.gs.fill_color() {
+                let device = user.transform(&self.gs.ctm);
+                fill_path(
+                    self.pixmap,
+                    &device,
+                    FillRule::NonZero,
+                    color,
+                    clip.as_deref(),
+                );
+            }
+        }
+        if matches!(render, 1 | 2 | 5 | 6) {
+            if let Some(color) = self.gs.stroke_paint() {
+                let outline = stroke_to_path(&user, &self.gs.stroke, &self.gs.ctm);
+                fill_path(
+                    self.pixmap,
+                    &outline,
+                    FillRule::NonZero,
+                    color,
+                    clip.as_deref(),
+                );
+            }
+        }
+    }
+
+    /// Draws a Type 3 glyph by running its content stream.
+    fn type3_glyph(
+        &mut self,
+        font: &PdfFont,
+        code: u32,
+        to_user: &Transform,
+        resources: &Dict,
+        depth: usize,
+    ) {
+        let Some((matrix, proc, own_resources)) = font.type3(code) else {
+            return;
+        };
+        let Some(Ok(Object::Stream(stream))) = proc.map(|p| self.doc.resolve(p)) else {
+            return;
+        };
+        if depth >= MAX_FORM_DEPTH {
+            self.warn("Type 3 glyphs nest too deeply");
+            return;
+        }
+        let Ok(decoded) = self.doc.decode_stream(&stream) else {
+            return;
+        };
+        let res = own_resources.cloned().unwrap_or_else(|| resources.clone());
+        let saved = self.gs.clone();
+        let saved_path = std::mem::take(&mut self.path);
+        let (saved_tm, saved_tlm) = (self.tm, self.tlm);
+        let saved_clip = self.text_clip.take();
+        self.gs.ctm = matrix.then(to_user).then(&self.gs.ctm);
+        self.gs.text = TextState::default();
+        self.run(&decoded.data, &res, depth + 1);
+        self.gs = saved;
+        self.path = saved_path;
+        self.tm = saved_tm;
+        self.tlm = saved_tlm;
+        self.text_clip = saved_clip;
+    }
+
+    fn record_glyph(
+        &mut self,
+        font: &PdfFont,
+        g: &crate::font::Glyph,
+        to_user: &Transform,
+        advance: f64,
+        vertical: bool,
+        invisible: bool,
+    ) {
+        let Some(out) = self.text.as_mut() else {
+            return;
+        };
+        let m = to_user.then(&self.gs.ctm);
+        // Glyph box in glyph space: the advance by a typical ascent/descent.
+        let (x0, x1, y0, y1) = if vertical {
+            (-0.5, 0.5, advance, 0.0)
+        } else {
+            (0.0, advance, -0.2, 0.8)
+        };
+        let p = |x: f64, y: f64| m.apply(Point::new(x, y));
+        let (b0, b1) = if vertical {
+            (p(0.0, 0.0), p(0.0, advance))
+        } else {
+            (p(0.0, 0.0), p(advance, 0.0))
+        };
+        out.push(TextGlyph {
+            text: g.unicode.clone().unwrap_or_default(),
+            quad: [p(x0, y0), p(x1, y0), p(x1, y1), p(x0, y1)],
+            baseline: (b0, b1),
+            size: m.apply_vector(Point::new(0.0, 1.0)).length(),
+            font: font.name.clone(),
+            invisible,
+        });
     }
 }
 

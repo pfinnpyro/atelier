@@ -51,9 +51,12 @@ pub fn standard_font(base_font: &str) -> Option<&'static Std14> {
         "Courier-Bold" | "CourierNew,Bold" | "CourierNew-Bold" | "CourierNewPS-BoldMT" => {
             "Courier-Bold"
         }
-        "Courier-Oblique" | "CourierNew,Italic" | "CourierNew-Italic"
-        | "CourierNewPS-ItalicMT" => "Courier-Oblique",
-        "Courier-BoldOblique" | "CourierNew,BoldItalic" | "CourierNew-BoldItalic"
+        "Courier-Oblique" | "CourierNew,Italic" | "CourierNew-Italic" | "CourierNewPS-ItalicMT" => {
+            "Courier-Oblique"
+        }
+        "Courier-BoldOblique"
+        | "CourierNew,BoldItalic"
+        | "CourierNew-BoldItalic"
         | "CourierNewPS-BoldItalicMT" => "Courier-BoldOblique",
         "Helvetica" | "Arial" | "ArialMT" => "Helvetica",
         "Helvetica-Bold" | "Arial,Bold" | "Arial-Bold" | "Arial-BoldMT" | "Helvetica,Bold" => {
@@ -61,19 +64,25 @@ pub fn standard_font(base_font: &str) -> Option<&'static Std14> {
         }
         "Helvetica-Oblique" | "Arial,Italic" | "Arial-Italic" | "Arial-ItalicMT"
         | "Helvetica,Italic" | "Helvetica-Italic" => "Helvetica-Oblique",
-        "Helvetica-BoldOblique" | "Arial,BoldItalic" | "Arial-BoldItalic"
-        | "Arial-BoldItalicMT" | "Helvetica,BoldItalic" | "Helvetica-BoldItalic" => {
-            "Helvetica-BoldOblique"
-        }
+        "Helvetica-BoldOblique"
+        | "Arial,BoldItalic"
+        | "Arial-BoldItalic"
+        | "Arial-BoldItalicMT"
+        | "Helvetica,BoldItalic"
+        | "Helvetica-BoldItalic" => "Helvetica-BoldOblique",
         "Times-Roman" | "TimesNewRoman" | "TimesNewRomanPSMT" | "Times" | "TimesNewRomanPS" => {
             "Times-Roman"
         }
         "Times-Bold" | "TimesNewRoman,Bold" | "TimesNewRoman-Bold" | "TimesNewRomanPS-BoldMT" => {
             "Times-Bold"
         }
-        "Times-Italic" | "TimesNewRoman,Italic" | "TimesNewRoman-Italic"
+        "Times-Italic"
+        | "TimesNewRoman,Italic"
+        | "TimesNewRoman-Italic"
         | "TimesNewRomanPS-ItalicMT" => "Times-Italic",
-        "Times-BoldItalic" | "TimesNewRoman,BoldItalic" | "TimesNewRoman-BoldItalic"
+        "Times-BoldItalic"
+        | "TimesNewRoman,BoldItalic"
+        | "TimesNewRoman-BoldItalic"
         | "TimesNewRomanPS-BoldItalicMT" => "Times-BoldItalic",
         "Symbol" | "Symbol,Bold" | "Symbol,Italic" | "Symbol,BoldItalic" | "SymbolMT" => "Symbol",
         "ZapfDingbats" | "Dingbats" | "ZapfDingbatsITC" => "ZapfDingbats",
@@ -99,8 +108,14 @@ mod tests {
         let h = standard_font("Helvetica").unwrap();
         assert_eq!(h.width("A"), Some(667));
         assert_eq!(h.width("space"), Some(278));
-        assert_eq!(standard_font("ABCDEF+Arial,Bold").unwrap().name, "Helvetica-Bold");
-        assert_eq!(standard_font("TimesNewRomanPSMT").unwrap().name, "Times-Roman");
+        assert_eq!(
+            standard_font("ABCDEF+Arial,Bold").unwrap().name,
+            "Helvetica-Bold"
+        );
+        assert_eq!(
+            standard_font("TimesNewRomanPSMT").unwrap().name,
+            "Times-Roman"
+        );
         assert!(standard_font("Courier").unwrap().is_fixed_pitch());
         assert!(standard_font("Comic Sans").is_none());
     }

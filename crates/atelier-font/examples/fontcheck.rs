@@ -6,7 +6,10 @@ use atelier_font::FontProgram;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let data = std::fs::read(&args[1]).expect("read font");
-    let max: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(usize::MAX);
+    let max: usize = args
+        .get(2)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(usize::MAX);
     let font = match FontProgram::parse(&data) {
         Ok(f) => f,
         Err(e) => {
@@ -43,7 +46,10 @@ fn main() {
         if polys.is_empty() {
             println!("{label} {adv:.6} empty");
         } else {
-            println!("{label} {adv:.6} {:.6} {x0:.5} {y0:.5} {x1:.5} {y1:.5}", area / 2.0);
+            println!(
+                "{label} {adv:.6} {:.6} {x0:.5} {y0:.5} {x1:.5} {y1:.5}",
+                area / 2.0
+            );
         }
     }
 }
