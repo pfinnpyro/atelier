@@ -39,6 +39,18 @@ pub const TOLERANCE: f64 = 0.2;
 /// subpath is implicitly closed, as fills require. Returns `None` when nothing
 /// is visible.
 pub fn rasterize(path: &Path, rule: FillRule, (width, height): (usize, usize)) -> Option<Coverage> {
+    rasterize_in(path, rule, (0, 0, width, height))
+}
+
+/// Like [`rasterize`], but only computes coverage inside the device-pixel
+/// rectangle `(x, y, width, height)`; the rest is treated as 0. Clipped
+/// drawing uses the clip's bounds here, so a shape far bigger than what
+/// shows costs only what shows.
+pub fn rasterize_in(
+    path: &Path,
+    rule: FillRule,
+    (rx, ry, rw, rh): (usize, usize, usize, usize),
+) -> Option<Coverage> {
     let polys = path.flatten(TOLERANCE);
     let mut min = Point::new(f64::INFINITY, f64::INFINITY);
     let mut max = Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
@@ -51,10 +63,10 @@ pub fn rasterize(path: &Path, rule: FillRule, (width, height): (usize, usize)) -
             max = Point::new(max.x.max(p.x), max.y.max(p.y));
         }
     }
-    let x0 = min.x.floor().max(0.0);
-    let y0 = min.y.floor().max(0.0);
-    let x1 = max.x.ceil().min(width as f64);
-    let y1 = max.y.ceil().min(height as f64);
+    let x0 = min.x.floor().max(rx as f64);
+    let y0 = min.y.floor().max(ry as f64);
+    let x1 = max.x.ceil().min((rx + rw) as f64);
+    let y1 = max.y.ceil().min((ry + rh) as f64);
     if !(x0 < x1 && y0 < y1) {
         return None;
     }
@@ -309,6 +321,14 @@ mod tests {
         }
         let path = b.finish();
         let eo = rasterize(&path, FillRule::EvenOdd, (10, 10)).unwrap();
+        // Rasterizing a window gives the same pixels as the whole.
+        let part = rasterize_in(&path, FillRule::EvenOdd, (3, 2, 5, 6)).unwrap();
+        for y in 0..10 {
+            for x in 0..10 {
+                let inside = (3..8).contains(&x) && (2..8).contains(&y);
+                assert_eq!(part.get(x, y), if inside { eo.get(x, y) } else { 0 });
+            }
+        }
         let nz = rasterize(&path, FillRule::NonZero, (10, 10)).unwrap();
         assert_eq!(eo.get(5, 5), 0);
         assert_eq!(eo.get(1, 1), 255);

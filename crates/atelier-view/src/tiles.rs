@@ -62,7 +62,21 @@ pub fn tiles_for_view(
     view: ViewRect,
     pixels_per_point: f64,
 ) -> Vec<(TileKey, (usize, usize))> {
-    let scale_milli = scale_key(layout.zoom(), pixels_per_point);
+    tiles_at_scale(layout, view, scale_key(layout.zoom(), pixels_per_point))
+}
+
+/// Device pixels per point, in thousandths, of the quick low-resolution
+/// tiles shown while sharp ones render (36 dpi).
+pub const PREVIEW_SCALE: u32 = 500;
+
+/// Like [`tiles_for_view`], at a given scale (in thousandths) rather than
+/// the layout's zoom; used for preview tiles.
+pub fn tiles_at_scale(
+    layout: &Layout,
+    view: ViewRect,
+    scale_milli: u32,
+) -> Vec<(TileKey, (usize, usize))> {
+    let scale_milli = scale_milli.max(1);
     let scale = f64::from(scale_milli) / 1000.0;
     // Logical pixels to device pixels at the key's (rounded) scale.
     let k = scale / layout.zoom();
@@ -256,6 +270,10 @@ mod tests {
         assert_eq!(hidpi[0].0.scale_milli, 4000);
         assert_eq!(hidpi[0].1, (2448, 3168));
         assert_eq!(hidpi.len(), 3);
+        // Previews cover the same view in far fewer tiles.
+        let preview = tiles_at_scale(&l, view, PREVIEW_SCALE);
+        assert_eq!(preview.len(), 1);
+        assert_eq!(preview[0].1, (306, 396));
     }
 
     #[test]
