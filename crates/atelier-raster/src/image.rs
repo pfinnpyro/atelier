@@ -1,7 +1,7 @@
 //! Drawing images through an arbitrary affine transform.
 
 use crate::pixmap::mul255;
-use crate::{FillRule, Mask, Path, Pixmap, Point, Transform, rasterize};
+use crate::{FillRule, Mask, Path, Pixmap, Point, Transform, drawable, rasterize_in};
 
 /// A decoded image: premultiplied RGBA8, rows top down.
 #[derive(Debug, Clone, PartialEq)]
@@ -75,7 +75,7 @@ pub fn draw_image(
     }
     // Edges anti-aliased by rasterizing the unit square itself.
     let square = Path::rect(0.0, 0.0, 1.0, 1.0).transform(ctm);
-    let Some(coverage) = rasterize(&square, FillRule::NonZero, pixmap.bounds()) else {
+    let Some(coverage) = rasterize_in(&square, FillRule::NonZero, drawable(pixmap, clip)) else {
         return;
     };
     let Some(inverse) = ctm.invert() else { return };
@@ -99,9 +99,10 @@ pub fn draw_image(
     let (w, h) = (img.width as f64, img.height as f64);
     let global = (alpha.clamp(0.0, 1.0) * 255.0 + 0.5) as u32;
 
-    for row in 0..coverage.height {
+    let (rows, cols) = crate::pixmap::visible_span(&coverage, clip);
+    for row in rows {
         let y = coverage.y + row;
-        for col in 0..coverage.width {
+        for col in cols.clone() {
             let x = coverage.x + col;
             let mut c = u32::from(coverage.data[row * coverage.width + col]);
             if let Some(m) = clip {

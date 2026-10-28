@@ -15,4 +15,6 @@ mod tiles;
 pub use layout::{Layout, PageGeom, ViewRect};
 pub use search::{SearchMatch, find_in_page};
 pub use select::{Caret, Selection, hit_test};
-pub use tiles::{TILE_SIZE, TileCache, TileKey, scale_key, tiles_for_view};
+pub use tiles::{
+    PREVIEW_SCALE, TILE_SIZE, TileCache, TileKey, scale_key, tiles_at_scale, tiles_for_view,
+};

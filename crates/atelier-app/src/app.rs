@@ -10,8 +10,8 @@ use atelier_raster::Point;
 use atelier_render::PageText;
 use atelier_syntax::Document;
 use atelier_view::{
-    Caret, Layout, PageGeom, SearchMatch, Selection, TileCache, TileKey, ViewRect, hit_test,
-    scale_key, tiles_for_view,
+    Caret, Layout, PREVIEW_SCALE, PageGeom, SearchMatch, Selection, TileCache, TileKey, ViewRect,
+    hit_test, scale_key, tiles_at_scale, tiles_for_view,
 };
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, CursorIcon, Event, FontId, Key, Modifiers, Pos2, Rect,
@@ -342,8 +342,9 @@ impl Viewer {
                     warnings,
                 } if generation == o.generation => {
                     // Drop tiles for a zoom we have since left, unless they
-                    // can stand in for the wanted one.
+                    // are previews or can stand in for the wanted one.
                     if key.scale_milli != scale_key(o.layout.zoom(), ppp)
+                        && key.scale_milli != PREVIEW_SCALE
                         && o.tiles.page_tiles(key.page).next().is_some()
                     {
                         continue;
@@ -420,7 +421,9 @@ impl Viewer {
 
     fn keyboard(&mut self) {
         let ctx = self.ctx.clone();
-        let typing = ctx.egui_wants_keyboard_input();
+        // Only a text box takes keys away from the page; a focused button or
+        // the page itself does not.
+        let typing = ctx.text_edit_focused();
         // Shortcuts match each key event with the modifiers held at that
         // moment; a quick Ctrl+F can be over before the frame ends.
         let shortcut = |k| ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, k));
@@ -741,6 +744,9 @@ impl Viewer {
                     .map(|(k, t)| (*k, t.id(), t.size_vec2()))
                     .collect();
                 others.sort_by_key(|(k, _, _)| k.scale_milli);
+                for (k, _, _) in &others {
+                    o.tiles.get(k);
+                }
                 draw.extend(others);
             }
             for (k, _) in wanted.iter().filter(|(k, _)| k.page == page) {
@@ -810,8 +816,10 @@ impl Viewer {
             }
         }
 
-        // Ask the workers for what is missing: visible tiles first, then
-        // the text of visible pages, then tiles just past the view.
+        // Ask the workers for what is missing, most urgent first: sharp
+        // tiles in view, quick previews of the pages in view, their text,
+        // sharp tiles a screen above and two below, then previews further
+        // out so fast scrolling shows something at once.
         let mut jobs = Vec::new();
         let tile_job = |(key, page_px): (TileKey, (usize, usize))| Job::Tile {
             doc: o.doc.clone(),
@@ -820,12 +828,27 @@ impl Viewer {
             page_px,
         };
         let needed = |o: &Open, k: &TileKey| !o.tiles.contains(k) && !o.failed.contains(k);
-        jobs.extend(
-            wanted
-                .iter()
-                .filter(|(k, _)| needed(o, k))
-                .map(|t| tile_job(*t)),
-        );
+        let mut queued: HashSet<TileKey> = HashSet::new();
+        let mut add_tiles = |jobs: &mut Vec<Job>, tiles: Vec<(TileKey, (usize, usize))>| {
+            for t in tiles {
+                if needed(o, &t.0) && queued.insert(t.0) {
+                    jobs.push(tile_job(t));
+                }
+            }
+        };
+        let previews = current_scale > 2 * PREVIEW_SCALE;
+        let around = |above: f64, below: f64| {
+            ViewRect::new(
+                view.x,
+                view.y - view.h * above,
+                view.w,
+                view.h * (1.0 + above + below),
+            )
+        };
+        add_tiles(&mut jobs, wanted.clone());
+        if previews {
+            add_tiles(&mut jobs, tiles_at_scale(&o.layout, view, PREVIEW_SCALE));
+        }
         let mut pages: Vec<usize> = o.layout.visible_pages(view.y, view.bottom()).collect();
         if let Some(sel) = self.selection {
             pages.extend([sel.anchor.page, sel.focus.page]);
@@ -843,13 +866,16 @@ impl Viewer {
                 });
             }
         }
-        let ahead = ViewRect::new(view.x, view.y - view.h, view.w, view.h * 3.0);
-        jobs.extend(
-            tiles_for_view(&o.layout, ahead, f64::from(ppp))
-                .into_iter()
-                .filter(|(k, _)| needed(o, k) && !wanted.iter().any(|(w, _)| w == k))
-                .map(tile_job),
+        add_tiles(
+            &mut jobs,
+            tiles_for_view(&o.layout, around(1.0, 2.0), f64::from(ppp)),
         );
+        if previews {
+            add_tiles(
+                &mut jobs,
+                tiles_at_scale(&o.layout, around(3.0, 6.0), PREVIEW_SCALE),
+            );
+        }
         self.pool.set_jobs(jobs);
     }
 

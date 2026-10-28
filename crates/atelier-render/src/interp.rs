@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use atelier_raster::{
     Color, FillRule, ImageSampling, LineCap, LineJoin, Mask, Path, PathBuilder, Pixmap, Point,
-    StrokeStyle, Transform, draw_image, fill_path, rasterize, stroke_to_path,
+    StrokeStyle, Transform, draw_image, fill_path, rasterize_in, stroke_to_path,
 };
 use atelier_syntax::{
     ContentParser, Dict, Document, Name, ObjRef, Object, Operation, Page, Result, Stream,
@@ -128,11 +128,69 @@ impl Default for TextState {
     }
 }
 
+/// A device rectangle `(x, y, width, height)` in pixels.
+type Area = (usize, usize, usize, usize);
+
+fn intersect_area(a: Area, b: Area) -> Area {
+    let x0 = a.0.max(b.0);
+    let y0 = a.1.max(b.1);
+    let x1 = (a.0 + a.2).min(b.0 + b.2);
+    let y1 = (a.1 + a.3).min(b.1 + b.3);
+    (x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0))
+}
+
+/// The pixels a device-space path can touch, within a `w` x `h` pixmap.
+fn path_area(path: &Path, (w, h): (usize, usize)) -> Area {
+    let Some((min, max)) = path.bounds() else {
+        return (0, 0, 0, 0);
+    };
+    if ![min.x, min.y, max.x, max.y].iter().all(|v| v.is_finite()) {
+        return (0, 0, 0, 0);
+    }
+    let x0 = min.x.floor().clamp(0.0, w as f64) as usize;
+    let y0 = min.y.floor().clamp(0.0, h as f64) as usize;
+    let x1 = max.x.ceil().clamp(0.0, w as f64) as usize;
+    let y1 = max.y.ceil().clamp(0.0, h as f64) as usize;
+    (x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0))
+}
+
+/// The clipping path: every clip set so far, each in device space. The
+/// mask is worked out only for the area something is drawn in, so a big
+/// clip around a small drawing costs only the small area.
+struct Clip {
+    parent: Option<Rc<Clip>>,
+    path: Path,
+    rule: FillRule,
+    /// Where this clip and all its parents can let anything through.
+    area: Area,
+}
+
+impl Clip {
+    /// The clip mask over `area` (zero elsewhere).
+    fn mask(&self, area: Area, size: (usize, usize)) -> Mask {
+        let area = intersect_area(area, self.area);
+        if area.2 == 0 || area.3 == 0 {
+            return Mask::new(size.0, size.1);
+        }
+        let mut mask: Option<Mask> = None;
+        let mut node = Some(self);
+        while let Some(c) = node {
+            let coverage = rasterize_in(&c.path, c.rule, area);
+            match &mut mask {
+                None => mask = Some(Mask::from_coverage(coverage.as_ref(), size.0, size.1)),
+                Some(m) => m.intersect(coverage.as_ref()),
+            }
+            node = c.parent.as_deref();
+        }
+        mask.unwrap_or_else(|| Mask::new(size.0, size.1))
+    }
+}
+
 #[derive(Clone)]
 struct GraphicsState {
     ctm: Transform,
     text: TextState,
-    clip: Option<Rc<Mask>>,
+    clip: Option<Rc<Clip>>,
     stroke: StrokeStyle,
     fill_space: ColorSpace,
     fill: Vec<f32>,
@@ -464,22 +522,23 @@ impl<'a> Interpreter<'a> {
     fn paint(&mut self, fill: Option<FillRule>, stroke: bool) {
         let path = self.path.finish();
         if !path.is_empty() && self.draw {
-            let clip = self.gs.clip.clone();
             if let Some(rule) = fill {
                 if let Some(color) = self.gs.fill_color() {
                     let device = path.transform(&self.gs.ctm);
-                    fill_path(self.pixmap, &device, rule, color, clip.as_deref());
+                    let clip = self.clip_mask(&device);
+                    fill_path(self.pixmap, &device, rule, color, clip.as_ref());
                 }
             }
             if stroke {
                 if let Some(color) = self.gs.stroke_paint() {
                     let outline = stroke_to_path(&path, &self.gs.stroke, &self.gs.ctm);
+                    let clip = self.clip_mask(&outline);
                     fill_path(
                         self.pixmap,
                         &outline,
                         FillRule::NonZero,
                         color,
-                        clip.as_deref(),
+                        clip.as_ref(),
                     );
                 }
             }
@@ -489,19 +548,27 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    /// The clip mask for drawing a device-space shape, or `None` when
+    /// nothing is clipped.
+    fn clip_mask(&self, device: &Path) -> Option<Mask> {
+        let clip = self.gs.clip.as_ref()?;
+        let size = self.pixmap.bounds();
+        Some(clip.mask(path_area(device, size), size))
+    }
+
     /// Intersects the clip with a device-space path.
     fn clip_device(&mut self, device: &Path, rule: FillRule) {
-        let (w, h) = self.pixmap.bounds();
-        let coverage = rasterize(device, rule, (w, h));
-        let mask = match &self.gs.clip {
-            Some(existing) => {
-                let mut m = (**existing).clone();
-                m.intersect(coverage.as_ref());
-                m
-            }
-            None => Mask::from_coverage(coverage.as_ref(), w, h),
-        };
-        self.gs.clip = Some(Rc::new(mask));
+        let size = self.pixmap.bounds();
+        let mut area = path_area(device, size);
+        if let Some(parent) = &self.gs.clip {
+            area = intersect_area(area, parent.area);
+        }
+        self.gs.clip = Some(Rc::new(Clip {
+            parent: self.gs.clip.clone(),
+            path: device.clone(),
+            rule,
+            area,
+        }));
     }
 
     fn ext_gstate(&mut self, name: &Name, resources: &Dict) {
@@ -707,14 +774,14 @@ impl<'a> Interpreter<'a> {
         } else {
             ImageSampling::Bilinear
         };
-        let clip = self.gs.clip.clone();
+        let clip = self.clip_mask(&Path::rect(0.0, 0.0, 1.0, 1.0).transform(&ctm));
         draw_image(
             self.pixmap,
             &info.image,
             &ctm,
             sampling,
             self.gs.fill_alpha,
-            clip.as_deref(),
+            clip.as_ref(),
         );
     }
 
@@ -809,28 +876,29 @@ impl<'a> Interpreter<'a> {
         if !self.draw {
             return;
         }
-        let clip = self.gs.clip.clone();
         if matches!(render, 0 | 2 | 4 | 6) {
             if let Some(color) = self.gs.fill_color() {
                 let device = user.transform(&self.gs.ctm);
+                let clip = self.clip_mask(&device);
                 fill_path(
                     self.pixmap,
                     &device,
                     FillRule::NonZero,
                     color,
-                    clip.as_deref(),
+                    clip.as_ref(),
                 );
             }
         }
         if matches!(render, 1 | 2 | 5 | 6) {
             if let Some(color) = self.gs.stroke_paint() {
                 let outline = stroke_to_path(&user, &self.gs.stroke, &self.gs.ctm);
+                let clip = self.clip_mask(&outline);
                 fill_path(
                     self.pixmap,
                     &outline,
                     FillRule::NonZero,
                     color,
-                    clip.as_deref(),
+                    clip.as_ref(),
                 );
             }
         }
