@@ -14,8 +14,12 @@ use atelier_syntax::{
 use crate::colorspace::{self, ColorSpace};
 use crate::font::PdfFont;
 use crate::image;
+use crate::pattern::{Cell, Pattern, PatternKind};
+use crate::shading::Shading;
 use crate::text::{PageText, TextGlyph};
 
+/// Patterns drawn inside pattern cells deeper than this are skipped.
+const MAX_PATTERN_DEPTH: usize = 6;
 /// Form XObjects nested deeper than this are skipped.
 const MAX_FORM_DEPTH: usize = 32;
 /// Hard cap on operators per page, so hostile content cannot hang the viewer.
@@ -198,6 +202,10 @@ struct GraphicsState {
     stroke_color: Vec<f32>,
     fill_alpha: f32,
     stroke_alpha: f32,
+    fill_pattern: Option<Rc<Pattern>>,
+    stroke_pattern: Option<Rc<Pattern>>,
+    /// Inside an uncoloured tiling pattern's cell every colour is this one.
+    forced: Option<Color>,
 }
 
 impl GraphicsState {
@@ -213,18 +221,21 @@ impl GraphicsState {
             stroke_color: vec![0.0],
             fill_alpha: 1.0,
             stroke_alpha: 1.0,
+            fill_pattern: None,
+            stroke_pattern: None,
+            forced: None,
         }
     }
 
     fn fill_color(&self) -> Option<Color> {
-        self.fill_space
-            .to_rgb(&self.fill)
+        self.forced
+            .or_else(|| self.fill_space.to_rgb(&self.fill))
             .map(|c| c.with_alpha(self.fill_alpha))
     }
 
     fn stroke_paint(&self) -> Option<Color> {
-        self.stroke_space
-            .to_rgb(&self.stroke_color)
+        self.forced
+            .or_else(|| self.stroke_space.to_rgb(&self.stroke_color))
             .map(|c| c.with_alpha(self.stroke_alpha))
     }
 }
@@ -251,6 +262,11 @@ struct Interpreter<'a> {
     draw: bool,
     /// Collected glyphs, when extracting text.
     text: Option<Vec<TextGlyph>>,
+    /// The default space of the content stream being run: the page's, or a
+    /// form's. Patterns are placed relative to it.
+    base_ctm: Transform,
+    /// How many pattern cells deep this interpreter is.
+    pattern_depth: usize,
 }
 
 fn nums(ops: &[Object]) -> Vec<f64> {
@@ -276,6 +292,8 @@ impl<'a> Interpreter<'a> {
             fonts: HashMap::new(),
             draw: true,
             text: None,
+            base_ctm: ctm,
+            pattern_depth: 0,
         }
     }
 
@@ -392,11 +410,15 @@ impl<'a> Interpreter<'a> {
                     .first()
                     .and_then(|obj| colorspace::parse(self.doc, obj, resources))
                     .unwrap_or(ColorSpace::Gray);
-                if matches!(space, ColorSpace::Pattern) {
-                    self.warn("pattern fills are not drawn yet");
-                }
-                if matches!(space, ColorSpace::Spot { .. }) {
-                    self.warn("Separation and DeviceN colours are approximated");
+                if matches!(
+                    space,
+                    ColorSpace::Spot {
+                        tint: None,
+                        none: false,
+                        ..
+                    }
+                ) {
+                    self.warn("a Separation or DeviceN colour has no usable tint transform");
                 }
                 let initial = space.initial();
                 if op.operator == b"CS" {
@@ -407,8 +429,18 @@ impl<'a> Interpreter<'a> {
                     self.gs.fill = initial;
                 }
             }
-            b"SC" | b"SCN" => self.gs.stroke_color = n.iter().map(|&v| v as f32).collect(),
-            b"sc" | b"scn" => self.gs.fill = n.iter().map(|&v| v as f32).collect(),
+            b"SC" | b"SCN" => {
+                self.gs.stroke_color = n.iter().map(|&v| v as f32).collect();
+                if matches!(self.gs.stroke_space, ColorSpace::Pattern { .. }) {
+                    self.gs.stroke_pattern = self.set_pattern(o, resources, true);
+                }
+            }
+            b"sc" | b"scn" => {
+                self.gs.fill = n.iter().map(|&v| v as f32).collect();
+                if matches!(self.gs.fill_space, ColorSpace::Pattern { .. }) {
+                    self.gs.fill_pattern = self.set_pattern(o, resources, false);
+                }
+            }
             b"G" if !n.is_empty() => self.set_stroke(ColorSpace::Gray, &n[..1]),
             b"g" if !n.is_empty() => self.set_fill(ColorSpace::Gray, &n[..1]),
             b"RG" if n.len() >= 3 => self.set_stroke(ColorSpace::Rgb, &n[..3]),
@@ -428,7 +460,11 @@ impl<'a> Interpreter<'a> {
                 }
             }
 
-            b"sh" => self.warn("shadings are not drawn yet"),
+            b"sh" => {
+                if let Some(name) = o.first().and_then(Object::as_name) {
+                    self.shade(name, resources);
+                }
+            }
 
             // Text
             b"BT" => {
@@ -523,29 +559,259 @@ impl<'a> Interpreter<'a> {
         let path = self.path.finish();
         if !path.is_empty() && self.draw {
             if let Some(rule) = fill {
-                if let Some(color) = self.gs.fill_color() {
-                    let device = path.transform(&self.gs.ctm);
-                    let clip = self.clip_mask(&device);
-                    fill_path(self.pixmap, &device, rule, color, clip.as_ref());
-                }
+                let device = path.transform(&self.gs.ctm);
+                self.paint_device(&device, rule, false);
             }
             if stroke {
-                if let Some(color) = self.gs.stroke_paint() {
-                    let outline = stroke_to_path(&path, &self.gs.stroke, &self.gs.ctm);
-                    let clip = self.clip_mask(&outline);
-                    fill_path(
-                        self.pixmap,
-                        &outline,
-                        FillRule::NonZero,
-                        color,
-                        clip.as_ref(),
-                    );
-                }
+                let outline = stroke_to_path(&path, &self.gs.stroke, &self.gs.ctm);
+                self.paint_device(&outline, FillRule::NonZero, true);
             }
         }
         if let Some(rule) = self.pending_clip.take() {
             self.clip_device(&path.transform(&self.gs.ctm), rule);
         }
+    }
+
+    /// Fills a device-space shape with the current fill (or stroke) paint:
+    /// a solid colour or a pattern.
+    fn paint_device(&mut self, device: &Path, rule: FillRule, stroke: bool) {
+        let (is_pattern, pattern, alpha) = if stroke {
+            (
+                matches!(self.gs.stroke_space, ColorSpace::Pattern { .. }),
+                self.gs.stroke_pattern.clone(),
+                self.gs.stroke_alpha,
+            )
+        } else {
+            (
+                matches!(self.gs.fill_space, ColorSpace::Pattern { .. }),
+                self.gs.fill_pattern.clone(),
+                self.gs.fill_alpha,
+            )
+        };
+        if is_pattern && self.gs.forced.is_none() {
+            if let Some(p) = pattern {
+                self.paint_pattern(&p, device, rule, alpha);
+            }
+            return;
+        }
+        let color = if stroke {
+            self.gs.stroke_paint()
+        } else {
+            self.gs.fill_color()
+        };
+        if let Some(color) = color {
+            let clip = self.clip_mask(device);
+            fill_path(self.pixmap, device, rule, color, clip.as_ref());
+        }
+    }
+
+    /// Reads the pattern named by the last operand of `scn`/`SCN`.
+    fn set_pattern(
+        &mut self,
+        ops: &[Object],
+        resources: &Dict,
+        stroke: bool,
+    ) -> Option<Rc<Pattern>> {
+        let name = ops.last()?.as_name()?;
+        let (obj, _) = self.lookup(resources, b"Pattern", name)?;
+        let base = self.base_ctm;
+        let mut warnings = Vec::new();
+        let parsed = Pattern::parse(self.doc, &obj, &base, resources, &mut |w| warnings.push(w));
+        for w in warnings {
+            self.warn(w);
+        }
+        let Some(mut pattern) = parsed else {
+            self.warn("a pattern could not be read");
+            return None;
+        };
+        if let PatternKind::Tiling(t) = &mut pattern.kind {
+            if t.uncolored {
+                let space = if stroke {
+                    &self.gs.stroke_space
+                } else {
+                    &self.gs.fill_space
+                };
+                let comps = if stroke {
+                    &self.gs.stroke_color
+                } else {
+                    &self.gs.fill
+                };
+                t.color = match space {
+                    ColorSpace::Pattern { base: Some(b) } => b.to_rgb(comps),
+                    _ => None,
+                };
+            }
+        }
+        Some(Rc::new(pattern))
+    }
+
+    /// The area drawing can reach: the clip's bounds, or the whole pixmap.
+    fn drawable_area(&self) -> Area {
+        let size = self.pixmap.bounds();
+        self.gs
+            .clip
+            .as_ref()
+            .map_or((0, 0, size.0, size.1), |c| c.area)
+    }
+
+    fn paint_pattern(&mut self, pattern: &Pattern, device: &Path, rule: FillRule, alpha: f32) {
+        if !self.draw {
+            return;
+        }
+        let area = intersect_area(
+            self.drawable_area(),
+            path_area(device, self.pixmap.bounds()),
+        );
+        let Some(coverage) = rasterize_in(device, rule, area) else {
+            return;
+        };
+        match &pattern.kind {
+            PatternKind::Shading(shading) => {
+                let mut clip = self.clip_mask(device);
+                if let Some(bg) = shading.background_color() {
+                    fill_path(
+                        self.pixmap,
+                        device,
+                        rule,
+                        bg.with_alpha(alpha),
+                        clip.as_ref(),
+                    );
+                }
+                if let Some(b) = shading.bbox {
+                    let rect = Path::rect(
+                        b[0].min(b[2]),
+                        b[1].min(b[3]),
+                        (b[2] - b[0]).abs(),
+                        (b[3] - b[1]).abs(),
+                    );
+                    clip = Some(self.extra_clip(clip, &rect.transform(&pattern.to_device), area));
+                }
+                shading.paint(
+                    self.pixmap,
+                    &coverage,
+                    clip.as_ref(),
+                    &pattern.to_device,
+                    alpha,
+                );
+            }
+            PatternKind::Tiling(tiling) => {
+                if self.pattern_depth >= MAX_PATTERN_DEPTH {
+                    self.warn("patterns nest too deeply");
+                    return;
+                }
+                if tiling.uncolored && tiling.color.is_none() {
+                    return;
+                }
+                let cell = self.tiling_cell(pattern);
+                let Some(inverse) = pattern.to_device.invert() else {
+                    return;
+                };
+                let clip = self.clip_mask(device);
+                // Four samples a pixel smooth the cell's edges when it is
+                // rotated or scaled.
+                const OFFSETS: [(f64, f64); 4] =
+                    [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)];
+                self.pixmap
+                    .fill_coverage_with(&coverage, clip.as_ref(), alpha, |x, y| {
+                        let mut sum = [0u32; 4];
+                        for (dx, dy) in OFFSETS {
+                            let u = inverse.apply(Point::new(x as f64 + dx, y as f64 + dy));
+                            if let Some(px) = tiling.sample(&cell, u) {
+                                for k in 0..4 {
+                                    sum[k] += u32::from(px[k]);
+                                }
+                            }
+                        }
+                        (sum[3] > 0).then(|| sum.map(|v| ((v + 2) / 4) as u8))
+                    });
+            }
+        }
+    }
+
+    /// Renders a tiling pattern's cell once and keeps it with the pattern.
+    fn tiling_cell(&mut self, pattern: &Pattern) -> Rc<Cell> {
+        let PatternKind::Tiling(tiling) = &pattern.kind else {
+            unreachable!("only tiling patterns have cells");
+        };
+        if let Some(cell) = tiling.cell.borrow().as_ref() {
+            return cell.clone();
+        }
+        let (w, h, to_cell) = tiling.cell_geometry(&pattern.to_device);
+        let mut pixmap = Pixmap::new(w, h);
+        let content = match self.doc.decode_stream(&tiling.stream) {
+            Ok(d) => d.data,
+            Err(e) => {
+                self.warn(format!("pattern content: {e}"));
+                Vec::new()
+            }
+        };
+        let warnings = {
+            let mut sub = Interpreter::new(self.doc, &mut pixmap, to_cell);
+            sub.pattern_depth = self.pattern_depth + 1;
+            sub.operations = self.operations;
+            if tiling.uncolored {
+                sub.gs.forced = tiling.color;
+            }
+            sub.run(&content, &tiling.resources, 0);
+            self.operations = sub.operations;
+            sub.warnings
+        };
+        for w in warnings {
+            self.warn(w);
+        }
+        let cell = Rc::new(Cell { pixmap, to_cell });
+        *tiling.cell.borrow_mut() = Some(cell.clone());
+        cell
+    }
+
+    /// `clip` narrowed by a device-space path, over `area`.
+    fn extra_clip(&self, clip: Option<Mask>, device: &Path, area: Area) -> Mask {
+        let size = self.pixmap.bounds();
+        let coverage = rasterize_in(device, FillRule::NonZero, area);
+        match clip {
+            Some(mut m) => {
+                m.intersect(coverage.as_ref());
+                m
+            }
+            None => Mask::from_coverage(coverage.as_ref(), size.0, size.1),
+        }
+    }
+
+    /// The `sh` operator: paints a shading over the whole clip.
+    fn shade(&mut self, name: &Name, resources: &Dict) {
+        if !self.draw {
+            return;
+        }
+        let Some((obj, _)) = self.lookup(resources, b"Shading", name) else {
+            return;
+        };
+        let mut warnings = Vec::new();
+        let shading = Shading::parse(self.doc, &obj, resources, &mut |w| warnings.push(w));
+        for w in warnings {
+            self.warn(w);
+        }
+        let Some(shading) = shading else {
+            self.warn("a shading could not be read");
+            return;
+        };
+        let area = self.drawable_area();
+        let rect = Path::rect(area.0 as f64, area.1 as f64, area.2 as f64, area.3 as f64);
+        let Some(coverage) = rasterize_in(&rect, FillRule::NonZero, area) else {
+            return;
+        };
+        let mut clip = self.clip_mask(&rect);
+        if let Some(b) = shading.bbox {
+            let bbox = Path::rect(
+                b[0].min(b[2]),
+                b[1].min(b[3]),
+                (b[2] - b[0]).abs(),
+                (b[3] - b[1]).abs(),
+            );
+            clip = Some(self.extra_clip(clip, &bbox.transform(&self.gs.ctm), area));
+        }
+        let ctm = self.gs.ctm;
+        let alpha = self.gs.fill_alpha;
+        shading.paint(self.pixmap, &coverage, clip.as_ref(), &ctm, alpha);
     }
 
     /// The clip mask for drawing a device-space shape, or `None` when
@@ -694,7 +960,9 @@ impl<'a> Interpreter<'a> {
         if let Some(r) = r {
             self.forms.push(r);
         }
+        let saved_base = std::mem::replace(&mut self.base_ctm, self.gs.ctm);
         self.run(&content, &resources, depth + 1);
+        self.base_ctm = saved_base;
         if r.is_some() {
             self.forms.pop();
         }
@@ -753,8 +1021,8 @@ impl<'a> Interpreter<'a> {
     ) {
         let fill = self
             .gs
-            .fill_space
-            .to_rgb(&self.gs.fill)
+            .forced
+            .or_else(|| self.gs.fill_space.to_rgb(&self.gs.fill))
             .unwrap_or(Color::BLACK);
         let mut warnings = Vec::new();
         let info = image::decode(self.doc, dict, data, filter, resources, fill, &mut |w| {
@@ -877,30 +1145,12 @@ impl<'a> Interpreter<'a> {
             return;
         }
         if matches!(render, 0 | 2 | 4 | 6) {
-            if let Some(color) = self.gs.fill_color() {
-                let device = user.transform(&self.gs.ctm);
-                let clip = self.clip_mask(&device);
-                fill_path(
-                    self.pixmap,
-                    &device,
-                    FillRule::NonZero,
-                    color,
-                    clip.as_ref(),
-                );
-            }
+            let device = user.transform(&self.gs.ctm);
+            self.paint_device(&device, FillRule::NonZero, false);
         }
         if matches!(render, 1 | 2 | 5 | 6) {
-            if let Some(color) = self.gs.stroke_paint() {
-                let outline = stroke_to_path(&user, &self.gs.stroke, &self.gs.ctm);
-                let clip = self.clip_mask(&outline);
-                fill_path(
-                    self.pixmap,
-                    &outline,
-                    FillRule::NonZero,
-                    color,
-                    clip.as_ref(),
-                );
-            }
+            let outline = stroke_to_path(&user, &self.gs.stroke, &self.gs.ctm);
+            self.paint_device(&outline, FillRule::NonZero, true);
         }
     }
 

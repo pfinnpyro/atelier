@@ -135,7 +135,7 @@ pub fn decode(
             },
             (None, cs) => cs?,
         };
-        if matches!(cs, ColorSpace::Pattern) {
+        if matches!(cs, ColorSpace::Pattern { .. }) {
             return None;
         }
         let n = cs.components();
@@ -161,6 +161,17 @@ pub fn decode(
 
         let mut out = vec![0u8; width * height * 4];
         let mut comps = vec![0f32; n];
+        // One-component images (gray, Indexed, Separation) convert every
+        // possible sample once, so tint transforms run at most 2^bpc times.
+        let table: Option<Vec<[u8; 4]>> = (n == 1).then(|| {
+            (0..=max as u32)
+                .map(|v| {
+                    let (lo, hi) = ranges[0];
+                    cs.to_rgb(&[lo + v as f32 * (hi - lo) / max])
+                        .map_or([0; 4], Color::to_premultiplied)
+                })
+                .collect()
+        });
         let mut cache: Option<(Vec<u32>, [u8; 4])> = None;
         for p in 0..width * height {
             let raw = &samples[p * n..(p + 1) * n];
@@ -174,8 +185,9 @@ pub fn decode(
                     continue;
                 }
             }
-            let px = match &cache {
-                Some((k, px)) if k.as_slice() == raw => *px,
+            let px = match (&table, &cache) {
+                (Some(t), _) => t[(raw[0] as usize).min(t.len() - 1)],
+                (None, Some((k, px))) if k.as_slice() == raw => *px,
                 _ => {
                     for (i, &v) in raw.iter().enumerate() {
                         let (lo, hi) = ranges[i];

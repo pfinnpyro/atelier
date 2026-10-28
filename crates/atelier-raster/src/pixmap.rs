@@ -115,6 +115,42 @@ impl Pixmap {
         }
     }
 
+    /// Composites a per-pixel source through `coverage`: `shader` gives the
+    /// premultiplied colour at device pixel (x, y), or `None` to leave the
+    /// pixel alone. `alpha` scales the whole fill.
+    pub fn fill_coverage_with(
+        &mut self,
+        coverage: &Coverage,
+        clip: Option<&Mask>,
+        alpha: f32,
+        mut shader: impl FnMut(usize, usize) -> Option<[u8; 4]>,
+    ) {
+        let global = (alpha.clamp(0.0, 1.0) * 255.0 + 0.5) as u32;
+        let (rows, cols) = visible_span(coverage, clip);
+        for row in rows {
+            let y = coverage.y + row;
+            for col in cols.clone() {
+                let x = coverage.x + col;
+                let mut c = u32::from(coverage.data[row * coverage.width + col]);
+                if let Some(m) = clip {
+                    c = mul255(c, u32::from(m.get(x, y)));
+                }
+                c = mul255(c, global);
+                if c == 0 {
+                    continue;
+                }
+                let Some(src) = shader(x, y) else { continue };
+                let px = [
+                    mul255(u32::from(src[0]), c),
+                    mul255(u32::from(src[1]), c),
+                    mul255(u32::from(src[2]), c),
+                    mul255(u32::from(src[3]), c),
+                ];
+                self.blend_pixel(x, y, px);
+            }
+        }
+    }
+
     /// Source-over of one premultiplied pixel.
     #[inline]
     pub fn blend_pixel(&mut self, x: usize, y: usize, src: [u32; 4]) {
@@ -323,6 +359,16 @@ mod tests {
         assert_eq!(p.pixel(5, 5), [0, 0, 0, 255]);
         assert_eq!(p.pixel(9, 9), [0, 0, 0, 255]);
         assert_eq!(p.pixel(10, 9), [255, 255, 255, 255]);
+    }
+
+    #[test]
+    fn fill_with_a_shader() {
+        let mut p = Pixmap::filled(4, 1, Color::WHITE);
+        p.fill_coverage_with(&cov(0, 0, 4, 1, 255), None, 1.0, |x, _| {
+            (x != 2).then_some([(x * 60) as u8, 0, 0, 255])
+        });
+        assert_eq!(p.pixel(1, 0), [60, 0, 0, 255]);
+        assert_eq!(p.pixel(2, 0), [255, 255, 255, 255]);
     }
 
     #[test]

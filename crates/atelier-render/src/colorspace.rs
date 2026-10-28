@@ -1,8 +1,12 @@
-//! Colour spaces (ISO 32000-2, 8.6). Device, CIE-based and Indexed spaces are
-//! handled; Separation, DeviceN and patterns arrive with phase 6.
+//! Colour spaces (ISO 32000-2, 8.6): device, CIE-based, Indexed,
+//! Separation, DeviceN and Pattern.
+
+use std::sync::Arc;
 
 use atelier_raster::Color;
 use atelier_syntax::{Dict, Document, Object};
+
+use crate::function::Function;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ColorSpace {
@@ -18,12 +22,18 @@ pub enum ColorSpace {
         hival: u8,
         lookup: Vec<u8>,
     },
-    /// Not supported yet: painting with it is skipped.
-    Pattern,
-    /// Separation or DeviceN, approximated until tint transforms land.
+    /// Painting with a pattern. Uncoloured tiling patterns take their
+    /// colour from `base`.
+    Pattern {
+        base: Option<Box<ColorSpace>>,
+    },
+    /// Separation or DeviceN: tints mapped by `tint` into `alt`. Without a
+    /// usable tint transform, full tint is drawn as black.
     Spot {
         components: usize,
         none: bool,
+        alt: Box<ColorSpace>,
+        tint: Option<Arc<Function>>,
     },
 }
 
@@ -33,7 +43,7 @@ impl ColorSpace {
             Self::Gray | Self::Indexed { .. } => 1,
             Self::Rgb | Self::Lab { .. } => 3,
             Self::Cmyk => 4,
-            Self::Pattern => 1,
+            Self::Pattern { .. } => 1,
             Self::Spot { components, .. } => *components,
         }
     }
@@ -89,10 +99,15 @@ impl ColorSpace {
                 };
                 return base.to_rgb(&comps);
             }
-            Self::Pattern => return None,
+            Self::Pattern { .. } => return None,
             Self::Spot { none: true, .. } => return None,
+            Self::Spot {
+                alt, tint: Some(f), ..
+            } => {
+                let tints: Vec<f32> = c.iter().map(|v| v.clamp(0.0, 1.0)).collect();
+                return alt.to_rgb(&f.eval(&tints));
+            }
             Self::Spot { .. } => {
-                // Approximation: full tint is black.
                 let tint = c.iter().fold(0.0f32, |m, v| m.max(v.clamp(0.0, 1.0)));
                 Color::rgb(1.0 - tint, 1.0 - tint, 1.0 - tint)
             }
@@ -151,7 +166,7 @@ fn parse_depth(doc: &Document, obj: &Object, resources: &Dict, depth: usize) -> 
             b"DeviceGray" | b"G" | b"CalGray" => Some(ColorSpace::Gray),
             b"DeviceRGB" | b"RGB" | b"CalRGB" => Some(ColorSpace::Rgb),
             b"DeviceCMYK" | b"CMYK" | b"CalCMYK" => Some(ColorSpace::Cmyk),
-            b"Pattern" => Some(ColorSpace::Pattern),
+            b"Pattern" => Some(ColorSpace::Pattern { base: None }),
             _ => {
                 let named = doc.get_key(resources, b"ColorSpace").ok()?;
                 let entry = named.as_dict()?.get(n.as_bytes())?.clone();
@@ -206,26 +221,41 @@ fn parse_depth(doc: &Document, obj: &Object, resources: &Dict, depth: usize) -> 
                         lookup,
                     })
                 }
-                b"Pattern" => Some(ColorSpace::Pattern),
-                b"Separation" => {
-                    let none = items
+                b"Pattern" => Some(ColorSpace::Pattern {
+                    base: items
                         .get(1)
-                        .and_then(Object::as_name)
-                        .is_some_and(|n| *n == b"None");
-                    Some(ColorSpace::Spot {
-                        components: 1,
-                        none,
-                    })
-                }
-                b"DeviceN" => {
+                        .and_then(|b| parse_depth(doc, b, resources, depth + 1))
+                        .map(Box::new),
+                }),
+                b"Separation" | b"DeviceN" => {
+                    let separation = family.as_name()?.as_bytes() == b"Separation";
                     let names = doc.resolve(items.get(1)?).ok()?;
-                    let n = names.as_array().map_or(1, <[Object]>::len).max(1);
-                    let none = names.as_array().is_some_and(|a| {
-                        a.iter().all(|x| x.as_name().is_some_and(|n| *n == b"None"))
-                    });
+                    let (components, none) = if separation {
+                        (1, names.as_name().is_some_and(|n| *n == b"None"))
+                    } else {
+                        let list = names.as_array().unwrap_or(&[]);
+                        (
+                            list.len().max(1),
+                            !list.is_empty()
+                                && list
+                                    .iter()
+                                    .all(|x| x.as_name().is_some_and(|n| *n == b"None")),
+                        )
+                    };
+                    let alt = items
+                        .get(2)
+                        .and_then(|a| parse_depth(doc, a, resources, depth + 1))
+                        .unwrap_or(ColorSpace::Gray);
+                    let tint = items
+                        .get(3)
+                        .and_then(|f| Function::parse(doc, f))
+                        .filter(|f| f.inputs() >= components)
+                        .map(Arc::new);
                     Some(ColorSpace::Spot {
-                        components: n,
+                        components,
                         none,
+                        alt: Box::new(alt),
+                        tint,
                     })
                 }
                 _ => None,
@@ -260,6 +290,32 @@ mod tests {
         };
         assert_eq!(cs.to_rgb(&[1.0]), Some(Color::rgb(0.0, 0.0, 1.0)));
         assert_eq!(cs.to_rgb(&[7.0]), Some(Color::rgb(0.0, 0.0, 1.0)));
+    }
+
+    #[test]
+    fn separation_uses_its_tint_transform() {
+        let pdf = b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n\
+                    2 0 obj << /Type /Pages /Kids [] /Count 0 >> endobj\n\
+                    trailer << /Root 1 0 R >>\n%%EOF\n";
+        let doc = Document::open(pdf.to_vec()).unwrap();
+        let obj = atelier_syntax::Parser::new(
+            b"[/Separation /Orange /DeviceCMYK \
+               << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 0.5 1 0] /N 1 >>]",
+        )
+        .parse_object()
+        .unwrap();
+        let cs = parse(&doc, &obj, &Dict::new()).unwrap();
+        assert_eq!(cs.to_rgb(&[0.0]), Some(Color::WHITE));
+        assert_eq!(cs.to_rgb(&[1.0]), Some(Color::rgb(1.0, 0.5, 0.0)));
+        // DeviceN with a PostScript tint transform is covered by the
+        // function tests; /None paints nothing.
+        let none = atelier_syntax::Parser::new(b"[/Separation /None /DeviceGray {}]")
+            .parse_object()
+            .unwrap();
+        assert_eq!(
+            parse(&doc, &none, &Dict::new()).unwrap().to_rgb(&[1.0]),
+            None
+        );
     }
 
     #[test]
