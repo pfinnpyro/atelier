@@ -3,7 +3,7 @@
 //! (x, 100 - y).
 
 use atelier_raster::Pixmap;
-use atelier_render::{RenderOptions, render_page};
+use atelier_render::{RenderOptions, render_page, render_region};
 use atelier_syntax::Document;
 
 fn stream(dict: &str, data: &[u8]) -> Vec<u8> {
@@ -340,4 +340,36 @@ fn broken_jpeg_is_skipped_with_a_warning() {
         r.warnings
     );
     assert_eq!(at(&r.pixmap, 50, 50), WHITE);
+}
+
+#[test]
+fn region_matches_the_same_area_of_the_full_page() {
+    // A diagonal stroke and a circle-ish curve, on a rotated page, at a
+    // scale that does not divide evenly.
+    let content = b"0 0 1 rg 10 10 m 90 30 l 50 95 l f 1 0 0 RG 3 w 5 5 m 95 95 l S \
+                    0 g 50 50 m 80 50 80 80 50 80 c 20 80 20 50 50 50 c f";
+    for rotate in ["", "/Rotate 90"] {
+        let doc = Document::open(build(rotate, content, "<< >>", &[])).unwrap();
+        let page = &doc.pages().unwrap()[0];
+        let options = RenderOptions {
+            scale: 1.7,
+            ..RenderOptions::default()
+        };
+        let full = render_page(&doc, page, &options).unwrap().pixmap;
+        for (x, y, w, h) in [(0, 0, 60, 60), (60, 60, 40, 40), (13, 97, 50, 73)] {
+            let tile = render_region(&doc, page, &options, (x, y, w, h))
+                .unwrap()
+                .pixmap;
+            assert_eq!((tile.width(), tile.height()), (w, h));
+            for ty in 0..h {
+                for tx in 0..w {
+                    assert_eq!(
+                        tile.pixel(tx, ty),
+                        full.pixel(x + tx, y + ty),
+                        "{rotate} tile at ({x}, {y}), pixel ({tx}, {ty})"
+                    );
+                }
+            }
+        }
+    }
 }

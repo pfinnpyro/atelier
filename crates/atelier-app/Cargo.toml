@@ -1,0 +1,23 @@
+[package]
+name = "atelier-app"
+description = "The Atelier PDF viewer"
+version.workspace = true
+edition.workspace = true
+# eframe needs a newer compiler than the library crates.
+rust-version = "1.95"
+publish.workspace = true
+
+[[bin]]
+name = "atelier-viewer"
+path = "src/main.rs"
+
+[dependencies]
+atelier-raster.workspace = true
+atelier-render.workspace = true
+atelier-syntax.workspace = true
+atelier-view.workspace = true
+eframe = "0.37"
+rfd = "0.17"
+
+[lints]
+workspace = true

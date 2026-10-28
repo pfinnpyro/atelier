@@ -12,5 +12,7 @@ mod interp;
 mod text;
 
 pub use colorspace::ColorSpace;
-pub use interp::{RenderOptions, Rendered, extract_text, page_transform, render_page};
+pub use interp::{
+    RenderOptions, Rendered, extract_text, page_transform, render_page, render_region,
+};
 pub use text::{PageText, TextGlyph};
