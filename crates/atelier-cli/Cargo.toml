@@ -1,0 +1,17 @@
+[package]
+name = "atelier-cli"
+description = "Command-line tool for inspecting PDFs with the Atelier engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "atelier"
+path = "src/main.rs"
+
+[dependencies]
+atelier-syntax.workspace = true
+
+[lints]
+workspace = true
