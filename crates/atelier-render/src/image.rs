@@ -1,5 +1,6 @@
 //! Image XObjects and inline images (ISO 32000-2, 8.9) to RGBA.
 
+use atelier_filters::decode_dct;
 use atelier_raster::{Color, RgbaImage};
 use atelier_syntax::{Dict, Document, ImageFilter, Object, Stream};
 
@@ -18,24 +19,67 @@ pub struct ImageInfo {
     pub interpolate: bool,
 }
 
+/// 8-bit samples from an image codec. Their size and component count
+/// override what the image dictionary says.
+struct CodecOutput {
+    data: Vec<u8>,
+    width: usize,
+    height: usize,
+    components: usize,
+}
+
+/// Runs the image codec named by `filter`, if any.
+fn run_codec(
+    data: &[u8],
+    filter: Option<&(ImageFilter, Dict)>,
+) -> Result<Option<CodecOutput>, String> {
+    match filter {
+        None => Ok(None),
+        Some((ImageFilter::Dct, params)) => {
+            let transform = params
+                .get(b"ColorTransform")
+                .and_then(Object::as_i64)
+                .map(|v| v != 0);
+            let j = decode_dct(data, transform).map_err(|e| format!("JPEG image: {e}"))?;
+            Ok(Some(CodecOutput {
+                width: j.width,
+                height: j.height,
+                components: j.components,
+                data: j.data,
+            }))
+        }
+        Some((f, _)) => Err(format!("{f:?} images are not decoded yet")),
+    }
+}
+
 /// Decodes an image. `data` is the stream's data with its non-image filters
-/// already removed; `image_filter` is a remaining image codec, if any.
+/// already removed; `image_filter` is a remaining image codec and its
+/// parameters, if any.
 pub fn decode(
     doc: &Document,
     dict: &Dict,
     data: &[u8],
-    image_filter: Option<ImageFilter>,
+    image_filter: Option<&(ImageFilter, Dict)>,
     resources: &Dict,
     fill: Color,
     warn: &mut dyn FnMut(String),
 ) -> Option<ImageInfo> {
-    if let Some(f) = image_filter {
-        warn(format!("{f:?} images are not decoded yet"));
-        return None;
-    }
+    let codec = match run_codec(data, image_filter) {
+        Ok(c) => c,
+        Err(e) => {
+            warn(e);
+            return None;
+        }
+    };
+    let data = codec.as_ref().map_or(data, |c| c.data.as_slice());
     let resolve = |o: Option<&Object>| o.and_then(|o| doc.resolve(o).ok());
-    let width = usize::try_from(resolve(get(dict, b"Width", b"W"))?.as_i64()?).ok()?;
-    let height = usize::try_from(resolve(get(dict, b"Height", b"H"))?.as_i64()?).ok()?;
+    let (width, height) = match &codec {
+        Some(c) => (c.width, c.height),
+        None => (
+            usize::try_from(resolve(get(dict, b"Width", b"W"))?.as_i64()?).ok()?,
+            usize::try_from(resolve(get(dict, b"Height", b"H"))?.as_i64()?).ok()?,
+        ),
+    };
     if width == 0 || height == 0 || width.saturating_mul(height) > MAX_PIXELS {
         return None;
     }
@@ -69,14 +113,28 @@ pub fn decode(
             data: out,
         }
     } else {
-        let bpc = resolve(get(dict, b"BitsPerComponent", b"BPC"))
-            .and_then(|o| o.as_i64())
-            .unwrap_or(8);
+        let bpc = match &codec {
+            Some(_) => 8,
+            None => resolve(get(dict, b"BitsPerComponent", b"BPC"))
+                .and_then(|o| o.as_i64())
+                .unwrap_or(8),
+        };
         let bpc = u32::try_from(bpc)
             .ok()
             .filter(|b| matches!(b, 1 | 2 | 4 | 8 | 16))?;
-        let cs_obj = get(dict, b"ColorSpace", b"CS")?;
-        let cs = colorspace::parse(doc, cs_obj, resources)?;
+        let declared =
+            get(dict, b"ColorSpace", b"CS").and_then(|o| colorspace::parse(doc, o, resources));
+        let cs = match (&codec, declared) {
+            // The codec's component count wins over a missing or
+            // mismatched colour space.
+            (Some(c), Some(cs)) if cs.components() == c.components => cs,
+            (Some(c), _) => match c.components {
+                1 => ColorSpace::Gray,
+                4 => ColorSpace::Cmyk,
+                _ => ColorSpace::Rgb,
+            },
+            (None, cs) => cs?,
+        };
         if matches!(cs, ColorSpace::Pattern) {
             return None;
         }
@@ -154,17 +212,27 @@ pub fn decode(
 /// means masked out unless Decode says otherwise), as an alpha plane.
 fn mask_alpha(doc: &Document, stream: &Stream, stencil: bool) -> Option<(usize, usize, Vec<u8>)> {
     let decoded = doc.decode_stream(stream).ok()?;
-    if decoded.image_filter.is_some() {
+    let codec = run_codec(&decoded.data, decoded.image_filter.as_ref()).ok()?;
+    // A JPEG mask must be gray to be a usable alpha plane.
+    if codec.as_ref().is_some_and(|c| c.components != 1 || stencil) {
         return None;
     }
+    let data = codec.as_ref().map_or(&decoded.data[..], |c| &c.data[..]);
     let dict = &stream.dict;
-    let w = usize::try_from(doc.get_key(dict, b"Width").ok()?.as_i64()?).ok()?;
-    let h = usize::try_from(doc.get_key(dict, b"Height").ok()?.as_i64()?).ok()?;
+    let (w, h) = match &codec {
+        Some(c) => (c.width, c.height),
+        None => (
+            usize::try_from(doc.get_key(dict, b"Width").ok()?.as_i64()?).ok()?,
+            usize::try_from(doc.get_key(dict, b"Height").ok()?.as_i64()?).ok()?,
+        ),
+    };
     if w == 0 || h == 0 || w.saturating_mul(h) > MAX_PIXELS {
         return None;
     }
     let bpc = if stencil {
         1
+    } else if codec.is_some() {
+        8
     } else {
         doc.get_key(dict, b"BitsPerComponent").ok()?.as_i64()? as u32
     };
@@ -176,7 +244,7 @@ fn mask_alpha(doc: &Document, stream: &Stream, stencil: bool) -> Option<(usize, 
             .and_then(|a| a.first().and_then(Object::as_f64))
     }) == Some(1.0);
     let max = (1u32 << bpc) - 1;
-    let alpha = unpack(&decoded.data, w, h, 1, bpc)
+    let alpha = unpack(data, w, h, 1, bpc)
         .into_iter()
         .map(|v| {
             let a = (v * 255 / max) as u8;

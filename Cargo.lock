@@ -32,6 +32,7 @@ version = "0.1.0"
 name = "atelier-render"
 version = "0.1.0"
 dependencies = [
+ "atelier-filters",
  "atelier-raster",
  "atelier-syntax",
  "miniz_oxide",

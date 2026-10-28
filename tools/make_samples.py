@@ -139,6 +139,41 @@ q 40 0 0 40 240 200 cm BI /W 2 /H 2 /BPC 8 /CS /G ID \x00\xff\xff\x00 EI Q
     ],
 )
 
+def jpeg_fixture(name):
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(here, "..", "crates", "atelier-filters", "tests", "data", name + ".jpg")
+    with open(path, "rb") as f:
+        return f.read()
+
+
+def jpeg_image(name, cs, extra=b""):
+    data = jpeg_fixture(name)
+    return stream(b"/Type /XObject /Subtype /Image /Width 37 /Height 23 /ColorSpace " + cs
+                  + b" /BitsPerComponent 8 /Filter /DCTDecode " + extra, data, compress=False)
+
+
+# The fixtures are 37 x 23. Adobe CMYK JPEGs store inverted samples, which
+# PDFs undo with a Decode array.
+SAMPLES["jpeg"] = single_page(
+    b"""
+q 180 0 0 112 10 280 cm /J1 Do Q
+q 180 0 0 112 210 280 cm /J2 Do Q
+q 180 0 0 112 10 150 cm /J3 Do Q
+q 180 0 0 112 210 150 cm /J4 Do Q
+q 180 0 0 112 10 20 cm /J5 Do Q
+q 180 0 0 112 210 20 cm /J6 Do Q
+""",
+    resources=b"<< /XObject << /J1 5 0 R /J2 6 0 R /J3 7 0 R /J4 8 0 R /J5 9 0 R /J6 10 0 R >> >>",
+    extra_objects=[
+        jpeg_image("rgb420_baseline", b"/DeviceRGB"),
+        jpeg_image("rgb420_progressive", b"/DeviceRGB"),
+        jpeg_image("rgb422_baseline", b"/DeviceRGB"),
+        jpeg_image("rgb420_progressive_restart", b"/DeviceRGB"),
+        jpeg_image("gray_progressive", b"/DeviceGray"),
+        jpeg_image("cmyk_baseline", b"/DeviceCMYK", b"/Decode [1 0 1 0 1 0 1 0]"),
+    ],
+)
+
 SAMPLES["forms"] = single_page(
     b"""
 q 1 0 0 1 50 50 cm /F1 Do Q

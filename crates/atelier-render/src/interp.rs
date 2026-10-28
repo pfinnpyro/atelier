@@ -494,7 +494,7 @@ impl<'a> Interpreter<'a> {
                 return;
             }
         };
-        let filter = decoded.image_filter.as_ref().map(|(f, _)| *f);
+        let filter = decoded.image_filter.as_ref();
         self.draw_decoded_image(&stream.dict, &decoded.data, filter, resources);
     }
 
@@ -518,7 +518,7 @@ impl<'a> Interpreter<'a> {
                 return;
             }
         };
-        let filter = decoded.image_filter.as_ref().map(|(f, _)| *f);
+        let filter = decoded.image_filter.as_ref();
         self.draw_decoded_image(dict, &decoded.data, filter, resources);
     }
 
@@ -526,7 +526,7 @@ impl<'a> Interpreter<'a> {
         &mut self,
         dict: &Dict,
         data: &[u8],
-        filter: Option<atelier_syntax::ImageFilter>,
+        filter: Option<&(atelier_syntax::ImageFilter, Dict)>,
         resources: &Dict,
     ) {
         let fill = self

@@ -7,6 +7,7 @@
 
 mod ascii85;
 mod asciihex;
+mod dct;
 mod deflate;
 mod flate;
 mod lzw;
@@ -15,6 +16,7 @@ mod runlength;
 
 pub use ascii85::decode_ascii85;
 pub use asciihex::decode_ascii_hex;
+pub use dct::{DecodedJpeg, decode_dct};
 pub use deflate::{adler32, encode_flate};
 pub use flate::{decode_flate, inflate};
 pub use lzw::decode_lzw;
