@@ -1,0 +1,13 @@
+[package]
+name = "atelier-font"
+description = "Atelier's font readers: TrueType, CFF and Type 1 outlines, plus standard encodings and metrics"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+atelier-raster.workspace = true
+
+[lints]
+workspace = true

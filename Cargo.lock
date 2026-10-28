@@ -25,6 +25,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "atelier-font"
+version = "0.1.0"
+dependencies = [
+ "atelier-raster",
+]
+
+[[package]]
 name = "atelier-raster"
 version = "0.1.0"
 
@@ -33,6 +40,7 @@ name = "atelier-render"
 version = "0.1.0"
 dependencies = [
  "atelier-filters",
+ "atelier-font",
  "atelier-raster",
  "atelier-syntax",
  "miniz_oxide",

@@ -180,6 +180,18 @@ impl PathBuilder {
         self.path.is_empty()
     }
 
+    /// Appends the subpaths of a finished path.
+    pub fn append(&mut self, other: &Path) {
+        for v in &other.verbs {
+            match *v {
+                Verb::MoveTo(p) => self.move_to(p),
+                Verb::LineTo(p) => self.line_to(p),
+                Verb::CubicTo(a, b, c) => self.cubic_to(a, b, c),
+                Verb::Close => self.close(),
+            }
+        }
+    }
+
     pub fn finish(&mut self) -> Path {
         self.current = None;
         std::mem::take(&mut self.path)

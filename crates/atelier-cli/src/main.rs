@@ -5,7 +5,7 @@ mod png;
 use std::io::Write;
 use std::time::Instant;
 
-use atelier_render::{RenderOptions, render_page};
+use atelier_render::{RenderOptions, extract_text, render_page};
 use std::process::ExitCode;
 
 use atelier_syntax::{Document, ObjRef, Object, XrefEntry};
@@ -20,7 +20,10 @@ Usage:
   atelier content <file.pdf> <page>        write a page's decoded content (page from 1)
   atelier render <file.pdf> <page|all> [--dpi N] [-o out.png]
                                            render pages to PNG (default 150 dpi; with
-                                           `all`, -o is a prefix: out-1.png, out-2.png...)";
+                                           `all`, -o is a prefix: out-1.png, out-2.png...)
+  atelier text <file.pdf> [page|all] [--glyphs]
+                                           print the text of pages (default all); with
+                                           --glyphs, one line per glyph with its box";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -49,6 +52,7 @@ fn run(args: &[String]) -> Result<(), String> {
         "stream" => stream(&doc, obj_ref(&args[2..])?, &mut out),
         "content" => content(&doc, &args[2..], &mut out),
         "render" => render(&doc, path, &args[2..], &mut out),
+        "text" => text(&doc, &args[2..], &mut out),
         other => return Err(format!("unknown command `{other}`\n\n{USAGE}")),
     };
     for warning in doc.warnings() {
@@ -251,6 +255,48 @@ fn render(doc: &Document, path: &str, args: &[String], out: &mut Out) -> Result<
         .map_err(io)?;
         for w in rendered.warnings {
             eprintln!("  page {n}: {w}");
+        }
+    }
+    Ok(())
+}
+
+fn text(doc: &Document, args: &[String], out: &mut Out) -> Result<(), String> {
+    let glyphs = args.iter().any(|a| a == "--glyphs");
+    let which = args
+        .iter()
+        .find(|a| !a.starts_with("--"))
+        .map_or("all", String::as_str);
+    let pages = doc.pages().map_err(|e| e.to_string())?;
+    let numbers: Vec<usize> = if which == "all" {
+        (1..=pages.len()).collect()
+    } else {
+        vec![
+            which
+                .parse()
+                .map_err(|_| "page must be a number or `all`")?,
+        ]
+    };
+    for n in numbers {
+        let page = n.checked_sub(1).and_then(|i| pages.get(i)).ok_or(format!(
+            "page {n} does not exist (the file has {})",
+            pages.len()
+        ))?;
+        let text = extract_text(doc, page).map_err(|e| e.to_string())?;
+        if glyphs {
+            for g in &text.glyphs {
+                let [a, _, c, _] = g.quad;
+                writeln!(
+                    out,
+                    "{n} {:?} {:.2} {:.2} {:.2} {:.2} {:.2} {}",
+                    g.text, a.x, a.y, c.x, c.y, g.size, g.font
+                )
+                .map_err(io)?;
+            }
+        } else {
+            writeln!(out, "{}", text.plain_text()).map_err(io)?;
+            if n != pages.len() {
+                out.write_all(b"\x0c").map_err(io)?;
+            }
         }
     }
     Ok(())
