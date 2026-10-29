@@ -222,3 +222,22 @@ fn serialized_objects_parse_back() {
         }
     }
 }
+
+#[test]
+fn text_strings_round_trip() {
+    use atelier_syntax::PdfString;
+    for text in ["plain", "café €5 — “quoted”", "Ελληνικά", "日本語", ""] {
+        assert_eq!(PdfString::from_text(text).to_text(), text);
+    }
+    // Latin text stays PDFDocEncoding; anything else becomes UTF-16BE.
+    assert_eq!(PdfString::from_text("café").bytes, b"caf\xE9");
+    assert!(
+        PdfString::from_text("日本")
+            .bytes
+            .starts_with(&[0xFE, 0xFF])
+    );
+    assert_eq!(
+        PdfString::literal(b"\xEF\xBB\xBFok".to_vec()).to_text(),
+        "ok"
+    );
+}

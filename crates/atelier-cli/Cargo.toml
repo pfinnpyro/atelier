@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 atelier-filters.workspace = true
+atelier-form.workspace = true
 atelier-render.workspace = true
 atelier-syntax.workspace = true
 

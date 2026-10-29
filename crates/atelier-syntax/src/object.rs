@@ -99,6 +99,104 @@ impl PdfString {
             hex: false,
         }
     }
+
+    /// Decodes a text string (ISO 32000-2, 7.9.2.2): UTF-16BE or UTF-8 with
+    /// a byte order mark, otherwise PDFDocEncoding.
+    pub fn to_text(&self) -> String {
+        text_from_bytes(&self.bytes)
+    }
+
+    /// Encodes a text string: PDFDocEncoding when every character has a
+    /// code there, otherwise UTF-16BE with a byte order mark.
+    pub fn from_text(text: &str) -> Self {
+        let pdfdoc: Option<Vec<u8>> = text.chars().map(pdfdoc_code).collect();
+        let bytes = pdfdoc.unwrap_or_else(|| {
+            let mut out = vec![0xFE, 0xFF];
+            for unit in text.encode_utf16() {
+                out.extend_from_slice(&unit.to_be_bytes());
+            }
+            out
+        });
+        Self::literal(bytes)
+    }
+}
+
+/// PDFDocEncoding codes whose characters differ from Latin-1.
+const PDFDOC_SPECIAL: [(u8, char); 41] = [
+    (0x18, '\u{02D8}'),
+    (0x19, '\u{02C7}'),
+    (0x1A, '\u{02C6}'),
+    (0x1B, '\u{02D9}'),
+    (0x1C, '\u{02DD}'),
+    (0x1D, '\u{02DB}'),
+    (0x1E, '\u{02DA}'),
+    (0x1F, '\u{02DC}'),
+    (0x80, '\u{2022}'),
+    (0x81, '\u{2020}'),
+    (0x82, '\u{2021}'),
+    (0x83, '\u{2026}'),
+    (0x84, '\u{2014}'),
+    (0x85, '\u{2013}'),
+    (0x86, '\u{0192}'),
+    (0x87, '\u{2044}'),
+    (0x88, '\u{2039}'),
+    (0x89, '\u{203A}'),
+    (0x8A, '\u{2212}'),
+    (0x8B, '\u{2030}'),
+    (0x8C, '\u{201E}'),
+    (0x8D, '\u{201C}'),
+    (0x8E, '\u{201D}'),
+    (0x8F, '\u{2018}'),
+    (0x90, '\u{2019}'),
+    (0x91, '\u{201A}'),
+    (0x92, '\u{2122}'),
+    (0x93, '\u{FB01}'),
+    (0x94, '\u{FB02}'),
+    (0x95, '\u{0141}'),
+    (0x96, '\u{0152}'),
+    (0x97, '\u{0160}'),
+    (0x98, '\u{0178}'),
+    (0x99, '\u{017D}'),
+    (0x9A, '\u{0131}'),
+    (0x9B, '\u{0142}'),
+    (0x9C, '\u{0153}'),
+    (0x9D, '\u{0161}'),
+    (0x9E, '\u{017E}'),
+    (0x9F, '\u{FFFD}'),
+    (0xA0, '\u{20AC}'),
+];
+
+fn pdfdoc_char(b: u8) -> char {
+    match PDFDOC_SPECIAL.iter().find(|e| e.0 == b) {
+        Some(&(_, c)) => c,
+        None => char::from(b),
+    }
+}
+
+fn pdfdoc_code(c: char) -> Option<u8> {
+    if let Some(&(b, _)) = PDFDOC_SPECIAL.iter().find(|e| e.1 == c && c != '\u{FFFD}') {
+        return Some(b);
+    }
+    let b = u8::try_from(u32::from(c)).ok()?;
+    // Codes taken by the special table, and 0xAD, mean something else.
+    let taken = PDFDOC_SPECIAL.iter().any(|e| e.0 == b) || b == 0xAD;
+    let control = b < 0x20 && !matches!(b, b'\t' | b'\n' | b'\r');
+    (!taken && !control && b != 0x7F).then_some(b)
+}
+
+/// Decodes text string bytes; see [`PdfString::to_text`].
+pub fn text_from_bytes(bytes: &[u8]) -> String {
+    if let Some(rest) = bytes.strip_prefix(&[0xFE, 0xFF]) {
+        let units: Vec<u16> = rest
+            .chunks_exact(2)
+            .map(|c| u16::from_be_bytes([c[0], c[1]]))
+            .collect();
+        return String::from_utf16_lossy(&units);
+    }
+    if let Some(rest) = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]) {
+        return String::from_utf8_lossy(rest).into_owned();
+    }
+    bytes.iter().map(|&b| pdfdoc_char(b)).collect()
 }
 
 impl fmt::Debug for PdfString {

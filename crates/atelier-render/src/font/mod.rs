@@ -4,6 +4,7 @@
 mod cmap;
 mod predefined;
 mod system;
+mod text_font;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -18,6 +19,7 @@ use atelier_syntax::{Dict, Document, Object, Stream};
 
 pub use cmap::CMap;
 use system::{Family, Script, Want};
+pub use text_font::TextFont;
 
 /// Font descriptor flags (9.8.2).
 const FIXED_PITCH: i64 = 1;
@@ -82,6 +84,8 @@ pub struct PdfFont {
     outlines: RefCell<HashMap<u32, Option<Rc<Path>>>>,
     /// Rasterized glyphs, by glyph, scale and subpixel offset.
     masks: RefCell<HashMap<MaskKey, Option<Rc<GlyphMask>>>>,
+    /// Characters to codes, built the first time something encodes text.
+    reverse: std::cell::OnceCell<HashMap<char, Vec<u8>>>,
 }
 
 /// Glyph id, the device matrix's a b c d in 1/256ths, and the origin's
@@ -232,6 +236,7 @@ impl PdfFont {
             missing_width: 0.0,
             to_unicode: None,
             outlines: RefCell::new(HashMap::new()),
+            reverse: std::cell::OnceCell::new(),
             masks: RefCell::new(HashMap::new()),
         }
     }
@@ -774,6 +779,66 @@ impl PdfFont {
             unicode,
             is_space: code == 32,
         }
+    }
+
+    /// Character codes that show `text` in this font, or None when some
+    /// character has no code here (or the embedded subset lacks its glyph).
+    pub fn encode(&self, text: &str) -> Option<Vec<u8>> {
+        let map = self.reverse.get_or_init(|| self.reverse_map());
+        let mut out = Vec::with_capacity(text.len());
+        for c in text.chars() {
+            out.extend_from_slice(map.get(&c)?);
+        }
+        Some(out)
+    }
+
+    /// Width of shown bytes in text space units (1.0 = font size).
+    pub fn width_of(&self, bytes: &[u8]) -> f64 {
+        self.decode(bytes).iter().map(|g| g.width).sum()
+    }
+
+    fn reverse_map(&self) -> HashMap<char, Vec<u8>> {
+        // An embedded program that is not a stand-in must actually hold the
+        // glyph; a subset usually holds only the characters it was made for.
+        let needs_glyph = self.program.is_some() && !self.substituted;
+        let mut map = HashMap::new();
+        let mut add = |code_bytes: Vec<u8>, glyph: Glyph| {
+            let Some(text) = glyph.unicode else { return };
+            let mut chars = text.chars();
+            let (Some(c), None) = (chars.next(), chars.next()) else {
+                return;
+            };
+            if needs_glyph && !glyph.gid.is_some_and(|g| g != 0) {
+                return;
+            }
+            map.entry(c).or_insert(code_bytes);
+        };
+        match &self.kind {
+            Kind::Simple { .. } => {
+                for code in 0..=255u8 {
+                    add(vec![code], self.simple_glyph(code));
+                }
+            }
+            Kind::Cid { cmap, .. } => {
+                let mut codes = self
+                    .to_unicode
+                    .as_ref()
+                    .map(CMap::unicode_codes)
+                    .unwrap_or_default();
+                if codes.is_empty() {
+                    return map;
+                }
+                codes.dedup_by_key(|e| e.0);
+                for (code, _) in codes {
+                    let bytes = cmap.code_bytes(code);
+                    if let Some(g) = self.decode(&bytes).into_iter().next() {
+                        add(bytes, g);
+                    }
+                }
+            }
+            Kind::Type3 { .. } => {}
+        }
+        map
     }
 
     /// The outline of a glyph in text space (1.0 = font size), cached.

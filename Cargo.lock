@@ -381,6 +381,7 @@ name = "atelier-cli"
 version = "0.1.0"
 dependencies = [
  "atelier-filters",
+ "atelier-form",
  "atelier-render",
  "atelier-syntax",
 ]
@@ -405,6 +406,15 @@ name = "atelier-font"
 version = "0.1.0"
 dependencies = [
  "atelier-raster",
+]
+
+[[package]]
+name = "atelier-form"
+version = "0.1.0"
+dependencies = [
+ "atelier-raster",
+ "atelier-render",
+ "atelier-syntax",
 ]
 
 [[package]]
