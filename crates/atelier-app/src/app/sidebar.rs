@@ -243,7 +243,9 @@ impl Viewer {
             o.outline_asked = true;
             let wake = self.ctx.clone();
             self.pool
-                .outline(o.doc.clone(), o.opened, move || wake.request_repaint());
+                .outline(o.doc.clone(), o.opened, o.ocr_texts.clone(), move || {
+                    wake.request_repaint()
+                });
         }
         let Some((items, from_headings)) = &o.outline else {
             ui.horizontal(|ui| {

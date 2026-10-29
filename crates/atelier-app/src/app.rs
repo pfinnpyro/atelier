@@ -92,6 +92,8 @@ struct Open {
     /// found in the text rather than bookmarks.
     outline: Option<(Vec<atelier_view::OutlineItem>, bool)>,
     outline_asked: bool,
+    /// Text OCR read from scanned pages.
+    ocr_texts: crate::worker::OcrTexts,
     /// Tiles that still show a field's old value; they stay on screen
     /// until their replacements arrive.
     stale: HashSet<TileKey>,
@@ -153,6 +155,8 @@ pub struct Viewer {
     settings: Settings,
     /// The Settings or About window is open.
     window: Option<Window>,
+    /// The OCR models being downloaded.
+    ocr_download: Option<settings_window::Download>,
     sidebar: Sidebar,
 }
 
@@ -198,6 +202,7 @@ impl Viewer {
             menu: None,
             settings: Settings::load(),
             window: None,
+            ocr_download: None,
             sidebar: Sidebar::default(),
         };
         if let Some(p) = path {
@@ -274,6 +279,7 @@ impl Viewer {
             thumb_stale: HashSet::new(),
             outline: None,
             outline_asked: false,
+            ocr_texts: Default::default(),
             doc,
             name,
             generation: self.generation,
@@ -304,6 +310,9 @@ impl Viewer {
         self.apply_fit();
         if self.settings.orient_on_open {
             self.start_orient(true);
+        } else if self.ocr_ready() {
+            // Read the scans, but leave the pages as they are.
+            self.start_ocr();
         }
     }
 
@@ -505,13 +514,20 @@ impl Viewer {
             self.step_hit(backwards);
             return;
         }
+        self.start_search(query);
+    }
+
+    /// Searches every page for `query` afresh.
+    pub(super) fn start_search(&mut self, query: String) {
         let Some(o) = &self.open else { return };
         let wake = self.ctx.clone();
-        let id = self
-            .pool
-            .search(o.doc.clone(), o.generation, query.clone(), move || {
-                wake.request_repaint()
-            });
+        let id = self.pool.search(
+            o.doc.clone(),
+            o.generation,
+            query.clone(),
+            o.ocr_texts.clone(),
+            move || wake.request_repaint(),
+        );
         self.search = Search {
             query,
             id,
@@ -679,6 +695,13 @@ impl Viewer {
                     generation,
                     rotations,
                 } => oriented = Some((generation, rotations)),
+                Done::OcrPage { opened, page } if opened == o.opened => {
+                    // Its text is now what OCR read.
+                    o.text.remove(&page);
+                }
+                Done::OcrFailed { error } => {
+                    self.error = Some(format!("OCR is off for now: {error}"));
+                }
                 _ => {}
             }
         }
@@ -1327,6 +1350,7 @@ impl Viewer {
                     doc: o.doc.clone(),
                     generation: o.generation,
                     page,
+                    ocr: o.ocr_texts.clone(),
                 });
             }
         }
@@ -1513,6 +1537,7 @@ impl eframe::App for Viewer {
         }
         self.password_window(&ctx);
         self.settings_window(&ctx);
+        self.download_progress(&ctx);
         self.confirm_window(&ctx);
     }
 }

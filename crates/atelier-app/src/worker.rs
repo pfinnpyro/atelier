@@ -1,15 +1,59 @@
 //! Background threads that render tiles and read page text, so the window
 //! never waits on the document.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
+use atelier_ocr::{Engine, read_page};
 use atelier_render::{PageText, RenderOptions, extract_text, render_page, render_region};
-use atelier_syntax::Document;
-use atelier_view::{Basis, OutlineItem, TileKey, bookmarks, find_in_page, headings, upright_page};
+use atelier_syntax::{Document, Page};
+use atelier_view::{
+    Basis, OutlineItem, TileKey, bookmarks, find_in_page, headings, upright_page, upright_rotation,
+};
+
+/// Text read with OCR from pages that have none of their own, by page.
+/// Kept per open file; it stays right when pages turn, since it is in the
+/// page's own coordinates.
+pub type OcrTexts = Arc<Mutex<HashMap<usize, Arc<PageText>>>>;
+
+/// Pages with fewer letters than this count as having no text, so OCR
+/// reads them.
+const MIN_LETTERS: usize = 12;
+
+fn little_text(text: &PageText) -> bool {
+    text.glyphs
+        .iter()
+        .filter(|g| !g.text.trim().is_empty())
+        .take(MIN_LETTERS)
+        .count()
+        < MIN_LETTERS
+}
+
+/// A page's text: its own, or what OCR read when it has next to none.
+pub fn page_text(doc: &Document, index: usize, page: &Page, ocr: &OcrTexts) -> Arc<PageText> {
+    let text = extract_text(doc, page).unwrap_or_default();
+    if little_text(&text)
+        && let Some(read) = ocr.lock().unwrap_or_else(|e| e.into_inner()).get(&index)
+    {
+        return read.clone();
+    }
+    Arc::new(text)
+}
+
+/// What an auto-orient run needs to read scans with OCR.
+#[derive(Clone)]
+pub struct OcrRun {
+    /// Where the models are.
+    pub dir: PathBuf,
+    /// Where the text read goes.
+    pub texts: OcrTexts,
+    /// Pages read so far.
+    pub read: Arc<AtomicUsize>,
+}
 
 /// Work for the pool. Each job carries the document it is for, so a job
 /// queued before another file was opened still finishes cleanly.
@@ -25,6 +69,7 @@ pub enum Job {
         doc: Arc<Document>,
         generation: u64,
         page: usize,
+        ocr: OcrTexts,
     },
     /// A page drawn small for the sidebar, `scale` device pixels per point.
     Thumb {
@@ -117,6 +162,15 @@ pub enum Done {
         generation: u64,
         rotations: Vec<Option<(u16, Basis)>>,
     },
+    /// OCR read a page of the file opened as `opened`.
+    OcrPage {
+        opened: u64,
+        page: usize,
+    },
+    /// The OCR models could not be loaded.
+    OcrFailed {
+        error: String,
+    },
 }
 
 struct Queue {
@@ -138,6 +192,8 @@ pub struct Pool {
     /// The search that should keep running; any other stops.
     search: Arc<AtomicU64>,
     threads: Vec<thread::JoinHandle<()>>,
+    /// The OCR engine, loaded the first time it is needed.
+    engine: Arc<Mutex<Option<Arc<Engine>>>>,
 }
 
 impl Pool {
@@ -173,6 +229,7 @@ impl Pool {
             done,
             search: Arc::new(AtomicU64::new(0)),
             threads,
+            engine: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -196,6 +253,7 @@ impl Pool {
         doc: Arc<Document>,
         generation: u64,
         query: String,
+        ocr: OcrTexts,
         wake: impl Fn() + Send + 'static,
     ) -> u64 {
         let id = self.search.fetch_add(1, Ordering::SeqCst) + 1;
@@ -214,7 +272,7 @@ impl Pool {
                 if current.load(Ordering::SeqCst) != id {
                     return;
                 }
-                let text = Arc::new(extract_text(&doc, page).unwrap_or_default());
+                let text = page_text(&doc, i, page, &ocr);
                 let hits = find_in_page(&text, i, &query)
                     .into_iter()
                     .map(|m| m.glyphs)
@@ -250,16 +308,30 @@ impl Pool {
         doc: Arc<Document>,
         generation: u64,
         done: Arc<AtomicUsize>,
+        ocr: Option<OcrRun>,
         wake: impl Fn() + Send + Sync + 'static,
     ) {
         let tx = self.done_tx.clone();
+        let engine = self.engine.clone();
         let _ = thread::Builder::new().name("orient".into()).spawn(move || {
+            let ocr = ocr.and_then(|run| match load_engine(&engine, &run) {
+                Ok(e) => Some((e, run)),
+                Err(error) => {
+                    let _ = tx.send(Done::OcrFailed { error });
+                    None
+                }
+            });
             let count = doc.pages().map_or(0, <[_]>::len);
             let next = AtomicUsize::new(0);
             let results = Mutex::new(vec![None; count]);
-            let threads = thread::available_parallelism()
-                .map_or(2, |n| n.get())
-                .clamp(1, 8);
+            let cores = thread::available_parallelism().map_or(2, |n| n.get());
+            // OCR spreads each page over the cores itself and takes a lot of
+            // memory per page, so fewer pages go at once.
+            let threads = if ocr.is_some() {
+                (cores / 2).clamp(1, 4)
+            } else {
+                cores.clamp(1, 8)
+            };
             thread::scope(|s| {
                 for _ in 0..threads {
                     s.spawn(|| {
@@ -269,7 +341,14 @@ impl Pool {
                             let Some(page) = pages.get(i) else { break };
                             // A page that panics the renderer is left as it is.
                             let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                upright_page(&doc, page)
+                                let ocr = ocr.as_ref().map(|(e, run)| (&**e, run));
+                                orient_page(&doc, i, page, ocr, &|| {
+                                    let _ = tx.send(Done::OcrPage {
+                                        opened: generation,
+                                        page: i,
+                                    });
+                                    wake();
+                                })
                             }))
                             .ok()
                             .flatten();
@@ -291,7 +370,13 @@ impl Pool {
 
     /// Reads the outline on its own thread: the bookmarks, or when there
     /// are none, headings found in the text of the first pages.
-    pub fn outline(&self, doc: Arc<Document>, opened: u64, wake: impl Fn() + Send + 'static) {
+    pub fn outline(
+        &self,
+        doc: Arc<Document>,
+        opened: u64,
+        ocr: OcrTexts,
+        wake: impl Fn() + Send + 'static,
+    ) {
         /// Pages read for headings at most.
         const MAX_PAGES: usize = 1500;
         let tx = self.done_tx.clone();
@@ -308,7 +393,8 @@ impl Pool {
                         .map(|p| {
                             p.iter()
                                 .take(MAX_PAGES)
-                                .map(|p| extract_text(&doc, p).unwrap_or_default())
+                                .enumerate()
+                                .map(|(i, p)| (*page_text(&doc, i, p, &ocr)).clone())
                                 .collect()
                         })
                         .unwrap_or_default();
@@ -463,18 +549,68 @@ fn work(job: Job) -> Done {
             doc,
             generation,
             page,
+            ocr,
         } => {
             let text = doc
                 .pages()
                 .ok()
-                .and_then(|p| p.get(page))
-                .and_then(|p| extract_text(&doc, p).ok())
+                .and_then(|p| p.get(page).map(|p| page_text(&doc, page, p, &ocr)))
                 .unwrap_or_default();
             Done::Text {
                 generation,
                 page,
-                text: Arc::new(text),
+                text,
             }
         }
     }
+}
+
+/// The OCR engine, loaded once and then kept.
+fn load_engine(cache: &Mutex<Option<Arc<Engine>>>, run: &OcrRun) -> Result<Arc<Engine>, String> {
+    let mut slot = cache.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(e) = &*slot {
+        return Ok(e.clone());
+    }
+    let e = Arc::new(Engine::load(&run.dir)?);
+    *slot = Some(e.clone());
+    Ok(e)
+}
+
+/// Which way up a page goes: by its own text, else by the words OCR reads
+/// (keeping them as its text), else by the look of its image. `read` is
+/// called when OCR has read the page.
+fn orient_page(
+    doc: &Document,
+    index: usize,
+    page: &Page,
+    ocr: Option<(&Engine, &OcrRun)>,
+    read: &dyn Fn(),
+) -> Option<(u16, Basis)> {
+    let text = extract_text(doc, page).unwrap_or_default();
+    if let Some(r) = upright_rotation(&text) {
+        return Some((r, Basis::Text));
+    }
+    if let Some((engine, run)) = ocr
+        && little_text(&text)
+    {
+        let known = run
+            .texts
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&index)
+            .cloned();
+        if let Some(t) = known {
+            return upright_rotation(&t).map(|r| (r, Basis::Ocr));
+        }
+        if let Ok(Some(reading)) = read_page(engine, doc, page) {
+            run.texts
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(index, Arc::new(reading.text));
+            run.read.fetch_add(1, Ordering::SeqCst);
+            read();
+            return Some((reading.rotate, Basis::Ocr));
+        }
+    }
+    upright_page(doc, page)
 }

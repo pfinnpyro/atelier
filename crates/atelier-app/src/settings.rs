@@ -42,6 +42,20 @@ impl Settings {
         .map(|d| d.join("settings.txt"))
     }
 
+    /// Where the OCR models are kept: `%LOCALAPPDATA%\Atelier\ocr-models`
+    /// on Windows, `~/.local/share/atelier/ocr-models` elsewhere.
+    pub fn ocr_models_dir() -> Option<PathBuf> {
+        if cfg!(windows) {
+            std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("Atelier"))
+        } else {
+            std::env::var_os("XDG_DATA_HOME")
+                .map(PathBuf::from)
+                .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+                .map(|d| d.join("atelier"))
+        }
+        .map(|d| d.join("ocr-models"))
+    }
+
     /// The saved settings, or the defaults for anything missing.
     pub fn load() -> Self {
         Self::path()
