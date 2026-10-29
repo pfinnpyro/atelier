@@ -1,0 +1,26 @@
+[package]
+name = "atelier-print"
+description = "Sends pages to a printer: the system print spooler on Windows, lp elsewhere."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Printing",
+    "Win32_Storage_Xps",
+    "Win32_System_SystemServices",
+] }
+
+# Talking to the Windows print spooler takes raw system calls, so this one
+# crate allows unsafe code, kept to the `windows` module.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

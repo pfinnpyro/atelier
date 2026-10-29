@@ -17,6 +17,7 @@ atelier-raster.workspace = true
 atelier-render.workspace = true
 atelier-syntax.workspace = true
 atelier-ocr.workspace = true
+atelier-print.workspace = true
 atelier-view.workspace = true
 eframe = "0.37"
 rfd = "0.17"

@@ -377,6 +377,7 @@ dependencies = [
  "arboard",
  "atelier-form",
  "atelier-ocr",
+ "atelier-print",
  "atelier-raster",
  "atelier-render",
  "atelier-syntax",
@@ -439,6 +440,13 @@ dependencies = [
  "atelier-view",
  "ocrs",
  "rten",
+]
+
+[[package]]
+name = "atelier-print"
+version = "0.1.0"
+dependencies = [
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
