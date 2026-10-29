@@ -11,6 +11,8 @@ pub struct Settings {
     pub orient_on_open: bool,
     /// Read the text of scans that have none.
     pub ocr: bool,
+    /// Save the text OCR reads into the file, as invisible text.
+    pub ocr_save: bool,
     /// The sidebar of page previews and the outline is shown.
     pub sidebar: bool,
     /// Look for a new version when Atelier starts.
@@ -25,6 +27,7 @@ impl Default for Settings {
             fit_page: true,
             orient_on_open: true,
             ocr: true,
+            ocr_save: true,
             sidebar: true,
             check_updates: true,
             preview: false,
@@ -81,6 +84,7 @@ impl Settings {
                 "zoom" => s.fit_page = value.trim() != "fit-width",
                 "orient-on-open" => s.orient_on_open = on,
                 "ocr" => s.ocr = on,
+                "ocr-save" => s.ocr_save = on,
                 "sidebar" => s.sidebar = on,
                 "check-updates" => s.check_updates = on,
                 "channel" => s.preview = value.trim() == "preview",
@@ -92,7 +96,7 @@ impl Settings {
 
     pub fn to_text(&self) -> String {
         format!(
-            "zoom = {}\norient-on-open = {}\nocr = {}\nsidebar = {}\ncheck-updates = {}\n\
+            "zoom = {}\norient-on-open = {}\nocr = {}\nocr-save = {}\nsidebar = {}\ncheck-updates = {}\n\
              channel = {}\n",
             if self.fit_page {
                 "fit-page"
@@ -101,6 +105,7 @@ impl Settings {
             },
             self.orient_on_open,
             self.ocr,
+            self.ocr_save,
             self.sidebar,
             self.check_updates,
             if self.preview { "preview" } else { "stable" }
@@ -128,6 +133,7 @@ mod tests {
             fit_page: false,
             orient_on_open: false,
             ocr: true,
+            ocr_save: false,
             sidebar: false,
             check_updates: false,
             preview: true,

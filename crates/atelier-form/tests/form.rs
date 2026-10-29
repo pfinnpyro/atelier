@@ -428,3 +428,44 @@ fn rotations_are_saved_with_the_fields() {
     s.rotate(0, 90);
     assert!(s.is_dirty());
 }
+
+#[test]
+fn ocr_text_layers_are_saved_as_invisible_text() {
+    use atelier_raster::Point;
+    use atelier_render::{PageText, TextGlyph, extract_text};
+    use std::sync::Arc;
+    let doc = Arc::new(Document::open(sample()).unwrap());
+    // Two words along y = 500, each letter 10 wide and 12 tall.
+    let mut glyphs = Vec::new();
+    for (i, c) in "Hello world".chars().enumerate() {
+        let x = 100.0 + 10.0 * i as f64;
+        let p = |x, y| Point::new(x, y);
+        let quad = [
+            p(x, 500.0),
+            p(x + 10.0, 500.0),
+            p(x + 10.0, 512.0),
+            p(x, 512.0),
+        ];
+        glyphs.push(TextGlyph {
+            text: c.to_string(),
+            quad,
+            baseline: (quad[0], quad[1]),
+            size: 12.0,
+            font: "OCR".into(),
+            invisible: true,
+        });
+    }
+    let mut session = atelier_form::Session::new(doc.clone());
+    session.set_text_layer(0, Arc::new(PageText { glyphs }));
+    assert!(!session.is_dirty());
+    let built = session.build().unwrap();
+    let page = &built.doc.pages().unwrap()[0];
+    let text = extract_text(&built.doc, page).unwrap();
+    assert_eq!(text.plain_text().trim(), "Hello world");
+    assert!(text.glyphs.iter().all(|g| g.invisible));
+    // The words keep their place: "world" starts near x = 160.
+    let w = text.glyphs.iter().find(|g| g.text == "w").unwrap();
+    assert!((w.quad[0].x - 160.0).abs() < 1.0, "{:?}", w.quad[0]);
+    // And the page looks the same.
+    assert_eq!(render(&built.doc).data(), render(&doc).data());
+}

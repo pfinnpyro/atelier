@@ -3,7 +3,8 @@ name = "atelier-cli"
 description = "Command-line tool for inspecting PDFs with the Atelier engine"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
+# OCR's runtime needs a newer compiler than the library crates.
+rust-version = "1.94"
 publish.workspace = true
 
 [[bin]]
@@ -13,6 +14,7 @@ path = "src/main.rs"
 [dependencies]
 atelier-filters.workspace = true
 atelier-form.workspace = true
+atelier-ocr.workspace = true
 atelier-render.workspace = true
 atelier-syntax.workspace = true
 atelier-view.workspace = true
