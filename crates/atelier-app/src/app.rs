@@ -25,10 +25,14 @@ mod form;
 mod inspect;
 mod menu;
 mod pages;
+mod settings_window;
 
 use form::FormView;
 use inspect::Inspector;
 use menu::MenuTarget;
+use settings_window::Window;
+
+use crate::settings::Settings;
 
 const MIN_ZOOM: f64 = 0.05;
 const MAX_ZOOM: f64 = 64.0;
@@ -38,6 +42,17 @@ const BACKDROP: Color32 = Color32::from_gray(82);
 const SELECTION: Color32 = Color32::from_rgba_premultiplied(0, 70, 160, 90);
 const HIT: Color32 = Color32::from_rgba_premultiplied(120, 100, 0, 110);
 const CURRENT_HIT: Color32 = Color32::from_rgba_premultiplied(160, 70, 0, 150);
+
+/// Where Save writes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SaveTo {
+    /// Over the file it was opened from.
+    Overwrite,
+    /// To a new file, which then becomes the open file.
+    As,
+    /// To a new file, leaving the open file where it is.
+    Copy,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ZoomMode {
@@ -64,7 +79,7 @@ struct Open {
     opened: u64,
     /// Auto-orient is working out which way up the pages go: pages done
     /// so far, and how many there are.
-    orienting: Option<(Arc<std::sync::atomic::AtomicUsize>, usize)>,
+    orienting: Option<pages::Orienting>,
     /// The form, when the document has one.
     form: Option<FormView>,
     /// Tiles that still show a field's old value; they stay on screen
@@ -125,6 +140,9 @@ pub struct Viewer {
     inspector: Inspector,
     /// What the right-click menu is for.
     menu: Option<MenuTarget>,
+    settings: Settings,
+    /// The Settings or About window is open.
+    window: Option<Window>,
 }
 
 /// An encrypted file the password prompt is open for.
@@ -167,6 +185,8 @@ impl Viewer {
             closing: false,
             inspector: Inspector::default(),
             menu: None,
+            settings: Settings::load(),
+            window: None,
         };
         if let Some(p) = path {
             v.open_path(&p);
@@ -255,12 +275,19 @@ impl Viewer {
         self.inspector.reset();
         self.update_title();
         self.error = None;
-        self.zoom_mode = ZoomMode::FitWidth;
+        self.zoom_mode = if self.settings.fit_page {
+            ZoomMode::FitPage
+        } else {
+            ZoomMode::FitWidth
+        };
         self.scroll_to = Some(Vec2::ZERO);
         self.search = Search::default();
         self.selection = None;
         self.selecting = false;
         self.apply_fit();
+        if self.settings.orient_on_open {
+            self.start_orient(true);
+        }
     }
 
     fn pick_file(&mut self) {
@@ -276,14 +303,22 @@ impl Viewer {
     /// Saves the document with its changes, to its own file or (`choose`)
     /// to one the person picks. The file is written beside the target and
     /// then moved over it, so a failed write never leaves half a file.
-    fn save(&mut self, choose: bool) {
+    fn save(&mut self, to: SaveTo) {
         let Some(o) = &self.open else { return };
-        let path = match (&o.path, choose) {
-            (Some(p), false) => Some(p.clone()),
-            _ => rfd::FileDialog::new()
-                .add_filter("PDF documents", &["pdf"])
-                .set_file_name(&o.name)
-                .save_file(),
+        let path = match (&o.path, to) {
+            (Some(p), SaveTo::Overwrite) => Some(p.clone()),
+            _ => {
+                let name = if to == SaveTo::Copy {
+                    let stem = o.name.strip_suffix(".pdf").unwrap_or(&o.name);
+                    format!("{stem} (copy).pdf")
+                } else {
+                    o.name.clone()
+                };
+                rfd::FileDialog::new()
+                    .add_filter("PDF documents", &["pdf"])
+                    .set_file_name(name)
+                    .save_file()
+            }
         };
         let Some(path) = path else { return };
         if let Err(e) = write_replacing(&path, o.doc.data()) {
@@ -291,8 +326,13 @@ impl Viewer {
             return;
         }
         let Some(o) = &mut self.open else { return };
-        o.name = display_name(&path);
-        o.path = Some(path);
+        if to == SaveTo::Copy {
+            self.notice = Some(format!("Saved a copy as {}.", display_name(&path)));
+        } else {
+            o.name = display_name(&path);
+            o.path = Some(path);
+        }
+        // The changes are saved somewhere, so closing need not ask again.
         o.session.saved(o.doc.clone());
         self.update_title();
     }
@@ -334,7 +374,7 @@ impl Viewer {
             return;
         }
         if choice == 0 {
-            self.save(false);
+            self.save(SaveTo::Overwrite);
             if self.is_dirty() {
                 // Not saved (cancelled or failed): stay.
                 return;
@@ -627,10 +667,10 @@ impl Viewer {
         let pressed = |k| ctx.input(|i| i.key_pressed(k));
         let copy = ctx.input(|i| i.events.iter().any(|e| matches!(e, Event::Copy)));
         if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::S)) {
-            self.save(true);
+            self.save(SaveTo::As);
         }
         if shortcut(Key::S) {
-            self.save(false);
+            self.save(SaveTo::Overwrite);
         }
         if shortcut(Key::O) {
             self.pick_file();
@@ -739,13 +779,38 @@ impl Viewer {
                 self.pick_file();
             }
             let dirty = self.is_dirty();
-            if ui
-                .add_enabled(self.open.is_some(), egui::Button::new("Save"))
-                .on_hover_text("Save (Ctrl+S); Save as: Ctrl+Shift+S")
-                .clicked()
-            {
-                self.save(false);
-            }
+            ui.add_enabled_ui(self.open.is_some(), |ui| {
+                // A split button: Save a copy, with Save and Save as beside it.
+                ui.spacing_mut().item_spacing.x = 1.0;
+                if ui
+                    .button("Save a copy…")
+                    .on_hover_text("Save the file with your changes under a new name")
+                    .clicked()
+                {
+                    self.save(SaveTo::Copy);
+                }
+                ui.menu_button("⏷", |ui| {
+                    if ui
+                        .add(egui::Button::new("Save").shortcut_text("Ctrl+S"))
+                        .on_hover_text("Save over the file it was opened from")
+                        .clicked()
+                    {
+                        self.save(SaveTo::Overwrite);
+                        ui.close();
+                    }
+                    if ui
+                        .add(egui::Button::new("Save as…").shortcut_text("Ctrl+Shift+S"))
+                        .clicked()
+                    {
+                        self.save(SaveTo::As);
+                        ui.close();
+                    }
+                    if ui.button("Save a copy…").clicked() {
+                        self.save(SaveTo::Copy);
+                        ui.close();
+                    }
+                });
+            });
             if dirty {
                 ui.label("●").on_hover_text("Unsaved changes");
             }
@@ -778,18 +843,20 @@ impl Viewer {
                     .desired_width(40.0)
                     .align(Align2::CENTER_CENTER);
                 let resp = ui.add(field).on_hover_text("Go to page");
+                // Read what was typed before the box shows the current page
+                // again: it loses focus in the same frame Enter is pressed.
+                if resp.lost_focus()
+                    && ui.input(|i| i.key_pressed(Key::Enter))
+                    && let Ok(n) = self.page_input.trim().parse::<usize>()
+                {
+                    self.go_to_page(n.saturating_sub(1));
+                }
                 if !resp.has_focus() {
                     self.page_input = if enabled {
                         (current + 1).to_string()
                     } else {
                         String::new()
                     };
-                }
-                if resp.lost_focus()
-                    && ui.input(|i| i.key_pressed(Key::Enter))
-                    && let Ok(n) = self.page_input.trim().parse::<usize>()
-                {
-                    self.go_to_page(n.saturating_sub(1));
                 }
                 ui.label(format!("/ {count}"));
                 ui.separator();
@@ -873,10 +940,20 @@ impl Viewer {
                     ui.label(label);
                 }
             });
-            if let Some(o) = &self.open
-                && !o.warnings.is_empty()
-            {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.menu_button("☰", |ui| {
+                    if ui.button("Settings…").clicked() {
+                        self.window = Some(Window::Settings);
+                        ui.close();
+                    }
+                    if ui.button("About Atelier").clicked() {
+                        self.window = Some(Window::About);
+                        ui.close();
+                    }
+                });
+                if let Some(o) = &self.open
+                    && !o.warnings.is_empty()
+                {
                     let label = format!("⚠ {}", o.warnings.len());
                     if ui
                         .selectable_label(self.show_warnings, label)
@@ -885,8 +962,8 @@ impl Viewer {
                     {
                         self.show_warnings = !self.show_warnings;
                     }
-                });
-            }
+                }
+            });
         });
     }
 
@@ -1363,6 +1440,7 @@ impl eframe::App for Viewer {
             self.warnings_window(&ctx);
         }
         self.password_window(&ctx);
+        self.settings_window(&ctx);
         self.confirm_window(&ctx);
     }
 }

@@ -85,12 +85,23 @@ impl Viewer {
 
     /// Starts working out which way up each page reads.
     pub(super) fn auto_orient(&mut self) {
+        self.start_orient(false);
+    }
+
+    /// Starts auto-orient. A quiet run (when a file opens) shows nothing
+    /// unless it turns pages, and its turns do not count as unsaved
+    /// changes.
+    pub(super) fn start_orient(&mut self, quiet: bool) {
         let Some(o) = &mut self.open else { return };
         if o.orienting.is_some() {
             return;
         }
         let done = Arc::new(AtomicUsize::new(0));
-        o.orienting = Some((done.clone(), o.layout.page_count()));
+        o.orienting = Some(Orienting {
+            done: done.clone(),
+            total: o.layout.page_count(),
+            quiet,
+        });
         let wake = self.ctx.clone();
         self.pool.orient(o.doc.clone(), o.opened, done, move || {
             wake.request_repaint()
@@ -100,13 +111,17 @@ impl Viewer {
 
     /// Shows how far auto-orient has got.
     pub(super) fn orient_progress(&mut self) {
-        let Some((done, total)) = self.open.as_ref().and_then(|o| o.orienting.clone()) else {
+        let Some(run) = self.open.as_ref().and_then(|o| o.orienting.as_ref()) else {
             return;
         };
-        let done = done.load(Ordering::SeqCst).min(total);
+        if run.quiet {
+            return;
+        }
+        let done = run.done.load(Ordering::SeqCst).min(run.total);
         self.notice = Some(format!(
-            "Auto-orient: reading page {} of {total}…",
-            (done + 1).min(total)
+            "Auto-orient: reading page {} of {}…",
+            (done + 1).min(run.total),
+            run.total
         ));
     }
 
@@ -114,10 +129,12 @@ impl Viewer {
     /// down.
     pub(super) fn oriented(&mut self, opened: u64, rotations: &[Option<(u16, Basis)>]) {
         let Some(o) = &mut self.open else { return };
-        if o.opened != opened || o.orienting.is_none() {
+        if o.opened != opened {
             return;
         }
-        o.orienting = None;
+        let Some(run) = o.orienting.take() else {
+            return;
+        };
         let mut turned = HashSet::new();
         let mut from_image = 0;
         for (p, r) in rotations.iter().enumerate() {
@@ -130,6 +147,9 @@ impl Viewer {
                     from_image += 1;
                 }
             }
+        }
+        if run.quiet {
+            o.session.quiet_rotations();
         }
         let unknown = rotations.iter().filter(|r| r.is_none()).count();
         let mut msg = match turned.len() {
@@ -144,15 +164,30 @@ impl Viewer {
                 msg.push('.');
             }
         }
-        if unknown > 0 {
-            let pages = if unknown == 1 { "page" } else { "pages" };
-            msg.push_str(&format!(
-                " {unknown} {pages} had no text to go by; turn those by hand."
-            ));
+        if run.quiet {
+            if !turned.is_empty() {
+                msg.push_str(" They stay that way in the file only if you save it.");
+                self.notice = Some(msg);
+            }
+        } else {
+            if unknown > 0 {
+                let pages = if unknown == 1 { "page" } else { "pages" };
+                msg.push_str(&format!(
+                    " {unknown} {pages} had no text to go by; turn those by hand."
+                ));
+            }
+            self.notice = Some(msg);
         }
-        self.notice = Some(msg);
         if !turned.is_empty() {
             self.rebuild(&turned, true);
         }
     }
+}
+
+/// An auto-orient run: pages done so far, how many there are, and
+/// whether it runs quietly.
+pub(super) struct Orienting {
+    pub done: Arc<AtomicUsize>,
+    pub total: usize,
+    pub quiet: bool,
 }

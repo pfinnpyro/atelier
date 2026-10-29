@@ -420,4 +420,11 @@ fn rotations_are_saved_with_the_fields() {
     assert!(s.original().is_none());
     s.rotate(0, 180);
     assert_eq!(s.build().unwrap().doc.pages().unwrap()[0].rotate, 180);
+
+    // Turns made quietly (auto-orient on open) are kept but not unsaved.
+    s.quiet_rotations();
+    assert!(!s.is_dirty());
+    assert_eq!(s.build().unwrap().doc.pages().unwrap()[0].rotate, 180);
+    s.rotate(0, 90);
+    assert!(s.is_dirty());
 }

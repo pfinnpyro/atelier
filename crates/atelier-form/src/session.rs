@@ -27,6 +27,9 @@ pub struct Session {
     edits: Vec<(usize, Value)>,
     /// Pages turned to a new /Rotate, by page index.
     rotations: BTreeMap<usize, u16>,
+    /// Turns that do not count as unsaved changes (made by auto-orient
+    /// when the file opened); they are still saved with the file.
+    quiet: BTreeMap<usize, u16>,
 }
 
 impl Session {
@@ -39,6 +42,7 @@ impl Session {
             base_form,
             edits: Vec::new(),
             rotations: BTreeMap::new(),
+            quiet: BTreeMap::new(),
         }
     }
 
@@ -88,15 +92,22 @@ impl Session {
         }
     }
 
+    /// Makes the page turns so far not count as unsaved changes. They
+    /// are still part of the document and saved with it.
+    pub fn quiet_rotations(&mut self) {
+        self.quiet = self.rotations.clone();
+    }
+
     /// Whether there are changes to save.
     pub fn is_dirty(&self) -> bool {
-        !self.edits.is_empty() || !self.rotations.is_empty()
+        !self.edits.is_empty() || self.rotations != self.quiet
     }
 
     /// Drops every change.
     pub fn revert(&mut self) {
         self.edits.clear();
         self.rotations.clear();
+        self.quiet.clear();
     }
 
     /// The document with the changes, and with every field redrawn when
@@ -104,7 +115,7 @@ impl Session {
     pub fn build(&self) -> Result<Built> {
         let mut form = self.base_form.clone();
         let redraw = form.as_ref().is_some_and(|f| f.need_appearances);
-        if !self.is_dirty() && !redraw {
+        if self.edits.is_empty() && self.rotations.is_empty() && !redraw {
             return Ok(Built {
                 doc: self.base.clone(),
                 form,
@@ -161,6 +172,7 @@ impl Session {
         self.base = doc;
         self.edits.clear();
         self.rotations.clear();
+        self.quiet.clear();
     }
 
     /// Pages whose widgets show `field`.
