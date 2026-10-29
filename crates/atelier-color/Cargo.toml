@@ -1,0 +1,12 @@
+[package]
+name = "atelier-color"
+description = "Colour management: ICC profiles and CIE colour spaces to sRGB"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

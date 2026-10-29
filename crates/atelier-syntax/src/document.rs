@@ -1,13 +1,18 @@
 //! A loaded PDF file with lazy object access.
 
+use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use crate::crypt::{Access, Security};
 use crate::decode::{DecodedStream, decode};
 use crate::page::{Page, collect_pages};
 use crate::parser::find;
 use crate::xref::{self, XrefEntry, XrefTable};
 use crate::{Dict, Error, Lexer, ObjRef, Object, Parser, Result, Stream, Token};
+
+/// Values derived from the document, by kind and key.
+type Memo = HashMap<(&'static str, u64), Arc<dyn Any + Send + Sync>>;
 
 /// Reference chains and object-stream lookups deeper than this are treated as
 /// cycles.
@@ -35,12 +40,26 @@ pub struct Document {
     scanned: OnceLock<HashMap<u32, (usize, u16)>>,
     pages: OnceLock<std::result::Result<Vec<Page>, Error>>,
     warnings: Mutex<Vec<String>>,
+    /// Set when the file is encrypted and a password opened it.
+    security: Option<Security>,
+    /// Values other crates derive from the document, computed once.
+    memo: Mutex<Memo>,
 }
 
 impl Document {
     /// Opens a PDF from its bytes. Broken cross-reference data is repaired by
-    /// scanning the file; check [`Document::was_repaired`].
+    /// scanning the file; check [`Document::was_repaired`]. An encrypted file
+    /// opens if its user password is empty, as most are; otherwise this
+    /// returns [`Error::Password`] and [`Document::open_with_password`] is
+    /// needed.
     pub fn open(data: impl Into<Arc<[u8]>>) -> Result<Self> {
+        Self::open_with_password(data, b"")
+    }
+
+    /// Opens an encrypted PDF with its user or owner password (UTF-8 for
+    /// AES-256 files, Latin-1 for older ones). For files that are not
+    /// encrypted the password is ignored.
+    pub fn open_with_password(data: impl Into<Arc<[u8]>>, password: &[u8]) -> Result<Self> {
         let data: Arc<[u8]> = data.into();
         let header_search = &data[..data.len().min(1024)];
         let (header_offset, version) = match find(header_search, b"%PDF-", 0) {
@@ -67,7 +86,8 @@ impl Document {
                 table,
                 false,
                 warnings.clone(),
-            );
+            )
+            .unlock(password)?;
             if doc.catalog().is_ok() {
                 return Ok(doc);
             }
@@ -76,7 +96,8 @@ impl Document {
             warnings.push("cross-reference data is unreadable; repairing".into());
         }
         let table = xref::repair(&data)?;
-        let doc = Self::build(data, version, header_offset, table, true, warnings);
+        let doc =
+            Self::build(data, version, header_offset, table, true, warnings).unlock(password)?;
         doc.catalog()?;
         Ok(doc)
     }
@@ -101,7 +122,64 @@ impl Document {
             scanned: OnceLock::new(),
             pages: OnceLock::new(),
             warnings: Mutex::new(warnings),
+            security: None,
+            memo: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Checks the password of an encrypted file and keeps the key.
+    fn unlock(mut self, password: &[u8]) -> Result<Self> {
+        let Some(entry) = self.trailer.get(b"Encrypt").cloned() else {
+            return Ok(self);
+        };
+        if self.resolve(&entry).is_ok_and(|e| e.is_null()) {
+            self.warn("/Encrypt points to nothing; reading the file as unencrypted".into());
+            return Ok(self);
+        }
+        let security = Security::open(&self, password)?;
+        // Anything read while checking was read without decryption.
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.clear();
+        }
+        self.security = Some(security);
+        Ok(self)
+    }
+
+    /// A value derived from this document, computed by `make` the first
+    /// time (`kind`, `key`) is asked for and shared after that. Lets other
+    /// crates cache things like parsed colour profiles for exactly as long
+    /// as the document lives.
+    pub fn memo<T: Any + Send + Sync>(
+        &self,
+        kind: &'static str,
+        key: u64,
+        make: impl FnOnce() -> T,
+    ) -> Arc<T> {
+        let found = self
+            .memo
+            .lock()
+            .ok()
+            .and_then(|m| m.get(&(kind, key)).cloned())
+            .and_then(|v| v.downcast::<T>().ok());
+        if let Some(v) = found {
+            return v;
+        }
+        let v = Arc::new(make());
+        if let Ok(mut m) = self.memo.lock() {
+            m.insert((kind, key), v.clone());
+        }
+        v
+    }
+
+    /// For an encrypted file, which password opened it.
+    pub fn access(&self) -> Option<Access> {
+        self.security.as_ref().map(|s| s.access)
+    }
+
+    /// For an encrypted file, its /P permission flags (ISO 32000-2, table
+    /// 22). Opening with the owner password grants everything regardless.
+    pub fn permissions(&self) -> Option<i32> {
+        self.security.as_ref().map(|s| s.permissions)
     }
 
     /// The version from the `%PDF-x.y` header, or the catalog's /Version if newer.
@@ -129,8 +207,9 @@ impl Document {
         self.repaired
     }
 
+    /// Whether the file is encrypted (and was opened with a password).
     pub fn is_encrypted(&self) -> bool {
-        self.trailer.contains_key(b"Encrypt")
+        self.security.is_some()
     }
 
     /// Problems found and worked around while reading.
@@ -193,7 +272,7 @@ impl Document {
             let (found, obj) = Parser::at(&self.data, offset)
                 .parse_indirect(&length)
                 .ok()?;
-            (found.num == r.num).then_some(obj)
+            (found.num == r.num).then(|| self.decrypt(found, obj))
         };
         if let Some(obj) = parse(offset) {
             return Ok(obj);
@@ -215,6 +294,27 @@ impl Document {
             }
         }
         Err(Error::MissingObject(r))
+    }
+
+    /// Decrypts the strings and stream data of an object read from the file.
+    /// Objects inside object streams are not encrypted on their own.
+    fn decrypt(&self, r: ObjRef, mut obj: Object) -> Object {
+        let Some(security) = &self.security else {
+            return obj;
+        };
+        if security.dict_ref == Some(r) {
+            return obj;
+        }
+        security.decrypt_strings(r, &mut obj);
+        if let Object::Stream(stream) = &mut obj {
+            let skip = stream.dict.is_type(b"XRef")
+                || (stream.dict.is_type(b"Metadata") && !security.encrypt_metadata)
+                || has_identity_crypt_filter(&stream.dict);
+            if !skip {
+                stream.data = security.decrypt_stream(r, &stream.data).into();
+            }
+        }
+        obj
     }
 
     fn load_compressed(&self, r: ObjRef, stream: u32, index: u32, depth: usize) -> Result<Object> {
@@ -354,9 +454,6 @@ impl Document {
     }
 
     fn decode_depth(&self, stream: &Stream, depth: usize) -> Result<DecodedStream> {
-        if self.is_encrypted() && !stream.dict.is_type(b"XRef") {
-            return Err(Error::Encrypted);
-        }
         let resolve = |o: &Object| match o {
             Object::Reference(r) => self.get_depth(*r, depth + 1).unwrap_or(Object::Null),
             other => other.clone(),
@@ -370,6 +467,28 @@ impl Document {
         }
         result
     }
+}
+
+/// Whether a stream opts out of encryption with the Identity crypt filter.
+fn has_identity_crypt_filter(dict: &Dict) -> bool {
+    let as_list = |o: Option<&Object>| -> Vec<Object> {
+        match o {
+            Some(Object::Array(a)) => a.clone(),
+            Some(other) => vec![other.clone()],
+            None => Vec::new(),
+        }
+    };
+    let filters = as_list(dict.get(b"Filter"));
+    let params = as_list(dict.get(b"DecodeParms"));
+    filters.iter().enumerate().any(|(i, f)| {
+        f.as_name().is_some_and(|n| *n == b"Crypt")
+            && params
+                .get(i)
+                .and_then(Object::as_dict)
+                .and_then(|p| p.get(b"Name"))
+                .and_then(Object::as_name)
+                .is_none_or(|n| *n == b"Identity")
+    })
 }
 
 impl std::fmt::Debug for Document {

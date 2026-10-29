@@ -252,3 +252,46 @@ fn hostile_text_does_not_hang_or_panic() {
     let _ = render(&doc2);
     let _ = text(&doc);
 }
+
+#[test]
+fn predefined_cjk_cmaps_give_cids_and_text() {
+    // Shift-JIS through 90ms-RKSJ-H, with no ToUnicode: the text comes from
+    // the Adobe-Japan1 collection. The font is embedded with Identity
+    // CIDToGIDMap so no system font is involved; CID widths prove the CIDs.
+    let extra = vec![
+        b"<< /Type /Font /Subtype /Type0 /BaseFont /Lib /Encoding /90ms-RKSJ-H /DescendantFonts [6 0 R] >>".to_vec(),
+        b"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Lib /CIDSystemInfo << /Registry (Adobe) /Ordering (Japan1) /Supplement 6 >> /FontDescriptor 7 0 R /DW 1000 /W [843 [500]] >>".to_vec(),
+        b"<< /Type /FontDescriptor /FontName /Lib /Flags 4 /FontFile2 8 0 R >>".to_vec(),
+        stream("", LIBERATION),
+    ];
+    // あ (82A0, CID 843), 日本 (93FA 967B), then an ASCII A.
+    let doc = open(b"BT /F1 10 Tf 0 0 Td <82A093FA967B41> Tj ET", &extra);
+    let t = text(&doc);
+    assert_eq!(t.plain_text(), "あ日本A");
+    let x: Vec<f64> = t.glyphs.iter().map(|g| g.baseline.0.x).collect();
+    assert_eq!(x, vec![0.0, 5.0, 15.0, 25.0]);
+}
+
+#[test]
+fn cached_glyphs_match_and_respect_the_clip() {
+    // The same glyph at the same pixel offset is stamped identically.
+    let doc = open(
+        b"BT /F1 30 Tf 10.3 40 Td (W) Tj 100 0 Td (W) Tj ET",
+        &truetype_font(),
+    );
+    let (p, _) = render(&doc);
+    assert!(ink(&p, 5, 30, 40, 80) > 50);
+    for y in 30..80 {
+        for x in 5..40 {
+            assert_eq!(p.pixel(x, y), p.pixel(x + 100, y), "({x}, {y})");
+        }
+    }
+    // A clip cuts a stamped glyph like any fill: the right part is gone.
+    let doc = open(
+        b"0 0 30 100 re W n BT /F1 40 Tf 10 30 Td (A) Tj ET",
+        &truetype_font(),
+    );
+    let (p, _) = render(&doc);
+    assert!(ink(&p, 10, 40, 30, 70) > 50);
+    assert_eq!(ink(&p, 30, 0, 200, 100), 0);
+}

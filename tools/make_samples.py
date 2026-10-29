@@ -477,6 +477,122 @@ SAMPLES["spot"] = single_page(
 )
 
 
+SAMPLES["transparency"] = single_page(
+    b"""
+1 0.8 0 rg 20 20 360 360 re f
+q /Mul gs 0 0.6 1 rg 40 220 150 150 re f Q
+q /Scr gs 0.8 0 0.4 rg 210 220 150 150 re f Q
+q /Lum gs 0.1 0.3 0.8 rg 40 40 150 150 re f Q
+q /Half gs /G Do Q
+""",
+    resources=b"<< /ExtGState << /Mul << /BM /Multiply >> /Scr << /BM /Screen >>"
+    b" /Half << /ca 0.5 /BM /HardLight >>"
+    b" /Lum << /SMask << /S /Luminosity /G 6 0 R >> >> >>"
+    b" /XObject << /G 5 0 R >> >>",
+    extra_objects=[
+        # 5: a group of two overlapping discs, composited as one at 50%.
+        stream(
+            b"/Type /XObject /Subtype /Form /BBox [200 30 380 200] /Group << /S /Transparency >>",
+            b"0 0.5 0 rg 270 115 m 270 160 250 190 220 190 c 220 40 l 250 40 270 70 270 115 c f"
+            b" 0 0 0.6 rg 220 60 140 120 re f",
+        ),
+        # 6: a soft mask fading from left to right, with a hole.
+        stream(
+            b"/Type /XObject /Subtype /Form /BBox [0 0 400 400]"
+            b" /Group << /S /Transparency /CS /DeviceGray >>"
+            b" /Resources << /Shading << /S << /ShadingType 2 /ColorSpace /DeviceGray"
+            b" /Coords [40 0 190 0] /Function << /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >> >> >> >>",
+            b"q 40 40 150 150 re W n /S sh Q 0 g 90 90 50 50 re f",
+        ),
+    ],
+)
+
+
+def icc_fixture(name):
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "crates", "atelier-color", "tests", "data", name + ".icc"), "rb") as f:
+        return f.read()
+
+
+def cmyk_image(w, h):
+    rows = bytearray()
+    for y in range(h):
+        for x in range(w):
+            rows += bytes([x * 255 // (w - 1), y * 255 // (h - 1), (x + y) * 255 // (w + h - 2), 40])
+    return bytes(rows)
+
+
+# ICC-based, calibrated and Lab colour, as swatches and images. Objects 5
+# and 6 are the profiles (RGB matrix/TRC and a CMYK lut16).
+_swatches = b"".join(
+    b"/%s cs %s sc %d %d 70 70 re f\n" % (cs, vals, 15 + 95 * (i % 4), 315 - 95 * (i // 4))
+    for i, (cs, vals) in enumerate([
+        (b"RGB1", b"1 0 0"), (b"RGB1", b"0.2 0.7 0.3"), (b"RGB1", b"0.5 0.5 0.5"), (b"CMYK1", b"1 0 0 0"),
+        (b"CMYK1", b"0 0.8 0.6 0.1"), (b"CMYK1", b"0.3 0.3 0.3 0.5"), (b"Cal1", b"0.9 0.2 0.1"), (b"Cal1", b"0.4 0.4 0.4"),
+        (b"Gray1", b"0.5"), (b"Lab1", b"60 50 -30"), (b"Lab1", b"85 -20 60"), (b"RGB1", b"0 0 1"),
+    ])
+)
+SAMPLES["icc"] = single_page(
+    _swatches + b"q 380 0 0 100 10 10 cm /Im1 Do Q",
+    resources=b"<< /ColorSpace << /RGB1 [/ICCBased 5 0 R] /CMYK1 [/ICCBased 6 0 R] "
+    b"/Cal1 [/CalRGB << /WhitePoint [0.9505 1 1.089] /Gamma [1.8 1.8 1.8] "
+    b"/Matrix [0.4497 0.2446 0.0252 0.3163 0.6720 0.1412 0.1845 0.0833 0.9227] >>] "
+    b"/Gray1 [/CalGray << /WhitePoint [0.9505 1 1.089] /Gamma 2.2 >>] "
+    b"/Lab1 [/Lab << /WhitePoint [0.9642 1 0.8249] /Range [-100 100 -100 100] >>] >> "
+    b"/XObject << /Im1 7 0 R >> >>",
+    extra_objects=[
+        stream(b"/N 3 /Alternate /DeviceRGB", icc_fixture("rgb-matrix")),
+        stream(b"/N 4 /Alternate /DeviceCMYK", icc_fixture("cmyk-lut16")),
+        stream(b"/Type /XObject /Subtype /Image /Width 64 /Height 32 /ColorSpace [/ICCBased 6 0 R] "
+               b"/BitsPerComponent 8", cmyk_image(64, 32)),
+    ],
+)
+
+# DeviceCMYK shown through the document's output intent profile.
+SAMPLES["output-intent"] = pdf([
+    b"<< /Type /Catalog /Pages 2 0 R /OutputIntents [<< /Type /OutputIntent /S /GTS_PDFX "
+    b"/OutputConditionIdentifier (test) /DestOutputProfile 5 0 R >>] >>",
+    b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 200] /Resources << >> /Contents 4 0 R >>",
+    stream(b"", b"1 0 0 0 k 10 110 80 80 re f 0 1 0 0 k 110 110 80 80 re f "
+           b"0 0 1 0 k 210 110 80 80 re f 0 0 0 1 k 310 110 80 80 re f "
+           b"0.5 0.2 0.1 0 k 10 10 80 80 re f 0 0 0 0.5 k 110 10 80 80 re f "
+           b"1 0 0 rg 210 10 80 80 re f"),
+    stream(b"/N 4", icc_fixture("cmyk-atob")),
+])
+
+
+def cid_font(base, cmap, ordering, vertical=False):
+    """A Type 0 font that is not embedded, in an Adobe character collection."""
+    return (b"<< /Type /Font /Subtype /Type0 /BaseFont /" + base + b" /Encoding /" + cmap
+            + b" /DescendantFonts [<< /Type /Font /Subtype /CIDFontType0 /BaseFont /" + base
+            + b" /CIDSystemInfo << /Registry (Adobe) /Ordering (" + ordering + b") /Supplement 2 >>"
+            + b" /FontDescriptor << /Type /FontDescriptor /FontName /" + base
+            + b" /Flags 4 /FontBBox [0 -120 1000 880] /ItalicAngle 0 /Ascent 880 /Descent -120"
+            + b" /CapHeight 700 /StemV 80 >> /DW 1000 >>] >>")
+
+
+def hexstr(b):
+    return b"<" + b.hex().encode() + b">"
+
+
+# Japanese in Shift-JIS, Chinese in UCS-2 and vertical Japanese, none
+# embedded: the viewer maps CIDs to Unicode and draws with system fonts.
+SAMPLES["cjk"] = single_page(
+    b"BT /F1 28 Tf 20 340 Td " + hexstr("日本語のテキスト".encode("cp932")) + b" Tj ET\n"
+    + b"BT /F2 28 Tf 20 280 Td " + hexstr("中文简体字示例".encode("utf-16-be")) + b" Tj ET\n"
+    + b"BT /F3 28 Tf 20 220 Td " + hexstr("한국어 텍스트".encode("utf-16-be")) + b" Tj ET\n"
+    + b"BT /F4 28 Tf 340 380 Td " + hexstr("縦書きの文".encode("utf-16-be")) + b" Tj ET\n",
+    resources=b"<< /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R /F4 8 0 R >> >>",
+    extra_objects=[
+        cid_font(b"MS-Gothic", b"90ms-RKSJ-H", b"Japan1"),
+        cid_font(b"SimSun", b"UniGB-UCS2-H", b"GB1"),
+        cid_font(b"Batang", b"UniKS-UCS2-H", b"Korea1"),
+        cid_font(b"MS-Mincho", b"UniJIS-UCS2-V", b"Japan1", vertical=True),
+    ],
+)
+
+
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else "samples"
     os.makedirs(out_dir, exist_ok=True)

@@ -8,7 +8,7 @@ use std::time::Instant;
 use atelier_render::{RenderOptions, extract_text, render_page};
 use std::process::ExitCode;
 
-use atelier_syntax::{Document, ObjRef, Object, XrefEntry};
+use atelier_syntax::{Access, Document, Error, ObjRef, Object, XrefEntry};
 
 const USAGE: &str = "\
 Usage:
@@ -23,7 +23,9 @@ Usage:
                                            `all`, -o is a prefix: out-1.png, out-2.png...)
   atelier text <file.pdf> [page|all] [--glyphs]
                                            print the text of pages (default all); with
-                                           --glyphs, one line per glyph with its box";
+                                           --glyphs, one line per glyph with its box
+
+Every command takes --password <pw> for encrypted files.";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -37,11 +39,24 @@ fn main() -> ExitCode {
 }
 
 fn run(args: &[String]) -> Result<(), String> {
+    let mut args = args.to_vec();
+    let mut password = String::new();
+    if let Some(i) = args.iter().position(|a| a == "--password") {
+        password = args.get(i + 1).ok_or("--password needs a value")?.clone();
+        args.drain(i..i + 2);
+    }
+    let args = &args[..];
     let (Some(command), Some(path)) = (args.first(), args.get(1)) else {
         return Err(format!("missing arguments\n\n{USAGE}"));
     };
     let bytes = std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?;
-    let doc = Document::open(bytes).map_err(|e| e.to_string())?;
+    let doc = match Document::open_with_password(bytes, password.as_bytes()) {
+        Err(Error::Password) if password.is_empty() => {
+            return Err("this PDF is protected by a password; pass --password".into());
+        }
+        Err(Error::Password) => return Err("wrong password".into()),
+        other => other.map_err(|e| e.to_string())?,
+    };
     let mut out = std::io::stdout().lock();
 
     let result = match command.as_str() {
@@ -89,12 +104,12 @@ fn info(doc: &Document, out: &mut Out) -> Result<(), String> {
         if doc.was_repaired() { "yes" } else { "no" }
     )
     .map_err(io)?;
-    writeln!(
-        out,
-        "Encrypted:    {}",
-        if doc.is_encrypted() { "yes" } else { "no" }
-    )
-    .map_err(io)?;
+    let encrypted = match doc.access() {
+        None => "no",
+        Some(Access::User) => "yes (opened with the user password)",
+        Some(Access::Owner) => "yes (opened with the owner password)",
+    };
+    writeln!(out, "Encrypted:    {encrypted}").map_err(io)?;
     match doc.pages() {
         Ok(p) => writeln!(out, "Pages:        {}", p.len()).map_err(io)?,
         Err(e) => writeln!(out, "Pages:        unreadable ({e})").map_err(io)?,

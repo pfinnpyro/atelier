@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use atelier_color::{CalGray, CalRgb, Intent, Profile, ProfileSpace};
 use atelier_raster::Color;
 use atelier_syntax::{Dict, Document, Object};
 
@@ -17,6 +18,11 @@ pub enum ColorSpace {
     Lab {
         white: [f32; 3],
     },
+    CalGray(CalGray),
+    CalRgb(Arc<CalRgb>),
+    /// An ICC profile (ICCBased, an output intent, or a JPEG 2000 image's
+    /// own), with values in 0..=1.
+    Icc(Arc<Profile>),
     Indexed {
         base: Box<ColorSpace>,
         hival: u8,
@@ -40,8 +46,9 @@ pub enum ColorSpace {
 impl ColorSpace {
     pub fn components(&self) -> usize {
         match self {
-            Self::Gray | Self::Indexed { .. } => 1,
-            Self::Rgb | Self::Lab { .. } => 3,
+            Self::Gray | Self::Indexed { .. } | Self::CalGray(_) => 1,
+            Self::Rgb | Self::Lab { .. } | Self::CalRgb(_) => 3,
+            Self::Icc(p) => p.components(),
             Self::Cmyk => 4,
             Self::Pattern { .. } => 1,
             Self::Spot { components, .. } => *components,
@@ -73,12 +80,21 @@ impl ColorSpace {
             Self::Gray => Color::rgb(at(0), at(0), at(0)),
             Self::Rgb => Color::rgb(at(0), at(1), at(2)),
             Self::Cmyk => cmyk_to_rgb(at(0), at(1), at(2), at(3)),
-            Self::Lab { white } => lab_to_rgb(
+            Self::Lab { white } => srgb(atelier_color::lab_to_srgb(
                 c.first().copied().unwrap_or(0.0),
                 c.get(1).copied().unwrap_or(0.0),
                 c.get(2).copied().unwrap_or(0.0),
                 *white,
-            ),
+            )),
+            Self::CalGray(cal) => srgb(cal.to_srgb(at(0))),
+            Self::CalRgb(cal) => srgb(cal.to_srgb([at(0), at(1), at(2)])),
+            Self::Icc(p) => {
+                let mut v = [0f32; 16];
+                for (i, slot) in v.iter_mut().enumerate().take(p.components().min(16)) {
+                    *slot = at(i);
+                }
+                srgb(p.to_srgb(&v[..p.components().min(16)]))
+            }
             Self::Indexed {
                 base,
                 hival,
@@ -115,79 +131,195 @@ impl ColorSpace {
     }
 }
 
-/// A simple, profile-free CMYK conversion.
+/// Unmanaged DeviceCMYK, shown the way a press prints it.
 pub fn cmyk_to_rgb(c: f32, m: f32, y: f32, k: f32) -> Color {
-    Color::rgb(
-        (1.0 - c) * (1.0 - k),
-        (1.0 - m) * (1.0 - k),
-        (1.0 - y) * (1.0 - k),
-    )
+    srgb(atelier_color::cmyk_to_srgb(c, m, y, k))
 }
 
-fn lab_to_rgb(l: f32, a: f32, b: f32, white: [f32; 3]) -> Color {
-    let fy = (l + 16.0) / 116.0;
-    let fx = fy + a / 500.0;
-    let fz = fy - b / 200.0;
-    let g = |t: f32| {
-        if t > 6.0 / 29.0 {
-            t * t * t
-        } else {
-            3.0 * (6.0f32 / 29.0).powi(2) * (t - 4.0 / 29.0)
-        }
+fn srgb(c: [f32; 3]) -> Color {
+    Color::rgb(c[0], c[1], c[2])
+}
+
+/// The ICC profile in an ICCBased stream, parsed once per document.
+fn icc_profile(doc: &Document, obj: &Object) -> Option<Arc<Profile>> {
+    let parse = || -> Option<Arc<Profile>> {
+        let Object::Stream(stream) = doc.resolve(obj).ok()? else {
+            return None;
+        };
+        let data = doc.decode_stream(&stream).ok()?.data;
+        Profile::parse(&data, Intent::RelativeColorimetric).map(Arc::new)
     };
-    let (x, y, z) = (white[0] * g(fx), white[1] * g(fy), white[2] * g(fz));
-    // XYZ (D65) to linear sRGB, then gamma.
-    let r = 3.2406 * x - 1.5372 * y - 0.4986 * z;
-    let gg = -0.9689 * x + 1.8758 * y + 0.0415 * z;
-    let bb = 0.0557 * x - 0.2040 * y + 1.0570 * z;
-    let gamma = |v: f32| {
-        let v = v.clamp(0.0, 1.0);
-        if v <= 0.003_130_8 {
-            12.92 * v
-        } else {
-            1.055 * v.powf(1.0 / 2.4) - 0.055
+    match obj {
+        Object::Reference(r) => {
+            let key = u64::from(r.num) << 16 | u64::from(r.generation);
+            (*doc.memo("icc-profile", key, parse)).clone()
         }
+        _ => parse(),
+    }
+}
+
+/// The CMYK profile of the document's output intent (PDF/X and the like),
+/// which DeviceCMYK colours are shown through.
+fn output_intent_cmyk(doc: &Document) -> Option<Arc<Profile>> {
+    let find = || -> Option<Arc<Profile>> {
+        let catalog = doc.catalog().ok()?;
+        let intents = doc.get_key(&catalog, b"OutputIntents").ok()?;
+        intents.as_array()?.iter().find_map(|i| {
+            let intent = doc.resolve(i).ok()?;
+            let profile = icc_profile(doc, intent.as_dict()?.get(b"DestOutputProfile")?)?;
+            (profile.space == ProfileSpace::Cmyk).then_some(profile)
+        })
     };
-    Color::rgb(gamma(r), gamma(gg), gamma(bb))
+    (*doc.memo("output-intent-cmyk", 0, find)).clone()
+}
+
+/// The space a device colour space name stands for: the resources'
+/// DefaultGray, DefaultRGB or DefaultCMYK when given (8.6.5.6), and for
+/// CMYK otherwise the output intent's profile.
+pub fn device(doc: &Document, resources: &Dict, components: usize) -> ColorSpace {
+    let (name, plain): (&[u8], ColorSpace) = match components {
+        1 => (b"DefaultGray", ColorSpace::Gray),
+        4 => (b"DefaultCMYK", ColorSpace::Cmyk),
+        _ => (b"DefaultRGB", ColorSpace::Rgb),
+    };
+    let named = doc
+        .get_key(resources, b"ColorSpace")
+        .ok()
+        .and_then(|d| d.as_dict().and_then(|d| d.get(name)).cloned());
+    if let Some(entry) = named {
+        if let Some(cs) = parse_depth(doc, &entry, resources, 1, false) {
+            if cs.components() == components && !matches!(cs, ColorSpace::Pattern { .. }) {
+                return cs;
+            }
+        }
+    }
+    if components == 4 {
+        if let Some(p) = output_intent_cmyk(doc) {
+            return ColorSpace::Icc(p);
+        }
+    }
+    plain
+}
+
+impl ColorSpace {
+    /// Whether converting a colour costs enough that images should sample
+    /// the conversion on a grid.
+    pub fn is_costly(&self) -> bool {
+        match self {
+            Self::Icc(_) | Self::CalRgb(_) | Self::Lab { .. } | Self::Cmyk => true,
+            Self::Spot { tint: Some(_), .. } => true,
+            Self::Indexed { .. } => false,
+            _ => false,
+        }
+    }
+}
+
+fn white_point(d: &Dict) -> [f32; 3] {
+    let arr = |key: &[u8], n: usize| -> Option<Vec<f32>> {
+        let a = d.get(key)?.as_array()?;
+        (a.len() >= n).then(|| a.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect())
+    };
+    arr(b"WhitePoint", 3)
+        .filter(|w| w[1] > 0.0)
+        .map_or(atelier_color::D65, |w| [w[0], w[1], w[2]])
 }
 
 /// Parses a colour space object, looking names up in `resources`.
 pub fn parse(doc: &Document, obj: &Object, resources: &Dict) -> Option<ColorSpace> {
-    parse_depth(doc, obj, resources, 0)
+    parse_depth(doc, obj, resources, 0, true)
 }
 
-fn parse_depth(doc: &Document, obj: &Object, resources: &Dict, depth: usize) -> Option<ColorSpace> {
+/// `defaults` is false while resolving a Default space itself, which must
+/// not refer back to the device space it replaces.
+fn parse_depth(
+    doc: &Document,
+    obj: &Object,
+    resources: &Dict,
+    depth: usize,
+    defaults: bool,
+) -> Option<ColorSpace> {
     if depth > 8 {
         return None;
     }
     let obj = doc.resolve(obj).ok()?;
+    let device = |n: usize, plain: ColorSpace| {
+        if defaults {
+            device(doc, resources, n)
+        } else {
+            plain
+        }
+    };
     match &obj {
         Object::Name(n) => match n.as_bytes() {
-            b"DeviceGray" | b"G" | b"CalGray" => Some(ColorSpace::Gray),
-            b"DeviceRGB" | b"RGB" | b"CalRGB" => Some(ColorSpace::Rgb),
-            b"DeviceCMYK" | b"CMYK" | b"CalCMYK" => Some(ColorSpace::Cmyk),
+            b"DeviceGray" | b"G" | b"CalGray" => Some(device(1, ColorSpace::Gray)),
+            b"DeviceRGB" | b"RGB" | b"CalRGB" => Some(device(3, ColorSpace::Rgb)),
+            b"DeviceCMYK" | b"CMYK" | b"CalCMYK" => Some(device(4, ColorSpace::Cmyk)),
             b"Pattern" => Some(ColorSpace::Pattern { base: None }),
             _ => {
                 let named = doc.get_key(resources, b"ColorSpace").ok()?;
                 let entry = named.as_dict()?.get(n.as_bytes())?.clone();
-                parse_depth(doc, &entry, resources, depth + 1)
+                parse_depth(doc, &entry, resources, depth + 1, defaults)
             }
         },
         Object::Array(items) => {
             let family = doc.resolve(items.first()?).ok()?;
             match family.as_name()?.as_bytes() {
-                b"DeviceGray" | b"CalGray" | b"G" => Some(ColorSpace::Gray),
-                b"DeviceRGB" | b"CalRGB" | b"RGB" => Some(ColorSpace::Rgb),
-                b"DeviceCMYK" | b"CMYK" => Some(ColorSpace::Cmyk),
+                b"DeviceGray" | b"G" => Some(device(1, ColorSpace::Gray)),
+                b"DeviceRGB" | b"RGB" => Some(device(3, ColorSpace::Rgb)),
+                b"DeviceCMYK" | b"CMYK" => Some(device(4, ColorSpace::Cmyk)),
+                b"CalGray" => {
+                    let params = doc.resolve(items.get(1)?).ok()?;
+                    let d = params.as_dict()?;
+                    let gamma = d.get(b"Gamma").and_then(Object::as_f64).unwrap_or(1.0) as f32;
+                    Some(ColorSpace::CalGray(CalGray {
+                        white: white_point(d),
+                        gamma: if gamma > 0.0 { gamma } else { 1.0 },
+                    }))
+                }
+                b"CalRGB" => {
+                    let params = doc.resolve(items.get(1)?).ok()?;
+                    let d = params.as_dict()?;
+                    let floats = |key: &[u8], n: usize| -> Option<Vec<f32>> {
+                        let a = d.get(key)?.as_array()?;
+                        (a.len() >= n)
+                            .then(|| a.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect())
+                    };
+                    let gamma = floats(b"Gamma", 3).unwrap_or(vec![1.0; 3]);
+                    let matrix = floats(b"Matrix", 9)
+                        .unwrap_or(vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
+                    Some(ColorSpace::CalRgb(Arc::new(CalRgb {
+                        white: white_point(d),
+                        gamma: [gamma[0], gamma[1], gamma[2]]
+                            .map(|g| if g > 0.0 { g } else { 1.0 }),
+                        matrix: std::array::from_fn(|i| matrix[i]),
+                    })))
+                }
                 b"ICCBased" => {
-                    let stream = doc.resolve(items.get(1)?).ok()?;
+                    let stream_obj = items.get(1)?;
+                    let stream = doc.resolve(stream_obj).ok()?;
                     let dict = stream.as_dict()?;
+                    let n = doc
+                        .get_key(dict, b"N")
+                        .ok()
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0);
+                    if let Some(profile) = icc_profile(doc, stream_obj) {
+                        if profile.components() as i64 == n || n == 0 {
+                            return Some(if profile.space == ProfileSpace::Lab {
+                                ColorSpace::Lab {
+                                    white: atelier_color::D50,
+                                }
+                            } else {
+                                ColorSpace::Icc(profile)
+                            });
+                        }
+                    }
                     if let Some(alt) = dict.get(b"Alternate") {
-                        if let Some(cs) = parse_depth(doc, alt, resources, depth + 1) {
+                        if let Some(cs) = parse_depth(doc, alt, resources, depth + 1, defaults) {
                             return Some(cs);
                         }
                     }
-                    match doc.get_key(dict, b"N").ok()?.as_i64()? {
+                    match n {
                         1 => Some(ColorSpace::Gray),
                         4 => Some(ColorSpace::Cmyk),
                         _ => Some(ColorSpace::Rgb),
@@ -208,7 +340,7 @@ fn parse_depth(doc: &Document, obj: &Object, resources: &Dict, depth: usize) -> 
                     Some(ColorSpace::Lab { white })
                 }
                 b"Indexed" | b"I" => {
-                    let base = parse_depth(doc, items.get(1)?, resources, depth + 1)?;
+                    let base = parse_depth(doc, items.get(1)?, resources, depth + 1, defaults)?;
                     let hival = doc.resolve(items.get(2)?).ok()?.as_i64()?.clamp(0, 255) as u8;
                     let lookup = match doc.resolve(items.get(3)?).ok()? {
                         Object::String(s) => s.bytes,
@@ -224,7 +356,7 @@ fn parse_depth(doc: &Document, obj: &Object, resources: &Dict, depth: usize) -> 
                 b"Pattern" => Some(ColorSpace::Pattern {
                     base: items
                         .get(1)
-                        .and_then(|b| parse_depth(doc, b, resources, depth + 1))
+                        .and_then(|b| parse_depth(doc, b, resources, depth + 1, defaults))
                         .map(Box::new),
                 }),
                 b"Separation" | b"DeviceN" => {
@@ -244,7 +376,7 @@ fn parse_depth(doc: &Document, obj: &Object, resources: &Dict, depth: usize) -> 
                     };
                     let alt = items
                         .get(2)
-                        .and_then(|a| parse_depth(doc, a, resources, depth + 1))
+                        .and_then(|a| parse_depth(doc, a, resources, depth + 1, defaults))
                         .unwrap_or(ColorSpace::Gray);
                     let tint = items
                         .get(3)
@@ -273,7 +405,7 @@ mod tests {
     fn cmyk_black_and_white() {
         assert_eq!(
             ColorSpace::Cmyk.to_rgb(&[0.0, 0.0, 0.0, 1.0]),
-            Some(Color::BLACK)
+            Some(Color::rgb(35.0 / 255.0, 31.0 / 255.0, 32.0 / 255.0))
         );
         assert_eq!(
             ColorSpace::Cmyk.to_rgb(&[0.0, 0.0, 0.0, 0.0]),
@@ -306,7 +438,7 @@ mod tests {
         .unwrap();
         let cs = parse(&doc, &obj, &Dict::new()).unwrap();
         assert_eq!(cs.to_rgb(&[0.0]), Some(Color::WHITE));
-        assert_eq!(cs.to_rgb(&[1.0]), Some(Color::rgb(1.0, 0.5, 0.0)));
+        assert_eq!(cs.to_rgb(&[1.0]), Some(cmyk_to_rgb(0.0, 0.5, 1.0, 0.0)));
         // DeviceN with a PostScript tint transform is covered by the
         // function tests; /None paints nothing.
         let none = atelier_syntax::Parser::new(b"[/Separation /None /DeviceGray {}]")

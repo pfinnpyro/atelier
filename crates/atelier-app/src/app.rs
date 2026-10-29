@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use atelier_raster::Point;
 use atelier_render::PageText;
-use atelier_syntax::Document;
+use atelier_syntax::{Document, Error};
 use atelier_view::{
     Caret, Layout, PREVIEW_SCALE, PageGeom, SearchMatch, Selection, TileCache, TileKey, ViewRect,
     hit_test, scale_key, tiles_at_scale, tiles_for_view,
@@ -80,6 +80,18 @@ pub struct Viewer {
     selection: Option<Selection>,
     selecting: bool,
     show_warnings: bool,
+    /// A file waiting for its password.
+    locked: Option<Locked>,
+}
+
+/// An encrypted file the password prompt is open for.
+struct Locked {
+    data: Vec<u8>,
+    name: String,
+    password: String,
+    /// The last password tried was wrong.
+    wrong: bool,
+    focus: bool,
 }
 
 impl Viewer {
@@ -105,6 +117,7 @@ impl Viewer {
             selection: None,
             selecting: false,
             show_warnings: false,
+            locked: None,
         };
         if let Some(p) = path {
             v.open_path(&p);
@@ -120,8 +133,23 @@ impl Viewer {
     }
 
     fn open_bytes(&mut self, data: Vec<u8>, name: String) {
-        let doc = match Document::open(data) {
+        self.open_with_password(data, name, "");
+    }
+
+    fn open_with_password(&mut self, data: Vec<u8>, name: String, password: &str) {
+        // The bytes are kept only while a password is needed.
+        let doc = match Document::open_with_password(&data[..], password.as_bytes()) {
             Ok(d) => d,
+            Err(Error::Password) => {
+                self.locked = Some(Locked {
+                    data,
+                    name,
+                    password: String::new(),
+                    wrong: !password.is_empty(),
+                    focus: true,
+                });
+                return;
+            }
             Err(e) => {
                 self.error = Some(format!("Could not open {name}: {e}"));
                 return;
@@ -134,6 +162,7 @@ impl Viewer {
                 return;
             }
         };
+        self.locked = None;
         self.pool.stop_search();
         self.pool.set_jobs(Vec::new());
         self.generation += 1;
@@ -623,6 +652,63 @@ impl Viewer {
         });
     }
 
+    /// Asks for the password of an encrypted file.
+    fn password_window(&mut self, ctx: &egui::Context) {
+        let Some(locked) = &mut self.locked else {
+            return;
+        };
+        let mut submit = false;
+        let mut cancel = false;
+        egui::Window::new("Password required")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.label(format!(
+                    "{} is protected. Enter its password to open it.",
+                    locked.name
+                ));
+                ui.add_space(4.0);
+                let field = ui.add(
+                    egui::TextEdit::singleline(&mut locked.password)
+                        .password(true)
+                        .hint_text("Password")
+                        .desired_width(260.0),
+                );
+                if locked.focus {
+                    field.request_focus();
+                    locked.focus = false;
+                }
+                if field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    submit = true;
+                }
+                if locked.wrong {
+                    ui.colored_label(
+                        Color32::from_rgb(220, 90, 70),
+                        "That password is not right.",
+                    );
+                }
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Open").clicked() {
+                        submit = true;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        cancel = true;
+                    }
+                });
+            });
+        if cancel || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.locked = None;
+        } else if submit && let Some(locked) = self.locked.take() {
+            let password = locked.password;
+            self.open_with_password(locked.data, locked.name, &password);
+            if let Some(l) = &mut self.locked {
+                l.focus = true;
+            }
+        }
+    }
+
     fn warnings_window(&mut self, ctx: &egui::Context) {
         let Some(o) = &self.open else { return };
         let mut open = self.show_warnings;
@@ -978,6 +1064,7 @@ impl eframe::App for Viewer {
         if self.show_warnings {
             self.warnings_window(&ctx);
         }
+        self.password_window(&ctx);
     }
 }
 

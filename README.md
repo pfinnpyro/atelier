@@ -21,16 +21,23 @@ moving or resizing it never touches the document.
 
 Fonts a file does not embed are drawn with the system's metric-compatible
 fonts: Arial, Times New Roman and Courier New on Windows and macOS, and
-Liberation (or DejaVu) on Linux. Set `ATELIER_FONT_DIR` to add a folder to
-search.
+Liberation (or DejaVu) on Linux. Chinese, Japanese and Korean text uses the
+system's CJK fonts for its script (Yu Gothic, Microsoft YaHei, Malgun Gothic
+and the like on Windows; Noto CJK, IPA or WenQuanYi on Linux). Set
+`ATELIER_FONT_DIR` to add a folder to search.
+
+Adobe's predefined CJK CMaps are built in, compiled from Adobe's
+cmap-resources (BSD-3-Clause; see
+`crates/atelier-render/src/font/data/ADOBE-CMAPS-LICENSE.txt`).
 
 | Crate | What it does |
 | --- | --- |
-| `atelier-filters` | Our own Flate (inflate and a compressor), LZW, ASCII85, ASCIIHex and RunLength, PNG and TIFF predictors, and a JPEG decoder (baseline and progressive) |
+| `atelier-filters` | Our own Flate (inflate and a compressor), LZW, ASCII85, ASCIIHex and RunLength, PNG and TIFF predictors, and image decoders: JPEG (baseline and progressive), CCITT fax, JBIG2 and JPEG 2000 |
+| `atelier-color` | Colour management: ICC profiles (matrix/TRC and LUT based), CalGray, CalRGB and Lab, and press-like DeviceCMYK |
 | `atelier-syntax` | Lexer, object model, xref tables, xref streams, object streams, incremental updates, broken-file repair, page tree, content stream parsing |
 | `atelier-font` | Our font readers: TrueType and OpenType, CFF (including CID-keyed) and Type 1 outlines, character maps and metrics, plus the standard encodings, the Adobe Glyph List and the 14 standard fonts' widths |
 | `atelier-raster` | Our rasterizer: exact-area anti-aliased fills (non-zero and even-odd), strokes with joins, caps and dashes, clip masks, image drawing |
-| `atelier-render` | Content stream interpreter, graphics state, colour spaces, Form XObjects, images, PDF fonts (simple, CID, Type 3, CMaps, ToUnicode), text drawing and extraction |
+| `atelier-render` | Content stream interpreter, graphics state, colour spaces, Form XObjects, images, PDF fonts (simple, CID, Type 3, CMaps including Adobe's predefined CJK ones, ToUnicode), text drawing and extraction |
 | `atelier-view` | Viewer logic without a window: page layout, the tile grid and cache, text selection and search |
 | `atelier-app` | The viewer window (`atelier-viewer`), built on eframe (winit, wgpu and egui) |
 | `atelier-cli` | The `atelier` command for inspecting and rendering files |
