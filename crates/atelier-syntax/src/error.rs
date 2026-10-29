@@ -19,8 +19,8 @@ pub enum Error {
     Structure(String),
     /// A stream filter failed and produced no usable output.
     Filter(FilterError),
-    /// The file is encrypted; decryption arrives in a later phase.
-    Encrypted,
+    /// The file is encrypted and the password given does not open it.
+    Password,
     /// A feature this build does not handle yet.
     Unsupported(String),
     /// Object references nest deeper than we allow (usually a reference cycle).
@@ -46,7 +46,7 @@ impl fmt::Display for Error {
             Self::WrongType { expected, found } => write!(f, "expected {expected}, found {found}"),
             Self::Structure(m) => write!(f, "broken file structure: {m}"),
             Self::Filter(e) => write!(f, "{e}"),
-            Self::Encrypted => write!(f, "the file is encrypted, which is not supported yet"),
+            Self::Password => write!(f, "this PDF is protected by a password"),
             Self::Unsupported(m) => write!(f, "not supported yet: {m}"),
             Self::TooDeep => write!(f, "object references nest too deeply"),
         }

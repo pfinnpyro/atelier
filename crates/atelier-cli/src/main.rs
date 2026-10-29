@@ -8,7 +8,7 @@ use std::time::Instant;
 use atelier_render::{RenderOptions, extract_text, render_page};
 use std::process::ExitCode;
 
-use atelier_syntax::{Document, ObjRef, Object, XrefEntry};
+use atelier_syntax::{Access, Document, Error, ObjRef, Object, XrefEntry};
 
 const USAGE: &str = "\
 Usage:
@@ -23,7 +23,18 @@ Usage:
                                            `all`, -o is a prefix: out-1.png, out-2.png...)
   atelier text <file.pdf> [page|all] [--glyphs]
                                            print the text of pages (default all); with
-                                           --glyphs, one line per glyph with its box";
+                                           --glyphs, one line per glyph with its box
+  atelier fields <file.pdf>                list form fields, their values and widgets
+  atelier fill <file.pdf> -o <out.pdf> [name=value ...] [--refresh]
+                                           set field values and save as an incremental
+                                           update. Checkboxes take on, off or a state
+                                           name; multi-select lists take a|b|c.
+                                           --refresh redraws every field's appearance
+  atelier actions <file.pdf>               list scripts and other actions (never run)
+  atelier orient <file.pdf>                which way up each page reads, judged from
+                                           its text, or for scans from the image
+
+Every command takes --password <pw> for encrypted files.";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -37,11 +48,24 @@ fn main() -> ExitCode {
 }
 
 fn run(args: &[String]) -> Result<(), String> {
+    let mut args = args.to_vec();
+    let mut password = String::new();
+    if let Some(i) = args.iter().position(|a| a == "--password") {
+        password = args.get(i + 1).ok_or("--password needs a value")?.clone();
+        args.drain(i..i + 2);
+    }
+    let args = &args[..];
     let (Some(command), Some(path)) = (args.first(), args.get(1)) else {
         return Err(format!("missing arguments\n\n{USAGE}"));
     };
     let bytes = std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?;
-    let doc = Document::open(bytes).map_err(|e| e.to_string())?;
+    let doc = match Document::open_with_password(bytes, password.as_bytes()) {
+        Err(Error::Password) if password.is_empty() => {
+            return Err("this PDF is protected by a password; pass --password".into());
+        }
+        Err(Error::Password) => return Err("wrong password".into()),
+        other => other.map_err(|e| e.to_string())?,
+    };
     let mut out = std::io::stdout().lock();
 
     let result = match command.as_str() {
@@ -53,6 +77,10 @@ fn run(args: &[String]) -> Result<(), String> {
         "content" => content(&doc, &args[2..], &mut out),
         "render" => render(&doc, path, &args[2..], &mut out),
         "text" => text(&doc, &args[2..], &mut out),
+        "fields" => fields(&doc, &mut out),
+        "fill" => fill(&doc, &args[2..], &mut out),
+        "actions" => actions(&doc, &mut out),
+        "orient" => orient(&doc, &mut out),
         other => return Err(format!("unknown command `{other}`\n\n{USAGE}")),
     };
     for warning in doc.warnings() {
@@ -89,12 +117,12 @@ fn info(doc: &Document, out: &mut Out) -> Result<(), String> {
         if doc.was_repaired() { "yes" } else { "no" }
     )
     .map_err(io)?;
-    writeln!(
-        out,
-        "Encrypted:    {}",
-        if doc.is_encrypted() { "yes" } else { "no" }
-    )
-    .map_err(io)?;
+    let encrypted = match doc.access() {
+        None => "no",
+        Some(Access::User) => "yes (opened with the user password)",
+        Some(Access::Owner) => "yes (opened with the owner password)",
+    };
+    writeln!(out, "Encrypted:    {encrypted}").map_err(io)?;
     match doc.pages() {
         Ok(p) => writeln!(out, "Pages:        {}", p.len()).map_err(io)?,
         Err(e) => writeln!(out, "Pages:        unreadable ({e})").map_err(io)?,
@@ -127,6 +155,19 @@ fn pages(doc: &Document, out: &mut Out) -> Result<(), String> {
             m.y1
         )
         .map_err(io)?;
+    }
+    Ok(())
+}
+
+fn orient(doc: &Document, out: &mut Out) -> Result<(), String> {
+    let pages = doc.pages().map_err(|e| e.to_string())?;
+    for (i, page) in pages.iter().enumerate() {
+        let verdict = match atelier_view::upright_page(doc, page) {
+            Some((r, basis)) if r == page.rotate => format!("upright ({basis:?})"),
+            Some((r, basis)) => format!("turn to rotate {r} ({basis:?})"),
+            None => "cannot tell".to_string(),
+        };
+        writeln!(out, "{:>5}  rotate {:<3}  {verdict}", i + 1, page.rotate).map_err(io)?;
     }
     Ok(())
 }
@@ -296,6 +337,187 @@ fn text(doc: &Document, args: &[String], out: &mut Out) -> Result<(), String> {
             writeln!(out, "{}", text.plain_text()).map_err(io)?;
             if n != pages.len() {
                 out.write_all(b"\x0c").map_err(io)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn load_form(doc: &Document) -> Result<atelier_form::Form, String> {
+    atelier_form::Form::load(doc)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "this PDF has no form fields".to_string())
+}
+
+fn fields(doc: &Document, out: &mut Out) -> Result<(), String> {
+    use atelier_form::flags;
+    let form = load_form(doc)?;
+    if form.has_xfa {
+        writeln!(out, "(also has an XFA form, which Atelier ignores)").map_err(io)?;
+    }
+    if form.need_appearances {
+        writeln!(out, "(NeedAppearances is set: viewers redraw fields)").map_err(io)?;
+    }
+    for f in &form.fields {
+        let mut notes = Vec::new();
+        for (flag, label) in [
+            (flags::READ_ONLY, "read-only"),
+            (flags::REQUIRED, "required"),
+        ] {
+            if f.has_flag(flag) {
+                notes.push(label);
+            }
+        }
+        if f.kind == atelier_form::FieldKind::Text {
+            for (flag, label) in [
+                (flags::MULTILINE, "multiline"),
+                (flags::PASSWORD, "password"),
+                (flags::COMB, "comb"),
+            ] {
+                if f.has_flag(flag) {
+                    notes.push(label);
+                }
+            }
+        }
+        if f.kind == atelier_form::FieldKind::ListBox && f.has_flag(flags::MULTI_SELECT) {
+            notes.push("multi-select");
+        }
+        let notes = if notes.is_empty() {
+            String::new()
+        } else {
+            format!(" [{}]", notes.join(", "))
+        };
+        writeln!(
+            out,
+            "{} ({}){notes} = {:?}",
+            f.name,
+            f.kind.label(),
+            f.display_value()
+        )
+        .map_err(io)?;
+        if let Some(t) = &f.tooltip {
+            writeln!(out, "    tooltip: {t}").map_err(io)?;
+        }
+        if !f.options.is_empty() {
+            let opts: Vec<String> = f
+                .options
+                .iter()
+                .map(|o| {
+                    if o.export == o.display {
+                        o.display.clone()
+                    } else {
+                        format!("{} ({})", o.display, o.export)
+                    }
+                })
+                .collect();
+            writeln!(out, "    options: {}", opts.join(" | ")).map_err(io)?;
+        }
+        let states = f.states();
+        if !states.is_empty() {
+            writeln!(out, "    states: {}", states.join(", ")).map_err(io)?;
+        }
+        for w in &f.widgets {
+            let page = w.page.map_or("?".to_string(), |p| (p + 1).to_string());
+            writeln!(
+                out,
+                "    widget {} on page {page} at [{:.1} {:.1} {:.1} {:.1}]{}",
+                w.obj,
+                w.rect.x0,
+                w.rect.y0,
+                w.rect.x1,
+                w.rect.y1,
+                if w.is_hidden() { " hidden" } else { "" }
+            )
+            .map_err(io)?;
+        }
+    }
+    Ok(())
+}
+
+fn fill(doc: &Document, args: &[String], out: &mut Out) -> Result<(), String> {
+    use atelier_form::{FieldKind, Value};
+    let mut form = load_form(doc)?;
+    let mut output = None;
+    let mut refresh = false;
+    let mut sets = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-o" => {
+                output = Some(args.get(i + 1).ok_or("-o needs a file name")?.clone());
+                i += 1;
+            }
+            "--refresh" => refresh = true,
+            a => {
+                let (name, value) = a
+                    .split_once('=')
+                    .ok_or_else(|| format!("expected name=value, got `{a}`"))?;
+                sets.push((name.to_string(), value.to_string()));
+            }
+        }
+        i += 1;
+    }
+    let output = output.ok_or("fill needs -o <out.pdf>")?;
+    let mut update = doc.update();
+    if refresh {
+        for index in 0..form.fields.len() {
+            for w in form
+                .refresh_appearance(&mut update, index)
+                .map_err(|e| e.to_string())?
+            {
+                eprintln!("warning: {w}");
+            }
+        }
+    }
+    for (name, text) in sets {
+        let index = form
+            .fields
+            .iter()
+            .position(|f| f.name == name)
+            .ok_or_else(|| format!("no field named `{name}`"))?;
+        let field = &form.fields[index];
+        let value = match field.kind {
+            FieldKind::Checkbox | FieldKind::Radio => match text.as_str() {
+                "off" | "Off" | "" => Value::None,
+                "on" => Value::State(
+                    field
+                        .states()
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| "Yes".to_string()),
+                ),
+                s => Value::State(s.to_string()),
+            },
+            FieldKind::ListBox => Value::Choices(text.split('|').map(str::to_string).collect()),
+            _ => Value::Text(text),
+        };
+        for w in form
+            .set_value(&mut update, index, value)
+            .map_err(|e| e.to_string())?
+        {
+            eprintln!("warning: {w}");
+        }
+    }
+    let bytes = update.to_bytes().map_err(|e| e.to_string())?;
+    std::fs::write(&output, &bytes).map_err(|e| format!("cannot write {output}: {e}"))?;
+    writeln!(out, "wrote {output} ({} bytes)", bytes.len()).map_err(io)?;
+    Ok(())
+}
+
+fn actions(doc: &Document, out: &mut Out) -> Result<(), String> {
+    let found = atelier_form::document_actions(doc);
+    if found.is_empty() {
+        writeln!(out, "no actions").map_err(io)?;
+    }
+    for a in found {
+        let owner = a.owner.map(|r| format!(" ({r})")).unwrap_or_default();
+        writeln!(out, "{}{owner}: {}", a.location, a.kind).map_err(io)?;
+        if let Some(t) = &a.target {
+            writeln!(out, "    target: {t}").map_err(io)?;
+        }
+        if let Some(js) = &a.javascript {
+            for line in js.lines() {
+                writeln!(out, "    | {line}").map_err(io)?;
             }
         }
     }

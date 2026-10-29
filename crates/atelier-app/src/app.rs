@@ -6,12 +6,13 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use atelier_form::Session;
 use atelier_raster::Point;
 use atelier_render::PageText;
-use atelier_syntax::Document;
+use atelier_syntax::{Document, Error};
 use atelier_view::{
     Caret, Layout, PREVIEW_SCALE, PageGeom, SearchMatch, Selection, TileCache, TileKey, ViewRect,
-    hit_test, scale_key, tiles_at_scale, tiles_for_view,
+    hit_test, scale_key, tiles_at_scale, tiles_for_view, word_at,
 };
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, CursorIcon, Event, FontId, Key, Modifiers, Pos2, Rect,
@@ -19,6 +20,23 @@ use eframe::egui::{
 };
 
 use crate::worker::{Done, Job, Pool};
+
+mod colors;
+mod form;
+mod inspect;
+mod menu;
+mod pages;
+mod print;
+mod settings_window;
+mod sidebar;
+
+use form::FormView;
+use inspect::Inspector;
+use menu::MenuTarget;
+use settings_window::Window;
+use sidebar::Sidebar;
+
+use crate::settings::Settings;
 
 const MIN_ZOOM: f64 = 0.05;
 const MAX_ZOOM: f64 = 64.0;
@@ -28,6 +46,17 @@ const BACKDROP: Color32 = Color32::from_gray(82);
 const SELECTION: Color32 = Color32::from_rgba_premultiplied(0, 70, 160, 90);
 const HIT: Color32 = Color32::from_rgba_premultiplied(120, 100, 0, 110);
 const CURRENT_HIT: Color32 = Color32::from_rgba_premultiplied(160, 70, 0, 150);
+
+/// Where Save writes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SaveTo {
+    /// Over the file it was opened from.
+    Overwrite,
+    /// To a new file, which then becomes the open file.
+    As,
+    /// To a new file, leaving the open file where it is.
+    Copy,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ZoomMode {
@@ -46,6 +75,40 @@ struct Open {
     failed: HashSet<TileKey>,
     text: HashMap<usize, Arc<PageText>>,
     warnings: BTreeSet<String>,
+    /// Where the file was read from, for Save.
+    path: Option<PathBuf>,
+    /// Changes made since opening or saving: field values and page turns.
+    session: Session,
+    /// The generation the file was opened with, which outlives edits.
+    opened: u64,
+    /// Auto-orient is working out which way up the pages go: pages done
+    /// so far, and how many there are.
+    orienting: Option<pages::Orienting>,
+    /// The form, when the document has one.
+    form: Option<FormView>,
+    /// Small pictures of the pages for the sidebar.
+    thumbs: HashMap<usize, TextureHandle>,
+    /// Page pictures that show an old version of their page.
+    thumb_stale: HashSet<usize>,
+    /// The outline, once read: its entries, and whether they are headings
+    /// found in the text rather than bookmarks.
+    outline: Option<(Vec<atelier_view::OutlineItem>, bool)>,
+    outline_asked: bool,
+    /// Text OCR read from scanned pages.
+    ocr_texts: crate::worker::OcrTexts,
+    /// Tiles that still show a field's old value; they stay on screen
+    /// until their replacements arrive.
+    stale: HashSet<TileKey>,
+}
+
+/// Something waiting on the unsaved-changes prompt.
+enum Pending {
+    Close,
+    Open {
+        data: Vec<u8>,
+        name: String,
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Default)]
@@ -66,6 +129,8 @@ pub struct Viewer {
     open: Option<Open>,
     generation: u64,
     error: Option<String>,
+    /// A message about something done, shown until dismissed.
+    notice: Option<String>,
     zoom_mode: ZoomMode,
     /// The scroll offset as of the last frame.
     offset: Vec2,
@@ -80,6 +145,34 @@ pub struct Viewer {
     selection: Option<Selection>,
     selecting: bool,
     show_warnings: bool,
+    /// A file waiting for its password.
+    locked: Option<Locked>,
+    /// The unsaved-changes prompt is open for this.
+    confirm: Option<Pending>,
+    /// Closing was confirmed; let the window go.
+    closing: bool,
+    inspector: Inspector,
+    /// What the right-click menu is for.
+    menu: Option<MenuTarget>,
+    settings: Settings,
+    /// The Settings or About window is open.
+    window: Option<Window>,
+    /// The OCR models being downloaded.
+    ocr_download: Option<settings_window::Download>,
+    colors: colors::Colors,
+    print: print::PrintDialog,
+    sidebar: Sidebar,
+}
+
+/// An encrypted file the password prompt is open for.
+struct Locked {
+    data: Vec<u8>,
+    name: String,
+    path: Option<PathBuf>,
+    password: String,
+    /// The last password tried was wrong.
+    wrong: bool,
+    focus: bool,
 }
 
 impl Viewer {
@@ -94,6 +187,7 @@ impl Viewer {
             open: None,
             generation: 0,
             error: None,
+            notice: None,
             zoom_mode: ZoomMode::FitWidth,
             offset: Vec2::ZERO,
             view_size: Vec2::new(800.0, 600.0),
@@ -105,6 +199,17 @@ impl Viewer {
             selection: None,
             selecting: false,
             show_warnings: false,
+            locked: None,
+            confirm: None,
+            closing: false,
+            inspector: Inspector::default(),
+            menu: None,
+            settings: Settings::load(),
+            window: None,
+            ocr_download: None,
+            colors: colors::Colors::default(),
+            print: print::PrintDialog::default(),
+            sidebar: Sidebar::default(),
         };
         if let Some(p) = path {
             v.open_path(&p);
@@ -114,14 +219,45 @@ impl Viewer {
 
     fn open_path(&mut self, path: &Path) {
         match std::fs::read(path) {
-            Ok(data) => self.open_bytes(data, display_name(path)),
+            Ok(data) => self.open_bytes(data, display_name(path), Some(path.to_path_buf())),
             Err(e) => self.error = Some(format!("Could not read {}: {e}", path.display())),
         }
     }
 
-    fn open_bytes(&mut self, data: Vec<u8>, name: String) {
-        let doc = match Document::open(data) {
+    /// Opens a file, first asking about unsaved changes to the open one.
+    fn open_bytes(&mut self, data: Vec<u8>, name: String, path: Option<PathBuf>) {
+        if self.is_dirty() {
+            self.confirm = Some(Pending::Open { data, name, path });
+            return;
+        }
+        self.open_with_password(data, name, "", path);
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.open.as_ref().is_some_and(|o| o.session.is_dirty())
+    }
+
+    fn open_with_password(
+        &mut self,
+        data: Vec<u8>,
+        name: String,
+        password: &str,
+        path: Option<PathBuf>,
+    ) {
+        // The bytes are kept only while a password is needed.
+        let doc = match Document::open_with_password(&data[..], password.as_bytes()) {
             Ok(d) => d,
+            Err(Error::Password) => {
+                self.locked = Some(Locked {
+                    data,
+                    name,
+                    path,
+                    password: String::new(),
+                    wrong: !password.is_empty(),
+                    focus: true,
+                });
+                return;
+            }
             Err(e) => {
                 self.error = Some(format!("Could not open {name}: {e}"));
                 return;
@@ -134,14 +270,23 @@ impl Viewer {
                 return;
             }
         };
+        self.locked = None;
+        self.notice = None;
         self.pool.stop_search();
         self.pool.set_jobs(Vec::new());
         self.generation += 1;
         let warnings = doc.warnings().into_iter().collect();
-        self.ctx
-            .send_viewport_cmd(ViewportCommand::Title(format!("{name} - Atelier")));
-        self.open = Some(Open {
-            doc: Arc::new(doc),
+        let doc = Arc::new(doc);
+        let mut open = Open {
+            session: Session::new(doc.clone()),
+            opened: self.generation,
+            orienting: None,
+            thumbs: HashMap::new(),
+            thumb_stale: HashSet::new(),
+            outline: None,
+            outline_asked: false,
+            ocr_texts: Default::default(),
+            doc,
             name,
             generation: self.generation,
             layout: Layout::new(pages, 1.0),
@@ -149,14 +294,33 @@ impl Viewer {
             failed: HashSet::new(),
             text: HashMap::new(),
             warnings,
-        });
+            path,
+            form: None,
+            stale: HashSet::new(),
+        };
+        Self::load_form(&mut open);
+        self.open = Some(open);
+        self.inspector.reset();
+        self.sidebar.reset();
+        self.colors.reset();
+        self.update_title();
         self.error = None;
-        self.zoom_mode = ZoomMode::FitWidth;
+        self.zoom_mode = if self.settings.fit_page {
+            ZoomMode::FitPage
+        } else {
+            ZoomMode::FitWidth
+        };
         self.scroll_to = Some(Vec2::ZERO);
         self.search = Search::default();
         self.selection = None;
         self.selecting = false;
         self.apply_fit();
+        if self.settings.orient_on_open {
+            self.start_orient(true);
+        } else if self.ocr_ready() {
+            // Read the scans, but leave the pages as they are.
+            self.start_ocr();
+        }
     }
 
     fn pick_file(&mut self) {
@@ -166,6 +330,100 @@ impl Viewer {
             .pick_file()
         {
             self.open_path(&path);
+        }
+    }
+
+    /// Saves the document with its changes, to its own file or (`choose`)
+    /// to one the person picks. The file is written beside the target and
+    /// then moved over it, so a failed write never leaves half a file.
+    fn save(&mut self, to: SaveTo) {
+        let Some(o) = &self.open else { return };
+        let path = match (&o.path, to) {
+            (Some(p), SaveTo::Overwrite) => Some(p.clone()),
+            _ => {
+                let name = if to == SaveTo::Copy {
+                    let stem = o.name.strip_suffix(".pdf").unwrap_or(&o.name);
+                    format!("{stem} (copy).pdf")
+                } else {
+                    o.name.clone()
+                };
+                rfd::FileDialog::new()
+                    .add_filter("PDF documents", &["pdf"])
+                    .set_file_name(name)
+                    .save_file()
+            }
+        };
+        let Some(path) = path else { return };
+        if let Err(e) = write_replacing(&path, o.doc.data()) {
+            self.error = Some(format!("Could not save {}: {e}", path.display()));
+            return;
+        }
+        let Some(o) = &mut self.open else { return };
+        if to == SaveTo::Copy {
+            self.notice = Some(format!("Saved a copy as {}.", display_name(&path)));
+        } else {
+            o.name = display_name(&path);
+            o.path = Some(path);
+        }
+        // The changes are saved somewhere, so closing need not ask again.
+        o.session.saved(o.doc.clone());
+        self.update_title();
+    }
+
+    /// Asks whether to save changes before closing or opening another file.
+    fn confirm_window(&mut self, ctx: &egui::Context) {
+        let Some(pending) = &self.confirm else { return };
+        let name = self
+            .open
+            .as_ref()
+            .map_or("", |o| o.name.as_str())
+            .to_string();
+        let what = match pending {
+            Pending::Close => "closing",
+            Pending::Open { .. } => "opening another file",
+        };
+        let mut choice = None;
+        egui::Modal::new(egui::Id::unique("unsaved")).show(ctx, |ui| {
+            ui.heading("Unsaved changes");
+            ui.label(format!("Save the changes to {name} before {what}?"));
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                if ui.button("Save").clicked() {
+                    choice = Some(0);
+                }
+                if ui.button("Don't save").clicked() {
+                    choice = Some(1);
+                }
+                if ui.button("Cancel").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                    choice = Some(2);
+                }
+            });
+        });
+        let Some(choice) = choice else { return };
+        let Some(pending) = self.confirm.take() else {
+            return;
+        };
+        if choice == 2 {
+            return;
+        }
+        if choice == 0 {
+            self.save(SaveTo::Overwrite);
+            if self.is_dirty() {
+                // Not saved (cancelled or failed): stay.
+                return;
+            }
+        }
+        match pending {
+            Pending::Close => {
+                self.closing = true;
+                ctx.send_viewport_cmd(ViewportCommand::Close);
+            }
+            Pending::Open { data, name, path } => {
+                if let Some(o) = &mut self.open {
+                    o.session.revert();
+                }
+                self.open_with_password(data, name, "", path);
+            }
         }
     }
 
@@ -263,13 +521,20 @@ impl Viewer {
             self.step_hit(backwards);
             return;
         }
+        self.start_search(query);
+    }
+
+    /// Searches every page for `query` afresh.
+    pub(super) fn start_search(&mut self, query: String) {
         let Some(o) = &self.open else { return };
         let wake = self.ctx.clone();
-        let id = self
-            .pool
-            .search(o.doc.clone(), o.generation, query.clone(), move || {
-                wake.request_repaint()
-            });
+        let id = self.pool.search(
+            o.doc.clone(),
+            o.generation,
+            query.clone(),
+            o.ocr_texts.clone(),
+            move || wake.request_repaint(),
+        );
         self.search = Search {
             query,
             id,
@@ -331,6 +596,7 @@ impl Viewer {
     fn receive(&mut self) {
         let ppp = f64::from(self.ctx.pixels_per_point());
         let mut reveal = None;
+        let mut oriented = None;
         while let Ok(done) = self.pool.done.try_recv() {
             let Some(o) = &mut self.open else { continue };
             match done {
@@ -356,6 +622,7 @@ impl Viewer {
                         TextureOptions::LINEAR,
                     );
                     o.tiles.insert(key, tex, rgba.len());
+                    o.stale.remove(&key);
                     o.warnings.extend(
                         warnings
                             .into_iter()
@@ -409,8 +676,57 @@ impl Viewer {
                         reveal = Some(0);
                     }
                 }
+                Done::Thumb {
+                    generation,
+                    page,
+                    size,
+                    rgba,
+                } if generation == o.generation => {
+                    let image = egui::ColorImage::from_rgba_premultiplied(size, &rgba);
+                    let tex = self.ctx.load_texture(
+                        format!("thumb{page}"),
+                        image,
+                        TextureOptions::LINEAR,
+                    );
+                    o.thumbs.insert(page, tex);
+                    o.thumb_stale.remove(&page);
+                }
+                Done::Outline {
+                    opened,
+                    items,
+                    from_headings,
+                } if opened == o.opened => {
+                    o.outline = Some((items, from_headings));
+                }
+                Done::Oriented {
+                    generation,
+                    rotations,
+                } => oriented = Some((generation, rotations)),
+                Done::OcrPage { opened, page } if opened == o.opened => {
+                    // Its text is now what OCR read.
+                    o.text.remove(&page);
+                }
+                Done::OcrFailed { error } => {
+                    self.error = Some(format!("OCR is off for now: {error}"));
+                }
+                Done::Probed {
+                    generation,
+                    page,
+                    result,
+                } if generation == o.generation => {
+                    self.colors.waiting = false;
+                    self.colors.last = Some((page, result));
+                }
+                Done::Spots { opened, spots } if opened == o.opened => {
+                    self.colors.spots = Some(spots);
+                }
                 _ => {}
             }
+        }
+        if let Some((opened, rotations)) = oriented {
+            self.oriented(opened, &rotations);
+        } else {
+            self.orient_progress();
         }
         if let Some(i) = reveal {
             self.reveal_hit(i);
@@ -430,9 +746,35 @@ impl Viewer {
         let shift = ctx.input(|i| i.modifiers.shift);
         let pressed = |k| ctx.input(|i| i.key_pressed(k));
         let copy = ctx.input(|i| i.events.iter().any(|e| matches!(e, Event::Copy)));
+        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::S)) {
+            self.save(SaveTo::As);
+        }
+        if shortcut(Key::S) {
+            self.save(SaveTo::Overwrite);
+        }
         if shortcut(Key::O) {
             self.pick_file();
         }
+        if shortcut(Key::P) {
+            self.open_print();
+        }
+        let turn = |k| ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, k));
+        if turn(Key::Plus) || turn(Key::Equals) {
+            self.rotate_pages(1);
+        }
+        if turn(Key::Minus) {
+            self.rotate_pages(-1);
+        }
+        if self.open.is_some() && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F6)) {
+            self.toggle_colors();
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F4)) {
+            self.toggle_sidebar();
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F12)) {
+            self.inspector.open = !self.inspector.open;
+        }
+        self.form_keys();
         if shortcut(Key::F) {
             self.focus_search = true;
         }
@@ -481,6 +823,13 @@ impl Viewer {
         }
     }
 
+    fn toggle_sidebar(&mut self) {
+        self.settings.sidebar = !self.settings.sidebar;
+        if let Err(e) = self.settings.save() {
+            self.error = Some(format!("Could not save the settings: {e}"));
+        }
+    }
+
     fn copy_selection(&self) {
         let (Some(o), Some(sel)) = (&self.open, &self.selection) else {
             return;
@@ -519,11 +868,91 @@ impl Viewer {
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             if ui
+                .add(egui::Button::selectable(self.settings.sidebar, "◧"))
+                .on_hover_text("Page pictures and outline (F4)")
+                .clicked()
+            {
+                self.toggle_sidebar();
+            }
+            if ui
                 .button("Open…")
                 .on_hover_text("Open a PDF (Ctrl+O)")
                 .clicked()
             {
                 self.pick_file();
+            }
+            let dirty = self.is_dirty();
+            ui.add_enabled_ui(self.open.is_some(), |ui| {
+                // A split button: Save a copy, with Save and Save as beside it.
+                ui.spacing_mut().item_spacing.x = 1.0;
+                if ui
+                    .button("Save a copy…")
+                    .on_hover_text("Save the file with your changes under a new name")
+                    .clicked()
+                {
+                    self.save(SaveTo::Copy);
+                }
+                ui.menu_button("⏷", |ui| {
+                    if ui
+                        .add(egui::Button::new("Save").shortcut_text("Ctrl+S"))
+                        .on_hover_text("Save over the file it was opened from")
+                        .clicked()
+                    {
+                        self.save(SaveTo::Overwrite);
+                        ui.close();
+                    }
+                    if ui
+                        .add(egui::Button::new("Save as…").shortcut_text("Ctrl+Shift+S"))
+                        .clicked()
+                    {
+                        self.save(SaveTo::As);
+                        ui.close();
+                    }
+                    if ui.button("Save a copy…").clicked() {
+                        self.save(SaveTo::Copy);
+                        ui.close();
+                    }
+                });
+            });
+            if dirty {
+                ui.label("●").on_hover_text("Unsaved changes");
+            }
+            if ui
+                .add_enabled(self.open.is_some(), egui::Button::new("Print…"))
+                .on_hover_text("Print (Ctrl+P)")
+                .clicked()
+            {
+                self.open_print();
+            }
+            if let Some(fv) = self.open.as_ref().and_then(|o| o.form.as_ref()) {
+                let on = fv.highlight;
+                if ui
+                    .selectable_label(on, "Fields")
+                    .on_hover_text("Highlight fields you can fill in (Tab moves between them)")
+                    .clicked()
+                {
+                    self.toggle_highlight();
+                }
+            }
+            if ui
+                .add_enabled(
+                    self.open.is_some(),
+                    egui::Button::selectable(self.inspector.open, "Inspect"),
+                )
+                .on_hover_text("Objects, fields and scripts in this file (F12)")
+                .clicked()
+            {
+                self.inspector.open = !self.inspector.open;
+            }
+            if ui
+                .add_enabled(
+                    self.open.is_some(),
+                    egui::Button::selectable(self.colors.open, "Colours"),
+                )
+                .on_hover_text("Pick a colour from the page; list the spot colours (F6)")
+                .clicked()
+            {
+                self.toggle_colors();
             }
             ui.separator();
             let count = self.open.as_ref().map_or(0, |o| o.layout.page_count());
@@ -534,18 +963,20 @@ impl Viewer {
                     .desired_width(40.0)
                     .align(Align2::CENTER_CENTER);
                 let resp = ui.add(field).on_hover_text("Go to page");
+                // Read what was typed before the box shows the current page
+                // again: it loses focus in the same frame Enter is pressed.
+                if resp.lost_focus()
+                    && ui.input(|i| i.key_pressed(Key::Enter))
+                    && let Ok(n) = self.page_input.trim().parse::<usize>()
+                {
+                    self.go_to_page(n.saturating_sub(1));
+                }
                 if !resp.has_focus() {
                     self.page_input = if enabled {
                         (current + 1).to_string()
                     } else {
                         String::new()
                     };
-                }
-                if resp.lost_focus()
-                    && ui.input(|i| i.key_pressed(Key::Enter))
-                    && let Ok(n) = self.page_input.trim().parse::<usize>()
-                {
-                    self.go_to_page(n.saturating_sub(1));
                 }
                 ui.label(format!("/ {count}"));
                 ui.separator();
@@ -570,6 +1001,29 @@ impl Viewer {
                 {
                     self.zoom_mode = ZoomMode::FitPage;
                     self.apply_fit();
+                }
+                ui.separator();
+                if ui
+                    .button("↺")
+                    .on_hover_text("Rotate all pages counterclockwise (Ctrl+Shift+−)")
+                    .clicked()
+                {
+                    self.rotate_pages(-1);
+                }
+                if ui
+                    .button("↻")
+                    .on_hover_text("Rotate all pages clockwise (Ctrl+Shift+=)")
+                    .clicked()
+                {
+                    self.rotate_pages(1);
+                }
+                let orienting = self.open.as_ref().is_some_and(|o| o.orienting.is_some());
+                if ui
+                    .add_enabled(!orienting, egui::Button::new("Auto-orient"))
+                    .on_hover_text("Turn each page so its text reads upright")
+                    .clicked()
+                {
+                    self.auto_orient();
                 }
                 ui.separator();
                 let field = egui::TextEdit::singleline(&mut self.search_input)
@@ -606,10 +1060,20 @@ impl Viewer {
                     ui.label(label);
                 }
             });
-            if let Some(o) = &self.open
-                && !o.warnings.is_empty()
-            {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.menu_button("☰", |ui| {
+                    if ui.button("Settings…").clicked() {
+                        self.window = Some(Window::Settings);
+                        ui.close();
+                    }
+                    if ui.button("About Atelier").clicked() {
+                        self.window = Some(Window::About);
+                        ui.close();
+                    }
+                });
+                if let Some(o) = &self.open
+                    && !o.warnings.is_empty()
+                {
                     let label = format!("⚠ {}", o.warnings.len());
                     if ui
                         .selectable_label(self.show_warnings, label)
@@ -618,9 +1082,66 @@ impl Viewer {
                     {
                         self.show_warnings = !self.show_warnings;
                     }
-                });
-            }
+                }
+            });
         });
+    }
+
+    /// Asks for the password of an encrypted file.
+    fn password_window(&mut self, ctx: &egui::Context) {
+        let Some(locked) = &mut self.locked else {
+            return;
+        };
+        let mut submit = false;
+        let mut cancel = false;
+        egui::Window::new("Password required")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.label(format!(
+                    "{} is protected. Enter its password to open it.",
+                    locked.name
+                ));
+                ui.add_space(4.0);
+                let field = ui.add(
+                    egui::TextEdit::singleline(&mut locked.password)
+                        .password(true)
+                        .hint_text("Password")
+                        .desired_width(260.0),
+                );
+                if locked.focus {
+                    field.request_focus();
+                    locked.focus = false;
+                }
+                if field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    submit = true;
+                }
+                if locked.wrong {
+                    ui.colored_label(
+                        Color32::from_rgb(220, 90, 70),
+                        "That password is not right.",
+                    );
+                }
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Open").clicked() {
+                        submit = true;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        cancel = true;
+                    }
+                });
+            });
+        if cancel || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.locked = None;
+        } else if submit && let Some(locked) = self.locked.take() {
+            let password = locked.password;
+            self.open_with_password(locked.data, locked.name, &password, locked.path);
+            if let Some(l) = &mut self.locked {
+                l.focus = true;
+            }
+        }
     }
 
     fn warnings_window(&mut self, ctx: &egui::Context) {
@@ -675,7 +1196,12 @@ impl Viewer {
             self.offset = viewport.min.to_vec2();
             let (rect, response) = ui.allocate_exact_size(content, Sense::click_and_drag());
             self.draw_pages(ui, rect.min, viewport);
+            self.draw_fields(ui, rect.min);
+            self.draw_pick(ui, rect.min);
             self.pointer(ui, &response, rect.min);
+            self.draw_editor(ui, rect.min);
+            let ctx = ui.ctx().clone();
+            self.combo_popup(&ctx, rect.min);
         });
     }
 
@@ -700,6 +1226,7 @@ impl Viewer {
         let shift = self.centre_shift();
         let painter = ui.painter();
         painter.rect_filled(viewport.translate(origin.to_vec2()), 0.0, BACKDROP);
+        let print_page = self.print_preview_page();
         let Some(o) = &mut self.open else { return };
         o.tiles.next_frame();
         let zoom = o.layout.zoom();
@@ -827,7 +1354,9 @@ impl Viewer {
             key,
             page_px,
         };
-        let needed = |o: &Open, k: &TileKey| !o.tiles.contains(k) && !o.failed.contains(k);
+        let needed = |o: &Open, k: &TileKey| {
+            (!o.tiles.contains(k) || o.stale.contains(k)) && !o.failed.contains(k)
+        };
         let mut queued: HashSet<TileKey> = HashSet::new();
         let mut add_tiles = |jobs: &mut Vec<Job>, tiles: Vec<(TileKey, (usize, usize))>| {
             for t in tiles {
@@ -863,7 +1392,27 @@ impl Viewer {
                     doc: o.doc.clone(),
                     generation: o.generation,
                     page,
+                    ocr: o.ocr_texts.clone(),
                 });
+            }
+        }
+        // Page pictures for the sidebar and the print preview.
+        let preview = print_page.filter(|p| !o.thumbs.contains_key(p) || o.thumb_stale.contains(p));
+        if self.settings.sidebar || preview.is_some() {
+            let sidebar = if self.settings.sidebar {
+                &self.sidebar.wanted[..]
+            } else {
+                &[]
+            };
+            for &page in preview.iter().chain(sidebar) {
+                if let Some(g) = o.layout.geom(page) {
+                    jobs.push(Job::Thumb {
+                        doc: o.doc.clone(),
+                        generation: o.generation,
+                        page,
+                        scale: sidebar::thumb_scale(g.size(), f64::from(ppp)),
+                    });
+                }
             }
         }
         add_tiles(
@@ -894,9 +1443,16 @@ impl Viewer {
             self.zoom_by(f64::from(zoom_delta).sqrt(), anchor);
         }
 
+        if self.color_pointer(ui, response, response.hover_pos().map(to_layout))
+            || self.pick_pointer(ui, response, response.hover_pos().map(to_layout))
+        {
+            return;
+        }
         if let Some(p) = response.hover_pos() {
             let (lx, ly) = to_layout(p);
-            if self.over_text(lx, ly) || self.selecting {
+            if let Some(icon) = self.form_cursor(lx, ly).filter(|_| !self.selecting) {
+                ui.ctx().set_cursor_icon(icon);
+            } else if self.over_text(lx, ly) || self.selecting {
                 ui.ctx().set_cursor_icon(CursorIcon::Text);
             }
         }
@@ -905,7 +1461,10 @@ impl Viewer {
             let start = ui
                 .input(|i| i.pointer.press_origin())
                 .or(response.hover_pos());
-            if let Some(p) = start {
+            if let Some(p) = start.filter(|p| {
+                let (lx, ly) = to_layout(*p);
+                self.widget_at(lx, ly).is_none()
+            }) {
                 let (lx, ly) = to_layout(p);
                 self.selection = self.caret_at(lx, ly).map(|c| Selection {
                     anchor: c,
@@ -939,10 +1498,33 @@ impl Viewer {
         }
         if response.clicked() {
             self.selection = None;
+            if let Some(p) = response.interact_pointer_pos() {
+                let (lx, ly) = to_layout(p);
+                let ctrl = ui.input(|i| i.modifiers.command);
+                let on_field = self.form_click(lx, ly, ctrl);
+                // A double click selects the word under it.
+                if response.double_clicked()
+                    && !on_field
+                    && let Some(o) = &self.open
+                {
+                    let page = o.layout.page_at_y(ly);
+                    if let (Some(text), Some(user)) =
+                        (o.text.get(&page), o.layout.to_user(page, lx, ly))
+                        && self.over_text(lx, ly)
+                    {
+                        self.selection = word_at(text, page, user);
+                    }
+                }
+            }
         }
-        if response.secondary_clicked() {
-            // A small context menu could go here; for now copy is Ctrl+C.
+        if response.secondary_clicked()
+            && let Some(p) = response.interact_pointer_pos()
+        {
+            let (lx, ly) = to_layout(p);
+            self.menu = None;
+            self.menu_target_at(lx, ly);
         }
+        response.context_menu(|ui| self.context_menu(ui));
     }
 }
 
@@ -952,18 +1534,37 @@ impl eframe::App for Viewer {
         let dropped = ctx.input(|i| i.raw.dropped_files.first().cloned());
         if let Some(f) = dropped {
             match f.bytes() {
-                Ok(data) => self.open_bytes(data, display_name(f.path())),
+                Ok(data) => {
+                    let path = Some(f.path().to_path_buf()).filter(|p| p.is_file());
+                    self.open_bytes(data, display_name(f.path()), path);
+                }
                 Err(e) => self.error = Some(format!("Could not read the dropped file: {e}")),
             }
         }
+        if ctx.input(|i| i.viewport().close_requested()) && self.is_dirty() && !self.closing {
+            ctx.send_viewport_cmd(ViewportCommand::CancelClose);
+            self.confirm = Some(Pending::Close);
+        }
         self.receive();
-        self.keyboard();
+        if self.confirm.is_none() {
+            self.keyboard();
+        }
 
         egui::Panel::top("toolbar").show(ui, |ui| {
             ui.add_space(2.0);
             self.toolbar(ui);
             ui.add_space(2.0);
         });
+        if let Some(note) = self.notice.clone().filter(|_| self.open.is_some()) {
+            egui::Panel::bottom("notice").show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(note);
+                    if ui.small_button("Dismiss").clicked() {
+                        self.notice = None;
+                    }
+                });
+            });
+        }
         if let Some(err) = self.error.clone().filter(|_| self.open.is_some()) {
             egui::Panel::bottom("status").show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -974,11 +1575,34 @@ impl eframe::App for Viewer {
                 });
             });
         }
+        if self.settings.sidebar {
+            self.sidebar_panel(ui);
+        }
+        if self.inspector.open {
+            self.inspector_panel(ui);
+        }
         egui::CentralPanel::no_frame().show(ui, |ui| self.page_view(ui));
         if self.show_warnings {
             self.warnings_window(&ctx);
         }
+        self.password_window(&ctx);
+        self.settings_window(&ctx);
+        self.colors_window(&ctx);
+        self.print_window(&ctx);
+        self.download_progress(&ctx);
+        self.confirm_window(&ctx);
     }
+}
+
+/// Writes a file next to `path` and moves it over `path`.
+fn write_replacing(path: &Path, data: &[u8]) -> std::io::Result<()> {
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".atelier-saving");
+    let tmp = PathBuf::from(tmp);
+    std::fs::write(&tmp, data)?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
 }
 
 /// Whether a point lies inside a glyph box.

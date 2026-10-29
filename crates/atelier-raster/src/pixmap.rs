@@ -1,4 +1,4 @@
-use crate::Coverage;
+use crate::{BlendMode, Coverage};
 
 /// A colour with straight (not premultiplied) alpha, components in 0..=1.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -35,6 +35,8 @@ pub struct Pixmap {
     width: usize,
     height: usize,
     data: Vec<u8>,
+    /// How drawing mixes with what is already there.
+    blend: BlendMode,
 }
 
 impl Pixmap {
@@ -43,6 +45,7 @@ impl Pixmap {
             width,
             height,
             data: vec![0; width * height * 4],
+            blend: BlendMode::Normal,
         }
     }
 
@@ -56,6 +59,47 @@ impl Pixmap {
             width,
             height,
             data,
+            blend: BlendMode::Normal,
+        }
+    }
+
+    /// Sets the blend mode for everything drawn from now on.
+    pub fn set_blend(&mut self, mode: BlendMode) {
+        self.blend = mode;
+    }
+
+    pub fn blend(&self) -> BlendMode {
+        self.blend
+    }
+
+    /// Composites `layer`, whose top-left corner sits at `(x, y)` here,
+    /// through `clip` and with `alpha`, using the current blend mode.
+    pub fn composite(
+        &mut self,
+        layer: &Pixmap,
+        (x, y): (usize, usize),
+        clip: Option<&Mask>,
+        alpha: f32,
+    ) {
+        let global = (alpha.clamp(0.0, 1.0) * 255.0 + 0.5) as u32;
+        let rows = layer.height.min(self.height.saturating_sub(y));
+        let cols = layer.width.min(self.width.saturating_sub(x));
+        for row in 0..rows {
+            for col in 0..cols {
+                let (dx, dy) = (x + col, y + row);
+                let mut c = global;
+                if let Some(m) = clip {
+                    c = mul255(c, u32::from(m.get(dx, dy)));
+                }
+                if c == 0 {
+                    continue;
+                }
+                let px = layer.pixel(col, row);
+                if px[3] == 0 {
+                    continue;
+                }
+                self.blend_pixel(dx, dy, px.map(|v| mul255(u32::from(v), c)));
+            }
         }
     }
 
@@ -115,10 +159,56 @@ impl Pixmap {
         }
     }
 
-    /// Source-over of one premultiplied pixel.
+    /// Composites a per-pixel source through `coverage`: `shader` gives the
+    /// premultiplied colour at device pixel (x, y), or `None` to leave the
+    /// pixel alone. `alpha` scales the whole fill.
+    pub fn fill_coverage_with(
+        &mut self,
+        coverage: &Coverage,
+        clip: Option<&Mask>,
+        alpha: f32,
+        mut shader: impl FnMut(usize, usize) -> Option<[u8; 4]>,
+    ) {
+        let global = (alpha.clamp(0.0, 1.0) * 255.0 + 0.5) as u32;
+        let (rows, cols) = visible_span(coverage, clip);
+        for row in rows {
+            let y = coverage.y + row;
+            for col in cols.clone() {
+                let x = coverage.x + col;
+                let mut c = u32::from(coverage.data[row * coverage.width + col]);
+                if let Some(m) = clip {
+                    c = mul255(c, u32::from(m.get(x, y)));
+                }
+                c = mul255(c, global);
+                if c == 0 {
+                    continue;
+                }
+                let Some(src) = shader(x, y) else { continue };
+                let px = [
+                    mul255(u32::from(src[0]), c),
+                    mul255(u32::from(src[1]), c),
+                    mul255(u32::from(src[2]), c),
+                    mul255(u32::from(src[3]), c),
+                ];
+                self.blend_pixel(x, y, px);
+            }
+        }
+    }
+
+    /// Composites one premultiplied pixel with the current blend mode.
     #[inline]
     pub fn blend_pixel(&mut self, x: usize, y: usize, src: [u32; 4]) {
         let i = (y * self.width + x) * 4;
+        if self.blend != BlendMode::Normal {
+            let d = [
+                self.data[i],
+                self.data[i + 1],
+                self.data[i + 2],
+                self.data[i + 3],
+            ];
+            self.data[i..i + 4].copy_from_slice(&self.blend.composite(d, src));
+            return;
+        }
         let inv = 255 - src[3];
         for (d, s) in self.data[i..i + 4].iter_mut().zip(src) {
             *d = (s + mul255(u32::from(*d), inv)).min(255) as u8;
@@ -323,6 +413,16 @@ mod tests {
         assert_eq!(p.pixel(5, 5), [0, 0, 0, 255]);
         assert_eq!(p.pixel(9, 9), [0, 0, 0, 255]);
         assert_eq!(p.pixel(10, 9), [255, 255, 255, 255]);
+    }
+
+    #[test]
+    fn fill_with_a_shader() {
+        let mut p = Pixmap::filled(4, 1, Color::WHITE);
+        p.fill_coverage_with(&cov(0, 0, 4, 1, 255), None, 1.0, |x, _| {
+            (x != 2).then_some([(x * 60) as u8, 0, 0, 255])
+        });
+        assert_eq!(p.pixel(1, 0), [60, 0, 0, 255]);
+        assert_eq!(p.pixel(2, 0), [255, 255, 255, 255]);
     }
 
     #[test]

@@ -14,8 +14,18 @@ fn stream(dict: &str, data: &[u8]) -> Vec<u8> {
 }
 
 fn build(page_extra: &str, content: &[u8], resources: &str, extra: &[Vec<u8>]) -> Vec<u8> {
+    build_with_catalog("", page_extra, content, resources, extra)
+}
+
+fn build_with_catalog(
+    catalog_extra: &str,
+    page_extra: &str,
+    content: &[u8],
+    resources: &str,
+    extra: &[Vec<u8>],
+) -> Vec<u8> {
     let mut objects: Vec<Vec<u8>> = vec![
-        b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+        format!("<< /Type /Catalog /Pages 2 0 R {catalog_extra} >>").into_bytes(),
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
         format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] {page_extra} /Resources {resources} /Contents 4 0 R >>")
             .into_bytes(),
@@ -49,6 +59,16 @@ fn build(page_extra: &str, content: &[u8], resources: &str, extra: &[Vec<u8>]) -
 
 fn render_with(page_extra: &str, content: &[u8], resources: &str, extra: &[Vec<u8>]) -> Pixmap {
     let doc = Document::open(build(page_extra, content, resources, extra)).unwrap();
+    let page = &doc.pages().unwrap()[0];
+    let options = RenderOptions {
+        scale: 1.0,
+        ..RenderOptions::default()
+    };
+    render_page(&doc, page, &options).unwrap().pixmap
+}
+
+fn render_doc(data: Vec<u8>) -> Pixmap {
+    let doc = Document::open(data).unwrap();
     let page = &doc.pages().unwrap()[0];
     let options = RenderOptions {
         scale: 1.0,
@@ -372,4 +392,664 @@ fn region_matches_the_same_area_of_the_full_page() {
             }
         }
     }
+}
+
+const AXIAL_RED_BLUE: &str = "<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [20 0 80 0] \
+     /Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >>";
+
+#[test]
+fn axial_shading_blends_and_extends() {
+    let p = render_with(
+        "",
+        b"/S sh",
+        &format!("<< /Shading << /S {AXIAL_RED_BLUE} >> >>"),
+        &[],
+    );
+    // Without Extend nothing is painted outside the axis.
+    assert_eq!(at(&p, 10, 50), WHITE);
+    assert_eq!(at(&p, 90, 50), WHITE);
+    assert!(near(at(&p, 21, 50), [251, 0, 4]));
+    assert!(near(at(&p, 50, 50), [128, 0, 127]));
+    assert!(near(at(&p, 79, 50), [4, 0, 251]));
+
+    let extended = AXIAL_RED_BLUE.replace(">> >>", ">> /Extend [true true] >>");
+    let p = render_with(
+        "",
+        b"/S sh",
+        &format!("<< /Shading << /S {extended} >> >>"),
+        &[],
+    );
+    assert_eq!(at(&p, 5, 50), RED);
+    assert_eq!(at(&p, 95, 50), BLUE);
+}
+
+#[test]
+fn radial_shading_is_round() {
+    let shading = "<< /ShadingType 3 /ColorSpace /DeviceGray /Coords [50 50 0 50 50 40] \
+         /Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >> >>";
+    let p = render_with(
+        "",
+        b"/S sh",
+        &format!("<< /Shading << /S {shading} >> >>"),
+        &[],
+    );
+    assert!(near(at(&p, 50, 50), [0, 0, 0]));
+    // Same distance from the centre, same colour.
+    assert_eq!(at(&p, 70, 50), at(&p, 50, 70));
+    assert!(near(at(&p, 70, 50), [128, 128, 128]));
+    // Outside the end circle, unextended.
+    assert_eq!(at(&p, 95, 95), WHITE);
+}
+
+#[test]
+fn shading_respects_the_clip() {
+    let extended = AXIAL_RED_BLUE.replace(">> >>", ">> /Extend [true true] >>");
+    let p = render_with(
+        "",
+        b"q 40 40 20 20 re W n /S sh Q",
+        &format!("<< /Shading << /S {extended} >> >>"),
+        &[],
+    );
+    assert_eq!(at(&p, 30, 50), WHITE);
+    assert_eq!(at(&p, 50, 30), WHITE);
+    assert!(near(at(&p, 50, 50), [128, 0, 127]));
+}
+
+#[test]
+fn triangle_mesh_interpolates_vertex_colours() {
+    // Free-form mesh: 8-bit coordinates over [0 100], 8-bit RGB.
+    // Each vertex is a flag byte, x, y, then r, g, b.
+    let data = [
+        0u8, 0, 0, 255, 0, 0, // red at (0, 0)
+        0, 255, 0, 0, 255, 0, // green at (100, 0)
+        0, 0, 255, 0, 0, 255, // blue at (0, 100)
+    ];
+    let mesh = stream(
+        "/ShadingType 4 /ColorSpace /DeviceRGB /BitsPerCoordinate 8 /BitsPerComponent 8 \
+         /BitsPerFlag 8 /Decode [0 100 0 100 0 1 0 1 0 1]",
+        &data,
+    );
+    let p = render_with("", b"/M sh", "<< /Shading << /M 5 0 R >> >>", &[mesh]);
+    assert!(near(at(&p, 2, 2), [250, 4, 4]));
+    assert!(near(at(&p, 96, 2), [10, 245, 0]));
+    assert!(near(at(&p, 2, 96), [10, 0, 245]));
+    // The other half of the square is outside the triangle.
+    assert_eq!(at(&p, 80, 80), WHITE);
+}
+
+#[test]
+fn coloured_tiling_pattern_repeats() {
+    // 10 x 10 cell: red square in the lower left quarter.
+    let cell = stream(
+        "/PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 \
+         /Resources << >>",
+        b"1 0 0 rg 0 0 5 5 re f",
+    );
+    let p = render_with(
+        "",
+        b"/Pattern cs /P scn 0 0 100 100 re f",
+        "<< /Pattern << /P 5 0 R >> >>",
+        &[cell],
+    );
+    for (x, y) in [(2, 2), (32, 72), (92, 12)] {
+        assert_eq!(at(&p, x, y), RED, "({x}, {y})");
+    }
+    for (x, y) in [(7, 2), (2, 7), (37, 77)] {
+        assert_eq!(at(&p, x, y), WHITE, "({x}, {y})");
+    }
+}
+
+#[test]
+fn uncoloured_pattern_takes_the_fill_colour_and_matrix() {
+    // Stencil cell drawn in whatever colour is set; the matrix moves it by 5.
+    let cell = stream(
+        "/PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 10 10] /XStep 20 /YStep 20 \
+         /Matrix [1 0 0 1 5 5] /Resources << >>",
+        b"1 0 0 rg 0 0 10 10 re f",
+    );
+    let p = render_with(
+        "",
+        b"/P2 cs 0 0 1 /P scn 0 0 100 100 re f",
+        "<< /Pattern << /P 5 0 R >> /ColorSpace << /P2 [/Pattern /DeviceRGB] >> >>",
+        &[cell],
+    );
+    // The cell's own red is ignored.
+    assert_eq!(at(&p, 10, 10), BLUE);
+    assert_eq!(at(&p, 50, 30), BLUE);
+    assert_eq!(at(&p, 2, 2), WHITE);
+    assert_eq!(at(&p, 20, 10), WHITE);
+}
+
+#[test]
+fn shading_pattern_fills_and_strokes() {
+    let extended = AXIAL_RED_BLUE.replace(">> >>", ">> /Extend [true true] >>");
+    let p = render_with(
+        "",
+        b"/Pattern cs /P scn 0 0 100 40 re f /Pattern CS /P SCN 10 w 0 70 m 100 70 l S",
+        &format!("<< /Pattern << /P << /PatternType 2 /Shading {extended} >> >> >>"),
+        &[],
+    );
+    assert_eq!(at(&p, 5, 20), RED);
+    assert_eq!(at(&p, 95, 20), BLUE);
+    assert!(near(at(&p, 50, 70), [128, 0, 127]));
+    assert_eq!(at(&p, 50, 50), WHITE);
+}
+
+#[test]
+fn separation_uses_its_tint_transform() {
+    // Tint t maps to RGB (t, 0, 1 - t).
+    let resources = "<< /ColorSpace << /Spot [/Separation /Spot /DeviceRGB \
+         << /FunctionType 2 /Domain [0 1] /C0 [0 0 1] /C1 [1 0 0] /N 1 >>] >> >>";
+    let p = render_with(
+        "",
+        b"/Spot cs 1 sc 0 0 50 100 re f 0 sc 50 0 50 100 re f",
+        resources,
+        &[],
+    );
+    assert_eq!(at(&p, 25, 50), RED);
+    assert_eq!(at(&p, 75, 50), BLUE);
+}
+
+#[test]
+fn multiply_blend_mode_darkens() {
+    // Red, then 50% grey multiplied over half of it.
+    let p = render_with(
+        "",
+        b"1 0 0 rg 0 0 100 100 re f /M gs 0.5 g 50 0 50 100 re f",
+        "<< /ExtGState << /M << /BM /Multiply >> >> >>",
+        &[],
+    );
+    assert_eq!(at(&p, 25, 50), RED);
+    assert!(near(at(&p, 75, 50), [128, 0, 0]), "{:?}", at(&p, 75, 50));
+}
+
+#[test]
+fn blend_mode_array_and_q_restore() {
+    // The first known mode in the array wins; Q goes back to Normal.
+    let p = render_with(
+        "",
+        b"0 0 1 rg 0 0 100 100 re f q /S gs 1 0 0 rg 0 0 50 100 re f Q 1 0 0 rg 50 0 50 50 re f",
+        "<< /ExtGState << /S << /BM [/NoSuchMode /Screen] >> >> >>",
+        &[],
+    );
+    assert_eq!(at(&p, 25, 50), [255, 0, 255]);
+    assert_eq!(at(&p, 75, 25), RED);
+    assert_eq!(at(&p, 75, 75), BLUE);
+}
+
+#[test]
+fn luminosity_soft_mask_fades_painting() {
+    // The mask group is white on the left half, black on the right, and
+    // 50% grey in the top right corner.
+    let group = stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 100 100] \
+         /Group << /S /Transparency /CS /DeviceGray >>",
+        b"1 g 0 0 50 100 re f 0.5 g 50 50 50 50 re f",
+    );
+    let p = render_with(
+        "",
+        b"/SM gs 0 0 1 rg 0 0 100 100 re f",
+        "<< /ExtGState << /SM << /SMask << /S /Luminosity /G 5 0 R >> >> >> >>",
+        &[group],
+    );
+    assert_eq!(at(&p, 25, 50), BLUE);
+    assert_eq!(at(&p, 75, 25), WHITE);
+    assert!(
+        near(at(&p, 75, 75), [127, 127, 255]),
+        "{:?}",
+        at(&p, 75, 75)
+    );
+}
+
+#[test]
+fn alpha_soft_mask_and_none_turns_it_off() {
+    let group = stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency >>",
+        b"0 0 0 rg 0 0 100 50 re f",
+    );
+    let p = render_with(
+        "",
+        b"q /SM gs 1 0 0 rg 0 0 100 100 re f Q /Off gs 0 0 1 rg 0 0 20 20 re f",
+        "<< /ExtGState << /SM << /SMask << /S /Alpha /G 5 0 R >> >> \
+           /Off << /SMask /None >> >> >>",
+        &[group],
+    );
+    assert_eq!(at(&p, 50, 25), RED);
+    assert_eq!(at(&p, 50, 75), WHITE);
+    assert_eq!(at(&p, 10, 10), BLUE);
+}
+
+#[test]
+fn group_opacity_applies_to_the_group_as_a_whole() {
+    // Two overlapping opaque squares in a group drawn at 50%: the overlap
+    // is no darker than the rest.
+    let group = stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency >>",
+        b"0 0 1 rg 10 10 50 50 re f 40 40 50 50 re f",
+    );
+    let p = render_with(
+        "",
+        b"/H gs /G Do",
+        "<< /ExtGState << /H << /ca 0.5 >> >> /XObject << /G 5 0 R >> >>",
+        &[group],
+    );
+    let half = at(&p, 20, 20);
+    assert!(near(half, [127, 127, 255]), "{half:?}");
+    assert_eq!(at(&p, 50, 50), half);
+    assert_eq!(at(&p, 80, 80), half);
+    assert_eq!(at(&p, 80, 20), WHITE);
+}
+
+#[test]
+fn isolated_group_blends_against_nothing() {
+    // Inside an isolated group, Difference has nothing to mix with, so the
+    // green square keeps its colour over the red page.
+    let group = stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 100 100] \
+         /Group << /S /Transparency /I true >> /Resources << /ExtGState << /D << /BM /Difference >> >> >>",
+        b"/D gs 0 1 0 rg 20 20 60 60 re f",
+    );
+    let p = render_with(
+        "",
+        b"1 0 0 rg 0 0 100 100 re f /G Do",
+        "<< /XObject << /G 5 0 R >> >>",
+        &[group],
+    );
+    assert_eq!(at(&p, 50, 50), [0, 255, 0]);
+    assert_eq!(at(&p, 10, 10), RED);
+}
+
+#[test]
+fn group_is_clipped_by_the_page_clip() {
+    let group = stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency >>",
+        b"0 0 1 rg 0 0 100 100 re f",
+    );
+    let p = render_with(
+        "",
+        b"0 0 50 100 re W n /H gs /G Do",
+        "<< /ExtGState << /H << /ca 0.5 >> >> /XObject << /G 5 0 R >> >>",
+        &[group],
+    );
+    assert!(near(at(&p, 25, 50), [127, 127, 255]));
+    assert_eq!(at(&p, 75, 50), WHITE);
+}
+
+#[test]
+fn soft_mask_that_uses_itself_terminates() {
+    // The mask group sets the same soft mask while it is being drawn.
+    let group = stream(
+        "/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency >> \
+         /Resources << /ExtGState << /SM 6 0 R >> >>",
+        b"/SM gs 0 g 0 0 100 100 re f",
+    );
+    let p = render_with(
+        "",
+        b"/SM gs 1 0 0 rg 0 0 100 100 re f",
+        "<< /ExtGState << /SM 6 0 R >> >>",
+        &[group, b"<< /SMask << /S /Alpha /G 5 0 R >> >>".to_vec()],
+    );
+    assert_eq!(at(&p, 50, 50), RED);
+}
+
+#[test]
+fn ccitt_group_4_image() {
+    // 8 x 2 pixels, both rows white-white-black-black-black-white-white-
+    // white: H(2 white, 3 black) V0 on the first row, V0 V0 V0 on the
+    // second.
+    let image = stream(
+        "/Type /XObject /Subtype /Image /Width 8 /Height 2 /ColorSpace /DeviceGray \
+         /BitsPerComponent 1 /Filter /CCITTFaxDecode /DecodeParms << /K -1 /Columns 8 >>",
+        &[0b0010_1111, 0b0111_1000],
+    );
+    let p = render_with(
+        "",
+        b"100 0 0 100 0 0 cm /Im Do",
+        "<< /XObject << /Im 5 0 R >> >>",
+        &[image],
+    );
+    assert_eq!(at(&p, 10, 50), WHITE);
+    assert_eq!(at(&p, 40, 25), [0, 0, 0]);
+    assert_eq!(at(&p, 40, 75), [0, 0, 0]);
+    assert_eq!(at(&p, 80, 50), WHITE);
+}
+
+/// A JPEG 2000 fixture from atelier-filters and OpenJPEG's decode of it.
+fn jpx_fixture(name: &str) -> Vec<u8> {
+    std::fs::read(format!(
+        "{}/../atelier-filters/tests/data/jpx/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap()
+}
+
+fn jpx_page(file: &str, dict_extra: &str) -> Pixmap {
+    let image = stream(
+        &format!(
+            "/Type /XObject /Subtype /Image /Width 67 /Height 45 /Filter /JPXDecode {dict_extra}"
+        ),
+        &jpx_fixture(file),
+    );
+    // One pixel per unit, top left corner at the top of the page.
+    render_with(
+        "",
+        b"67 0 0 45 0 55 cm /Im Do",
+        "<< /XObject << /Im 5 0 R >> >>",
+        &[image],
+    )
+}
+
+#[test]
+fn jpx_image_matches_openjpeg() {
+    let p = jpx_page("rgb-layers.j2k", "");
+    let expected = jpx_fixture("rgb-layers.pnm");
+    let pixels = &expected[expected.len() - 67 * 45 * 3..];
+    for y in 0..45 {
+        for x in 0..67 {
+            let i = (y * 67 + x) * 3;
+            assert_eq!(
+                at(&p, x, 99 - y),
+                [pixels[i], pixels[i + 1], pixels[i + 2]],
+                "({x}, {y})"
+            );
+        }
+    }
+    // A declared one-component space keeps only the first channel.
+    let gray = jpx_page("rgb-layers.j2k", "/ColorSpace /DeviceGray");
+    assert_eq!(at(&gray, 5, 95), [pixels[5 * 3 + 4 * 67 * 3]; 3]);
+}
+
+#[test]
+fn jpx_alpha_needs_smask_in_data() {
+    // rgba.jp2's opacity runs from 0 at the left to 251 at the right.
+    let opaque = jpx_page("rgba.jp2", "");
+    let blended = jpx_page("rgba.jp2", "/SMaskInData 1");
+    assert_ne!(at(&opaque, 0, 80), WHITE);
+    assert_eq!(at(&blended, 0, 80), WHITE);
+    let (a, b) = (at(&blended, 66, 80), at(&opaque, 66, 80));
+    assert!(
+        a.iter().zip(b).all(|(&a, b)| a.abs_diff(b) <= 5),
+        "{a:?} {b:?}"
+    );
+}
+
+#[test]
+fn jbig2_image_with_globals() {
+    // jbig2enc's symbol coding of a 400 x 120 page, with the symbol
+    // dictionary in a JBIG2Globals stream. Drawn at one pixel per unit, so
+    // the top left 100 x 100 must match the source bitmap exactly.
+    let data = |name: &str| {
+        std::fs::read(format!(
+            "{}/../atelier-filters/tests/data/jbig2/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
+    let image = stream(
+        "/Type /XObject /Subtype /Image /Width 400 /Height 120 /ColorSpace /DeviceGray \
+         /BitsPerComponent 1 /Filter /JBIG2Decode /DecodeParms << /JBIG2Globals 6 0 R >>",
+        &data("symbol.jb2"),
+    );
+    let globals = stream("", &data("symbol-globals.jb2"));
+    let p = render_with(
+        "",
+        b"400 0 0 120 0 -20 cm /Im Do",
+        "<< /XObject << /Im 5 0 R >> >>",
+        &[image, globals],
+    );
+    let pbm = data("symbol.pbm");
+    let pixels = &pbm[pbm.len() - 50 * 120..];
+    let mut black = 0;
+    for y in 0..100 {
+        for x in 0..100 {
+            let bit = (pixels[y * 50 + x / 8] >> (7 - x % 8)) & 1;
+            let expected = if bit == 1 { [0, 0, 0] } else { WHITE };
+            assert_eq!(at(&p, x, 99 - y), expected, "({x}, {y})");
+            black += usize::from(bit);
+        }
+    }
+    assert!(black > 500, "the test area should hold text");
+}
+
+/// An ICC test profile and what Little CMS converts `input` to with it
+/// (see tools/icc_samples.py).
+fn icc_fixture(name: &str, input: &[u8]) -> (Vec<u8>, [u8; 3]) {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../atelier-color/tests/data/");
+    let profile = std::fs::read(format!("{dir}{name}.icc")).unwrap();
+    let reference = std::fs::read(format!("{dir}{name}.ref")).unwrap();
+    let n = input.len();
+    let expected = reference
+        .chunks(n + 3)
+        .find(|row| &row[..n] == input)
+        .map(|row| [row[n], row[n + 1], row[n + 2]])
+        .unwrap();
+    (profile, expected)
+}
+
+fn close(a: [u8; 3], b: [u8; 3], tolerance: i32) -> bool {
+    a.iter()
+        .zip(b)
+        .all(|(&x, y)| (x as i32 - y as i32).abs() <= tolerance)
+}
+
+fn operands(input: &[u8]) -> String {
+    input
+        .iter()
+        .map(|&v| format!("{} ", v as f32 / 255.0))
+        .collect()
+}
+
+#[test]
+fn icc_based_colour_matches_little_cms() {
+    let input = [255, 51, 0];
+    let (profile, expected) = icc_fixture("rgb-matrix", &input);
+    let content = format!("/C cs {}sc 0 0 100 100 re f", operands(&input));
+    let p = render_with(
+        "",
+        content.as_bytes(),
+        "<< /ColorSpace << /C [/ICCBased 5 0 R] >> >>",
+        &[stream("/N 3", &profile)],
+    );
+    assert!(
+        close(at(&p, 50, 50), expected, 2),
+        "{:?} vs {expected:?}",
+        at(&p, 50, 50)
+    );
+}
+
+#[test]
+fn icc_profile_with_the_wrong_component_count_uses_the_alternate() {
+    let (profile, _) = icc_fixture("rgb-matrix", &[0, 0, 0]);
+    let p = render_with(
+        "",
+        b"/C cs 0.5 sc 0 0 100 100 re f",
+        "<< /ColorSpace << /C [/ICCBased 5 0 R] >> >>",
+        &[stream("/N 1 /Alternate /DeviceGray", &profile)],
+    );
+    assert!(
+        close(at(&p, 50, 50), [128, 128, 128], 1),
+        "{:?}",
+        at(&p, 50, 50)
+    );
+}
+
+#[test]
+fn default_rgb_replaces_device_rgb() {
+    let input = [255, 51, 0];
+    let (profile, expected) = icc_fixture("rgb-matrix", &input);
+    let content = format!("{}rg 0 0 50 100 re f", operands(&input));
+    let p = render_with(
+        "",
+        content.as_bytes(),
+        "<< /ColorSpace << /DefaultRGB [/ICCBased 5 0 R] >> >>",
+        &[stream("/N 3", &profile)],
+    );
+    assert!(
+        close(at(&p, 25, 50), expected, 2),
+        "{:?} vs {expected:?}",
+        at(&p, 25, 50)
+    );
+    // Without it, DeviceRGB is sRGB.
+    let plain = render(content.as_bytes());
+    assert_eq!(at(&plain, 25, 50), [255, 51, 0]);
+}
+
+#[test]
+fn output_intent_profiles_device_cmyk() {
+    let input = [191, 64, 0, 128];
+    let (profile, expected) = icc_fixture("cmyk-lut16", &input);
+    let content = format!(
+        "{}k 0 0 50 100 re f 1 0 0 rg 50 0 50 100 re f",
+        operands(&input)
+    );
+    let data = build_with_catalog(
+        "/OutputIntents [<< /Type /OutputIntent /S /GTS_PDFX /DestOutputProfile 5 0 R >>]",
+        "",
+        content.as_bytes(),
+        "<< >>",
+        &[stream("/N 4", &profile)],
+    );
+    let p = render_doc(data);
+    assert!(
+        close(at(&p, 25, 50), expected, 2),
+        "{:?} vs {expected:?}",
+        at(&p, 25, 50)
+    );
+    // DeviceRGB is left alone.
+    assert_eq!(at(&p, 75, 50), RED);
+}
+
+fn annot_page(annot: &str, extra: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+    let mut objects = vec![annot.as_bytes().to_vec()];
+    objects.extend(extra);
+    objects
+}
+
+#[test]
+fn annotation_appearance_is_fitted_to_its_rect() {
+    // A 10x10 appearance box stretched over the rect 20..60.
+    let objects = annot_page(
+        "<< /Type /Annot /Subtype /Square /Rect [20 20 60 60] /AP << /N 6 0 R >> >>",
+        vec![stream(
+            "/Type /XObject /Subtype /Form /BBox [0 0 10 10]",
+            b"1 0 0 rg 0 0 10 10 re f",
+        )],
+    );
+    let p = render_with("/Annots [5 0 R]", b"", "<< >>", &objects);
+    assert_eq!(at(&p, 25, 25), RED);
+    assert_eq!(at(&p, 55, 55), RED);
+    assert_eq!(at(&p, 65, 65), WHITE);
+    assert_eq!(at(&p, 15, 15), WHITE);
+}
+
+#[test]
+fn appearance_state_is_chosen_by_as() {
+    let objects = annot_page(
+        "<< /Type /Annot /Subtype /Widget /FT /Btn /Rect [10 10 30 30] /AS /Yes /AP << /N << /Yes 6 0 R /Off 7 0 R >> >> >>",
+        vec![
+            stream(
+                "/Type /XObject /Subtype /Form /BBox [0 0 20 20]",
+                b"0 0 1 rg 0 0 20 20 re f",
+            ),
+            stream(
+                "/Type /XObject /Subtype /Form /BBox [0 0 20 20]",
+                b"1 0 0 rg 0 0 20 20 re f",
+            ),
+        ],
+    );
+    let p = render_with("/Annots [5 0 R]", b"", "<< >>", &objects);
+    assert_eq!(at(&p, 20, 20), BLUE);
+}
+
+#[test]
+fn hidden_and_suppressed_annotations_are_skipped() {
+    let ap = || {
+        stream(
+            "/Type /XObject /Subtype /Form /BBox [0 0 10 10]",
+            b"1 0 0 rg 0 0 10 10 re f",
+        )
+    };
+    // Flag 2 is Hidden.
+    let objects = annot_page(
+        "<< /Type /Annot /Subtype /Square /F 2 /Rect [10 10 20 20] /AP << /N 6 0 R >> >>",
+        vec![ap()],
+    );
+    let p = render_with("/Annots [5 0 R]", b"", "<< >>", &objects);
+    assert_eq!(at(&p, 15, 15), WHITE);
+
+    // The viewer hides an annotation it is editing itself.
+    let objects = annot_page(
+        "<< /Type /Annot /Subtype /Square /Rect [10 10 20 20] /AP << /N 6 0 R >> >>",
+        vec![ap()],
+    );
+    let doc = Document::open(build("/Annots [5 0 R]", b"", "<< >>", &objects)).unwrap();
+    let page = &doc.pages().unwrap()[0];
+    let mut options = RenderOptions {
+        scale: 1.0,
+        ..RenderOptions::default()
+    };
+    assert_eq!(
+        at(&render_page(&doc, page, &options).unwrap().pixmap, 15, 15),
+        RED
+    );
+    options.hidden_annotations = vec![atelier_syntax::ObjRef {
+        num: 5,
+        generation: 0,
+    }];
+    assert_eq!(
+        at(&render_page(&doc, page, &options).unwrap().pixmap, 15, 15),
+        WHITE
+    );
+    options.hidden_annotations.clear();
+    options.annotations = false;
+    assert_eq!(
+        at(&render_page(&doc, page, &options).unwrap().pixmap, 15, 15),
+        WHITE
+    );
+}
+
+#[test]
+fn picks_spot_colour_and_lists_spots() {
+    use atelier_render::{PaintKind, probe_color, spot_colors};
+    // A spot colour with a CMYK tint transform (exponential, C0 = white).
+    let sep = "[/Separation /PANTONE#20185#20C /DeviceCMYK \
+               << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 0.91 0.76 0] /N 1 >>]";
+    let resources = format!("<< /ColorSpace << /CS0 {sep} >> >>");
+    let data = build(
+        "",
+        b"/CS0 cs 0.5 scn 10 10 40 40 re f 0 0 1 RG 4 w 60 50 m 90 50 l S",
+        &resources,
+        &[],
+    );
+    let doc = Document::open(data).unwrap();
+    let page = &doc.pages().unwrap()[0];
+    let options = RenderOptions {
+        scale: 1.0,
+        ..RenderOptions::default()
+    };
+    // Inside the box (user 30,30 -> device 30,70).
+    let p = probe_color(&doc, page, &options, (30, 70)).unwrap();
+    let paint = p.paint.unwrap();
+    assert_eq!(paint.kind, PaintKind::Fill);
+    assert_eq!(paint.spots, vec!["PANTONE 185 C".to_string()]);
+    assert_eq!(paint.components, vec![0.5]);
+    let (alt, values) = paint.alternate.unwrap();
+    assert_eq!(alt, "DeviceCMYK");
+    assert!((values[1] - 0.455).abs() < 1e-3);
+    assert!(p.rgb[0] > p.rgb[1]);
+    // On the blue line.
+    let p = probe_color(&doc, page, &options, (75, 50)).unwrap();
+    let paint = p.paint.unwrap();
+    assert_eq!(
+        (paint.kind, paint.space.as_str()),
+        (PaintKind::Stroke, "DeviceRGB")
+    );
+    assert_eq!(paint.components, vec![0.0, 0.0, 1.0]);
+    // Bare paper.
+    let p = probe_color(&doc, page, &options, (95, 5)).unwrap();
+    assert_eq!((p.rgb, p.paint), (WHITE, None));
+    let spots = spot_colors(&doc);
+    assert_eq!(spots.len(), 1);
+    assert_eq!(spots[0].name, "PANTONE 185 C");
+    assert!(spots[0].space.starts_with("Separation PANTONE 185 C"));
 }

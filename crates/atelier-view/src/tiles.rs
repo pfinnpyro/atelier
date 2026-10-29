@@ -204,6 +204,18 @@ impl<T> TileCache<T> {
             .map(|(k, e)| (k, &e.value))
     }
 
+    /// Drops every tile of a page, for a page whose size or turn changed.
+    pub fn remove_page(&mut self, page: usize) {
+        let bytes = &mut self.bytes;
+        self.entries.retain(|k, e| {
+            let keep = k.page != page;
+            if !keep {
+                *bytes -= e.bytes;
+            }
+            keep
+        });
+    }
+
     pub fn clear(&mut self) {
         self.entries.clear();
         self.bytes = 0;

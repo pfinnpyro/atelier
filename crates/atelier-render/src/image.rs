@@ -1,6 +1,9 @@
 //! Image XObjects and inline images (ISO 32000-2, 8.9) to RGBA.
 
-use atelier_filters::decode_dct;
+use std::sync::Arc;
+
+use atelier_color::{Intent, Profile, Sampled};
+use atelier_filters::{decode_dct, decode_jpx};
 use atelier_raster::{Color, RgbaImage};
 use atelier_syntax::{Dict, Document, ImageFilter, Object, Stream};
 
@@ -26,6 +29,13 @@ struct CodecOutput {
     width: usize,
     height: usize,
     components: usize,
+    /// An opacity channel carried inside the image (JPEG 2000).
+    alpha: Option<Vec<u8>>,
+    /// JPEG 2000 images ignore /Decode (except as masks).
+    ignore_decode: bool,
+    /// The codec's own colour space (a JPEG 2000 ICC profile), used when
+    /// the image dictionary names none.
+    space: Option<ColorSpace>,
 }
 
 /// Runs the image codec named by `filter`, if any.
@@ -46,9 +56,29 @@ fn run_codec(
                 height: j.height,
                 components: j.components,
                 data: j.data,
+                alpha: None,
+                ignore_decode: false,
+                space: None,
             }))
         }
-        Some((f, _)) => Err(format!("{f:?} images are not decoded yet")),
+        Some((ImageFilter::Jpx, _)) => {
+            let j = decode_jpx(data).map_err(|e| format!("JPEG 2000 image: {e}"))?;
+            let space = j
+                .icc
+                .as_deref()
+                .and_then(|icc| Profile::parse(icc, Intent::RelativeColorimetric))
+                .filter(|p| p.components() == j.components)
+                .map(|p| ColorSpace::Icc(Arc::new(p)));
+            Ok(Some(CodecOutput {
+                space,
+                width: j.width,
+                height: j.height,
+                components: j.components,
+                data: j.data,
+                alpha: j.alpha,
+                ignore_decode: true,
+            }))
+        }
     }
 }
 
@@ -93,13 +123,24 @@ pub fn decode(
         d.as_array()
             .map(|a| a.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect())
     });
+    let colour_decode = decode_array
+        .clone()
+        .filter(|_| !codec.as_ref().is_some_and(|c| c.ignore_decode));
 
     let image = if is_mask {
         // Stencil mask: sample 0 paints the fill colour, unless Decode is [1 0].
         let invert = decode_array
             .as_ref()
             .is_some_and(|d| d.first() == Some(&1.0));
-        let bits = unpack(data, width, height, 1, 1);
+        let bits = match &codec {
+            // A codec's mask comes out as 8-bit samples of its first channel.
+            Some(c) => data
+                .iter()
+                .step_by(c.components.max(1))
+                .map(|&v| u32::from(v >= 128))
+                .collect(),
+            None => unpack(data, width, height, 1, 1),
+        };
         let px = fill.to_premultiplied();
         let mut out = vec![0u8; width * height * 4];
         for (i, &v) in bits.iter().enumerate() {
@@ -126,23 +167,41 @@ pub fn decode(
             get(dict, b"ColorSpace", b"CS").and_then(|o| colorspace::parse(doc, o, resources));
         let cs = match (&codec, declared) {
             // The codec's component count wins over a missing or
-            // mismatched colour space.
-            (Some(c), Some(cs)) if cs.components() == c.components => cs,
-            (Some(c), _) => match c.components {
-                1 => ColorSpace::Gray,
-                4 => ColorSpace::Cmyk,
-                _ => ColorSpace::Rgb,
+            // mismatched colour space; extra channels are dropped.
+            (Some(c), Some(cs)) if cs.components() <= c.components => cs,
+            (Some(c), _) => match &c.space {
+                Some(space) => space.clone(),
+                None => colorspace::device(
+                    doc,
+                    resources,
+                    match c.components {
+                        1 | 2 => 1,
+                        4 => 4,
+                        _ => 3,
+                    },
+                ),
             },
             (None, cs) => cs?,
         };
-        if matches!(cs, ColorSpace::Pattern) {
+        if matches!(cs, ColorSpace::Pattern { .. }) {
             return None;
         }
         let n = cs.components();
+        let repacked: Vec<u8>;
+        let data = match &codec {
+            Some(c) if c.components > n => {
+                repacked = data
+                    .chunks_exact(c.components)
+                    .flat_map(|px| px[..n].iter().copied())
+                    .collect();
+                &repacked[..]
+            }
+            _ => data,
+        };
         let samples = unpack(data, width, height, n, bpc);
         let max = ((1u32 << bpc) - 1) as f32;
         let ranges: Vec<(f32, f32)> = (0..n)
-            .map(|i| match &decode_array {
+            .map(|i| match &colour_decode {
                 Some(d) if d.len() >= 2 * n => (d[2 * i], d[2 * i + 1]),
                 _ => cs.decode_range(bpc),
             })
@@ -161,6 +220,37 @@ pub fn decode(
 
         let mut out = vec![0u8; width * height * 4];
         let mut comps = vec![0f32; n];
+        // One-component images (gray, Indexed, Separation) convert every
+        // possible sample once, so tint transforms run at most 2^bpc times.
+        let table: Option<Vec<[u8; 4]>> = (n == 1).then(|| {
+            (0..=max as u32)
+                .map(|v| {
+                    let (lo, hi) = ranges[0];
+                    cs.to_rgb(&[lo + v as f32 * (hi - lo) / max])
+                        .map_or([0; 4], Color::to_premultiplied)
+                })
+                .collect()
+        });
+        // Costly spaces (ICC, calibrated, DeviceN with tint functions) are
+        // sampled on a grid once and interpolated per pixel.
+        let grid = ((2..=4).contains(&n) && cs.is_costly() && width * height > 16_384)
+            .then(|| {
+                let points = match n {
+                    2 => 65,
+                    3 => 33,
+                    _ => 17,
+                };
+                Sampled::new(n, points, |x| {
+                    let comps: Vec<f32> = x
+                        .iter()
+                        .zip(&ranges)
+                        .map(|(&v, &(lo, hi))| lo + v * (hi - lo))
+                        .collect();
+                    cs.to_rgb(&comps).map_or([0.0; 3], |c| [c.r, c.g, c.b])
+                })
+            })
+            .flatten();
+        let mut unit = vec![0f32; n];
         let mut cache: Option<(Vec<u32>, [u8; 4])> = None;
         for p in 0..width * height {
             let raw = &samples[p * n..(p + 1) * n];
@@ -174,8 +264,18 @@ pub fn decode(
                     continue;
                 }
             }
-            let px = match &cache {
-                Some((k, px)) if k.as_slice() == raw => *px,
+            let px = match (&table, &cache) {
+                (Some(t), _) => t[(raw[0] as usize).min(t.len() - 1)],
+                (None, Some((k, px))) if k.as_slice() == raw => *px,
+                _ if grid.is_some() => {
+                    for (u, &v) in unit.iter_mut().zip(raw) {
+                        *u = v as f32 / max;
+                    }
+                    let rgb = grid.as_ref().map_or([0.0; 3], |g| g.eval(&unit));
+                    let px = Color::rgb(rgb[0], rgb[1], rgb[2]).to_premultiplied();
+                    cache = Some((raw.to_vec(), px));
+                    px
+                }
                 _ => {
                     for (i, &v) in raw.iter().enumerate() {
                         let (lo, hi) = ranges[i];
@@ -203,6 +303,14 @@ pub fn decode(
     } else if let Some(Object::Stream(mask)) = resolve(dict.get(b"Mask")) {
         if let Some(alpha) = mask_alpha(doc, &mask, true) {
             apply_alpha(&mut image, &alpha);
+        }
+    } else if let Some(alpha) = codec.and_then(|c| c.alpha) {
+        // SMaskInData: a JPEG 2000 image's own opacity channel.
+        let in_data = resolve(dict.get(b"SMaskInData"))
+            .and_then(|o| o.as_i64())
+            .unwrap_or(0);
+        if in_data != 0 && alpha.len() == width * height {
+            apply_alpha(&mut image, &(width, height, alpha));
         }
     }
     Some(ImageInfo { image, interpolate })

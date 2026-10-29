@@ -16,7 +16,16 @@ pub enum Family {
     Mono,
     Symbol,
     Dingbats,
-    Cjk,
+    Cjk { script: Script, serif: bool },
+}
+
+/// Which CJK fonts suit a character collection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Script {
+    Japanese,
+    Simplified,
+    Traditional,
+    Korean,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -173,19 +182,129 @@ fn candidates(w: Want) -> Vec<&'static str> {
             "DejaVuSans.ttf",
             "FreeSerif.ttf",
         ],
-        Family::Dingbats => vec!["wingding.ttf", "DejaVuSans.ttf", "FreeSerif.ttf"],
-        Family::Cjk => vec![
-            "msgothic.ttc",
-            "YuGothR.ttc",
-            "msyh.ttc",
-            "simsun.ttc",
-            "Hiragino Sans GB.ttc",
-            "NotoSansCJK-Regular.ttc",
-            "wqy-zenhei.ttc",
-            "fonts-japanese-gothic.ttf",
-            "ipag.ttf",
+        // ZapfDingbats glyphs are found by Unicode (a20 is U+2714), which
+        // Segoe UI Symbol covers on Windows; Wingdings uses its own codes.
+        Family::Dingbats => vec![
+            "seguisym.ttf",
             "DejaVuSans.ttf",
+            "FreeSerif.ttf",
+            "wingding.ttf",
         ],
+        Family::Cjk { script, serif } => cjk(script, serif),
+    }
+}
+
+/// CJK fonts for a script, the style asked for first. Windows, macOS and
+/// common Linux packages; any CJK font beats none, so the others follow.
+fn cjk(script: Script, serif: bool) -> Vec<&'static str> {
+    let (sans, mincho) = cjk_lists(script);
+    let (first, second) = if serif {
+        (mincho, sans)
+    } else {
+        (sans, mincho)
+    };
+    let mut out: Vec<&'static str> = first.iter().chain(second).copied().collect();
+    // Then any CJK font at all, and Unicode fonts with some coverage.
+    for s in [
+        Script::Japanese,
+        Script::Simplified,
+        Script::Traditional,
+        Script::Korean,
+    ] {
+        let (a, b) = cjk_lists(s);
+        for name in a.iter().chain(b) {
+            if !out.contains(name) {
+                out.push(name);
+            }
+        }
+    }
+    out.extend(["Arial Unicode.ttf", "ARIALUNI.TTF", "DejaVuSans.ttf"]);
+    out
+}
+
+/// Sans and serif CJK fonts for a script, best first.
+fn cjk_lists(script: Script) -> (&'static [&'static str], &'static [&'static str]) {
+    match script {
+        Script::Japanese => (
+            &[
+                "YuGothM.ttc",
+                "YuGothR.ttc",
+                "meiryo.ttc",
+                "msgothic.ttc",
+                "ヒラギノ角ゴシック W3.ttc",
+                "NotoSansCJKjp-Regular.otf",
+                "NotoSansCJK-Regular.ttc",
+                "ipag.ttf",
+                "ipagp.ttf",
+                "fonts-japanese-gothic.ttf",
+            ],
+            &[
+                "yumin.ttf",
+                "msmincho.ttc",
+                "ヒラギノ明朝 ProN.ttc",
+                "NotoSerifCJKjp-Regular.otf",
+                "NotoSerifCJK-Regular.ttc",
+                "ipam.ttf",
+                "ipamp.ttf",
+                "fonts-japanese-mincho.ttf",
+            ],
+        ),
+        Script::Simplified => (
+            &[
+                "msyh.ttc",
+                "simhei.ttf",
+                "PingFang.ttc",
+                "Hiragino Sans GB.ttc",
+                "NotoSansCJKsc-Regular.otf",
+                "NotoSansCJK-Regular.ttc",
+                "wqy-microhei.ttc",
+                "wqy-zenhei.ttc",
+            ],
+            &[
+                "simsun.ttc",
+                "Songti.ttc",
+                "NotoSerifCJKsc-Regular.otf",
+                "NotoSerifCJK-Regular.ttc",
+                "uming.ttc",
+            ],
+        ),
+        Script::Traditional => (
+            &[
+                "msjh.ttc",
+                "PingFang.ttc",
+                "NotoSansCJKtc-Regular.otf",
+                "NotoSansCJK-Regular.ttc",
+                "wqy-microhei.ttc",
+                "wqy-zenhei.ttc",
+            ],
+            &[
+                "mingliu.ttc",
+                "Songti.ttc",
+                "NotoSerifCJKtc-Regular.otf",
+                "NotoSerifCJK-Regular.ttc",
+                "bsmi00lp.ttf",
+                "uming.ttc",
+            ],
+        ),
+        Script::Korean => (
+            &[
+                "malgun.ttf",
+                "gulim.ttc",
+                "AppleSDGothicNeo.ttc",
+                "NotoSansCJKkr-Regular.otf",
+                "NotoSansCJK-Regular.ttc",
+                "NanumGothic.ttf",
+                "UnDotum.ttf",
+            ],
+            &[
+                "batang.ttc",
+                "AppleMyungjo.ttf",
+                "NotoSerifCJKkr-Regular.otf",
+                "NotoSerifCJK-Regular.ttc",
+                "NanumMyeongjo.ttf",
+                "UnBatang.ttf",
+            ],
+        ),
     }
 }
 
@@ -202,10 +321,25 @@ pub fn substitute(want: Want) -> Option<Arc<FontProgram>> {
         return hit.clone();
     }
     let dirs = dirs();
+    // A CJK font must have the script's letters: a Japanese font may have
+    // no Hangul, for one.
+    let probe = match want.family {
+        Family::Cjk { script, .. } => Some(match script {
+            Script::Japanese => 'あ',
+            Script::Simplified => '们',
+            Script::Traditional => '們',
+            Script::Korean => '한',
+        }),
+        _ => None,
+    };
     let found = candidates(want).into_iter().find_map(|name| {
         dirs.iter().find_map(|d| {
             let data = std::fs::read(d.join(name)).ok()?;
-            FontProgram::parse(&data).ok().map(Arc::new)
+            let program = FontProgram::parse(&data).ok()?;
+            if let Some(c) = probe {
+                program.glyph_by_unicode(c).filter(|&g| g != 0)?;
+            }
+            Some(Arc::new(program))
         })
     });
     if let Ok(mut c) = cache().lock() {

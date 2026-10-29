@@ -7,14 +7,22 @@
 //! same units with the origin at the top left of one page. User space is
 //! the PDF's own coordinates (points, y up).
 
+mod inspect;
 mod layout;
+mod orient;
+mod outline;
 mod search;
 mod select;
 mod tiles;
 
+pub use inspect::{
+    Fact, Picked, children, has_children, object_at, overview, preview, revisions, summary,
+};
 pub use layout::{Layout, PageGeom, ViewRect};
+pub use orient::{Basis, gray_of_rgba, upright_from_image, upright_page, upright_rotation};
+pub use outline::{OutlineItem, bookmarks, headings};
 pub use search::{SearchMatch, find_in_page};
-pub use select::{Caret, Selection, hit_test};
+pub use select::{Caret, Selection, hit_test, word_at};
 pub use tiles::{
     PREVIEW_SCALE, TILE_SIZE, TileCache, TileKey, scale_key, tiles_at_scale, tiles_for_view,
 };

@@ -9,12 +9,18 @@ rust-version = "1.85"
 publish = false
 
 [workspace.dependencies]
+atelier-color = { path = "crates/atelier-color" }
+atelier-crypto = { path = "crates/atelier-crypto" }
 atelier-filters = { path = "crates/atelier-filters" }
 atelier-font = { path = "crates/atelier-font" }
+atelier-form = { path = "crates/atelier-form" }
 atelier-syntax = { path = "crates/atelier-syntax" }
 atelier-raster = { path = "crates/atelier-raster" }
 atelier-render = { path = "crates/atelier-render" }
+atelier-ocr = { path = "crates/atelier-ocr" }
+atelier-print = { path = "crates/atelier-print" }
 atelier-view = { path = "crates/atelier-view" }
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -24,3 +30,9 @@ all = { level = "warn", priority = -1 }
 
 [profile.release]
 debug = 1
+
+# The image codecs are unusably slow unoptimised; keep them fast in debug
+# builds and tests too.
+[profile.dev.package.atelier-filters]
+opt-level = 2
+

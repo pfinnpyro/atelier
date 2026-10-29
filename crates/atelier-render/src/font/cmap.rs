@@ -8,7 +8,8 @@ use atelier_syntax::{ContentParser, Object};
 pub struct CMap {
     /// Code space ranges: byte length, low and high bytes.
     codespace: Vec<(usize, Vec<u8>, Vec<u8>)>,
-    /// Code ranges to CIDs: (low, high, first CID).
+    /// Code ranges to CIDs: (low, high, first CID), sorted and not
+    /// overlapping once parsed (see `normalise`).
     cid_ranges: Vec<(u32, u32, u32)>,
     /// Single codes to Unicode text.
     unicode: HashMap<u32, String>,
@@ -19,13 +20,42 @@ pub struct CMap {
     identity: bool,
 }
 
-/// CMaps a `usecmap` may pull in, by name. Only the identity CMaps are
-/// built in for now.
+/// CMaps a font or a `usecmap` may name: the identity CMaps and Adobe's
+/// CJK ones.
 fn predefined(name: &[u8]) -> Option<CMap> {
     match name {
         b"Identity-H" | b"Identity-V" => Some(CMap::identity(name == b"Identity-V")),
-        _ => None,
+        _ => super::predefined::load(name),
     }
+}
+
+/// Sorts code to CID ranges into ones that do not overlap, later ranges
+/// winning where they do.
+fn normalise(ranges: &[(u32, u32, u32)]) -> Vec<(u32, u32, u32)> {
+    use std::collections::BTreeMap;
+    let mut map: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
+    for &(lo, hi, cid) in ranges {
+        if hi < lo {
+            continue;
+        }
+        let hit: Vec<(u32, u32, u32)> = map
+            .range(..=hi)
+            .rev()
+            .take_while(|(_, (end, _))| *end >= lo)
+            .map(|(&s, &(e, c))| (s, e, c))
+            .collect();
+        for (s, e, c) in hit {
+            map.remove(&s);
+            if s < lo {
+                map.insert(s, (lo - 1, c));
+            }
+            if e > hi {
+                map.insert(hi + 1, (e, c.wrapping_add(hi + 1 - s)));
+            }
+        }
+        map.insert(lo, (hi, cid));
+    }
+    map.into_iter().map(|(s, (e, c))| (s, e, c)).collect()
 }
 
 impl CMap {
@@ -38,9 +68,36 @@ impl CMap {
         }
     }
 
-    /// A predefined CMap by name. Returns `None` for ones we do not ship yet.
+    /// A predefined CMap by name, or `None` for an unknown name.
     pub fn predefined(name: &[u8]) -> Option<Self> {
         predefined(name)
+    }
+
+    /// A CMap from code space ranges and code to CID ranges (later ones
+    /// winning), on top of an optional parent.
+    pub(super) fn from_parts(
+        codespace: Vec<(usize, Vec<u8>, Vec<u8>)>,
+        ranges: &[(u32, u32, u32)],
+        vertical: bool,
+        parent: Option<CMap>,
+    ) -> CMap {
+        let mut cmap = CMap {
+            codespace,
+            cid_ranges: ranges.to_vec(),
+            vertical,
+            ..CMap::default()
+        };
+        if let Some(p) = parent {
+            cmap.inherit(p);
+        } else {
+            cmap.cid_ranges = normalise(&cmap.cid_ranges);
+        }
+        cmap
+    }
+
+    /// The code to CID ranges, sorted and not overlapping.
+    pub(super) fn ranges(&self) -> &[(u32, u32, u32)] {
+        &self.cid_ranges
     }
 
     pub fn parse(data: &[u8]) -> Self {
@@ -153,6 +210,7 @@ impl CMap {
                 _ => {}
             }
         }
+        cmap.cid_ranges = normalise(&cmap.cid_ranges);
         cmap
     }
 
@@ -161,6 +219,7 @@ impl CMap {
         self.codespace.extend(parent.codespace);
         let own = std::mem::replace(&mut self.cid_ranges, parent.cid_ranges);
         self.cid_ranges.extend(own);
+        self.cid_ranges = normalise(&self.cid_ranges);
         self.identity |= parent.identity;
         self.vertical |= parent.vertical;
     }
@@ -200,11 +259,9 @@ impl CMap {
     }
 
     pub fn cid(&self, code: u32) -> u32 {
-        // Later ranges override earlier ones, as later definitions win.
-        for &(lo, hi, cid) in self.cid_ranges.iter().rev() {
-            if (lo..=hi).contains(&code) {
-                return cid + (code - lo);
-            }
+        let i = self.cid_ranges.partition_point(|r| r.1 < code);
+        if let Some(&(lo, _, cid)) = self.cid_ranges.get(i).filter(|r| r.0 <= code) {
+            return cid.wrapping_add(code - lo);
         }
         if self.identity { code } else { 0 }
     }
@@ -223,6 +280,45 @@ impl CMap {
             }
         }
         None
+    }
+
+    /// Every code with Unicode text, for building a reverse map. Ranges are
+    /// capped so a hostile CMap cannot make this huge.
+    pub fn unicode_codes(&self) -> Vec<(u32, String)> {
+        let mut out: Vec<(u32, String)> =
+            self.unicode.iter().map(|(&c, s)| (c, s.clone())).collect();
+        let mut budget = 1 << 16;
+        for &(lo, hi, _) in &self.unicode_ranges {
+            for code in lo..=hi {
+                if budget == 0 {
+                    break;
+                }
+                budget -= 1;
+                if let Some(s) = self.unicode(code) {
+                    out.push((code, s));
+                }
+            }
+        }
+        out.sort_by_key(|e| e.0);
+        out
+    }
+
+    /// The bytes of `code` as it appears in a string: as many as the
+    /// smallest code space range that holds it.
+    pub fn code_bytes(&self, code: u32) -> Vec<u8> {
+        let len = if self.identity {
+            2
+        } else {
+            self.codespace
+                .iter()
+                .filter(|(n, lo, hi)| {
+                    *n <= 4 && be(lo) <= code && code <= be(hi) && (*n == 4 || code >> (8 * n) == 0)
+                })
+                .map(|e| e.0)
+                .min()
+                .unwrap_or(if code > 0xFF { 2 } else { 1 })
+        };
+        code.to_be_bytes()[4 - len..].to_vec()
     }
 
     pub fn has_unicode(&self) -> bool {

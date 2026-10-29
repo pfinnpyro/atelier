@@ -92,6 +92,10 @@ impl Transform {
         Self::new(v[0], v[1], v[2], v[3], v[4], v[5])
     }
 
+    pub const fn to_array(&self) -> [f64; 6] {
+        [self.a, self.b, self.c, self.d, self.e, self.f]
+    }
+
     pub const fn translate(x: f64, y: f64) -> Self {
         Self::new(1.0, 0.0, 0.0, 1.0, x, y)
     }

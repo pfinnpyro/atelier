@@ -1,0 +1,278 @@
+//! Changes to the document as a whole: turning pages, by hand or by which
+//! way their text runs, and swapping in the document rebuilt after any
+//! change.
+
+use std::collections::HashSet;
+
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use atelier_ocr::models;
+use atelier_view::{Basis, Layout, PageGeom};
+
+use super::Viewer;
+use crate::settings::Settings;
+use crate::worker::OcrRun;
+
+impl Viewer {
+    /// Swaps in the document rebuilt from the changes. `pages` look
+    /// different now; `turned` says they also changed shape, so their tiles
+    /// are dropped and the pages laid out again. Otherwise old tiles stay
+    /// up until fresh ones arrive.
+    pub(super) fn rebuild(&mut self, pages: &HashSet<usize>, turned: bool) {
+        let keep_page = self.current_page();
+        let Some(o) = &mut self.open else { return };
+        let built = match o.session.build() {
+            Ok(b) => b,
+            Err(e) => {
+                self.error = Some(format!("Could not make the change: {e}"));
+                return;
+            }
+        };
+        if let Some(w) = built.warnings.first() {
+            self.error = Some(w.to_string());
+        }
+        if let (Some(fv), Some(form)) = (&mut o.form, built.form) {
+            fv.tab = form.tab_order(&built.doc);
+            fv.form = form;
+        }
+        o.doc = built.doc;
+        if turned {
+            if let Ok(p) = o.doc.pages() {
+                let zoom = o.layout.zoom();
+                o.layout = Layout::new(p.iter().map(PageGeom::of).collect(), zoom);
+            }
+            for &p in pages {
+                o.tiles.remove_page(p);
+                o.thumbs.remove(&p);
+            }
+            o.stale.retain(|k| !pages.contains(&k.page));
+        } else {
+            let stale: Vec<_> = pages
+                .iter()
+                .flat_map(|p| o.tiles.page_tiles(*p).map(|(k, _)| *k).collect::<Vec<_>>())
+                .collect();
+            o.stale.extend(stale);
+            o.thumb_stale.extend(pages.iter().copied());
+        }
+        o.failed.retain(|k| !pages.contains(&k.page));
+        // Work queued for the old document is dropped when it comes back.
+        self.generation += 1;
+        o.generation = self.generation;
+        if turned {
+            self.apply_fit();
+            self.go_to_page(keep_page);
+        }
+        self.update_title();
+    }
+
+    /// Turns every page a quarter clockwise (`quarters` = 1) or
+    /// counterclockwise (-1).
+    pub(super) fn rotate_pages(&mut self, quarters: i32) {
+        self.finish_editing(true);
+        let Some(o) = &mut self.open else { return };
+        let count = o.layout.page_count();
+        for p in 0..count {
+            let r = i32::from(o.session.rotation(p)) + 90 * quarters;
+            o.session.rotate(p, r);
+        }
+        self.rebuild(&(0..count).collect(), true);
+    }
+
+    /// Turns one page a quarter clockwise (1) or counterclockwise (-1).
+    pub(super) fn rotate_page(&mut self, page: usize, quarters: i32) {
+        self.finish_editing(true);
+        let Some(o) = &mut self.open else { return };
+        let r = i32::from(o.session.rotation(page)) + 90 * quarters;
+        o.session.rotate(page, r);
+        self.rebuild(&HashSet::from([page]), true);
+    }
+
+    /// Starts working out which way up each page reads.
+    pub(super) fn auto_orient(&mut self) {
+        self.start_orient(false);
+    }
+
+    /// Starts auto-orient. A quiet run (when a file opens) shows nothing
+    /// unless it turns pages or reads scans, and its turns do not count as
+    /// unsaved changes. Scans are read with OCR when it is on.
+    pub(super) fn start_orient(&mut self, quiet: bool) {
+        self.start_run(quiet, true);
+    }
+
+    /// Reads the scanned pages with OCR without turning any page.
+    pub(super) fn start_ocr(&mut self) {
+        self.start_run(true, false);
+    }
+
+    /// Whether OCR is on and its models are in place.
+    pub(super) fn ocr_ready(&self) -> bool {
+        self.settings.ocr && Settings::ocr_models_dir().is_some_and(|d| models::installed(&d))
+    }
+
+    fn start_run(&mut self, quiet: bool, turn: bool) {
+        let ocr = if self.ocr_ready() {
+            Settings::ocr_models_dir()
+        } else {
+            None
+        };
+        let Some(o) = &mut self.open else { return };
+        if o.orienting.is_some() {
+            return;
+        }
+        let done = Arc::new(AtomicUsize::new(0));
+        let ocr = ocr.map(|dir| OcrRun {
+            dir,
+            texts: o.ocr_texts.clone(),
+            read: Arc::new(AtomicUsize::new(0)),
+        });
+        o.orienting = Some(Orienting {
+            done: done.clone(),
+            total: o.layout.page_count(),
+            quiet,
+            turn,
+            read: ocr.as_ref().map(|r| r.read.clone()),
+        });
+        let wake = self.ctx.clone();
+        self.pool
+            .orient(o.doc.clone(), o.opened, done, ocr, move || {
+                wake.request_repaint()
+            });
+        self.orient_progress();
+    }
+
+    /// Shows how far auto-orient has got.
+    pub(super) fn orient_progress(&mut self) {
+        let Some(run) = self.open.as_ref().and_then(|o| o.orienting.as_ref()) else {
+            return;
+        };
+        let done = run.done.load(Ordering::SeqCst).min(run.total);
+        let page = (done + 1).min(run.total);
+        if run.read_count() > 0 {
+            self.notice = Some(format!(
+                "Reading scanned pages with OCR: page {page} of {}…",
+                run.total
+            ));
+        } else if !run.quiet {
+            self.notice = Some(format!(
+                "Auto-orient: reading page {page} of {}…",
+                run.total
+            ));
+        }
+    }
+
+    /// Turns the pages auto-orient found to be on their side or upside
+    /// down.
+    pub(super) fn oriented(&mut self, opened: u64, rotations: &[Option<(u16, Basis)>]) {
+        let Some(o) = &mut self.open else { return };
+        if o.opened != opened {
+            return;
+        }
+        let Some(run) = o.orienting.take() else {
+            return;
+        };
+        let read = run.read_count();
+        let scans = rotations
+            .iter()
+            .filter(|r| !matches!(r, Some((_, Basis::Text | Basis::Ocr))))
+            .count();
+        let mut turned = HashSet::new();
+        let (mut from_image, mut from_ocr) = (0, 0);
+        for (p, r) in rotations.iter().enumerate() {
+            if let Some((r, basis)) = *r
+                && run.turn
+                && r != o.session.rotation(p)
+            {
+                o.session.rotate(p, i32::from(r));
+                turned.insert(p);
+                match basis {
+                    Basis::Image => from_image += 1,
+                    Basis::Ocr => from_ocr += 1,
+                    Basis::Text => {}
+                }
+            }
+        }
+        if run.quiet {
+            o.session.quiet_rotations();
+        }
+        let unknown = rotations.iter().filter(|r| r.is_none()).count();
+        let mut msg = match turned.len() {
+            0 => "Auto-orient: every page is already upright.".to_string(),
+            1 => "Auto-orient turned 1 page".to_string(),
+            n => format!("Auto-orient turned {n} pages"),
+        };
+        if !turned.is_empty() {
+            let how: Vec<String> = [
+                (from_ocr, "by the words OCR read"),
+                (from_image, "by the look of the scan"),
+            ]
+            .into_iter()
+            .filter(|(n, _)| *n > 0)
+            .map(|(n, how)| format!("{n} {how}"))
+            .collect();
+            if how.is_empty() {
+                msg.push('.');
+            } else {
+                msg.push_str(&format!(" ({}).", how.join(", ")));
+            }
+        }
+        let read_msg = (read > 0).then(|| {
+            let pages = if read == 1 { "page" } else { "pages" };
+            format!(
+                "Read {read} scanned {pages} with OCR, so their text can be searched and copied."
+            )
+        });
+        if run.quiet {
+            let mut parts = Vec::new();
+            if !turned.is_empty() {
+                parts.push(format!(
+                    "{msg} They stay that way in the file only if you save it."
+                ));
+            }
+            parts.extend(read_msg);
+            if read == 0 && scans > 0 && self.settings.ocr && !self.ocr_ready() {
+                parts.push(
+                    "This file has scanned pages. To search their text, get the OCR models \
+                     in Settings (☰)."
+                        .into(),
+                );
+            }
+            self.notice = (!parts.is_empty()).then(|| parts.join(" "));
+        } else {
+            if unknown > 0 {
+                let pages = if unknown == 1 { "page" } else { "pages" };
+                msg.push_str(&format!(
+                    " {unknown} {pages} had no text to go by; turn those by hand."
+                ));
+            }
+            if let Some(r) = read_msg {
+                msg.push(' ');
+                msg.push_str(&r);
+            }
+            self.notice = Some(msg);
+        }
+        // A search made while OCR was reading runs again to take it in.
+        if read > 0 && !self.search.query.is_empty() {
+            self.start_search(self.search.query.clone());
+        }
+        if !turned.is_empty() {
+            self.rebuild(&turned, true);
+        }
+    }
+}
+
+/// An auto-orient run: pages done so far, how many there are, whether it
+/// runs quietly, whether it turns pages, and pages read with OCR so far.
+pub(super) struct Orienting {
+    pub done: Arc<AtomicUsize>,
+    pub total: usize,
+    pub quiet: bool,
+    pub turn: bool,
+    pub read: Option<Arc<AtomicUsize>>,
+}
+
+impl Orienting {
+    fn read_count(&self) -> usize {
+        self.read.as_ref().map_or(0, |r| r.load(Ordering::SeqCst))
+    }
+}

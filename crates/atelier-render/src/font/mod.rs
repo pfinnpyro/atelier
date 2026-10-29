@@ -2,7 +2,9 @@
 //! selects, how wide it is, and what text it stands for.
 
 mod cmap;
+mod predefined;
 mod system;
+mod text_font;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -12,11 +14,12 @@ use std::sync::Arc;
 use atelier_font::{
     Encoding, FontProgram, Std14, glyph_name_to_unicode, standard_font, strip_subset,
 };
-use atelier_raster::{Path, Transform};
+use atelier_raster::{Coverage, FillRule, Path, Transform, rasterize};
 use atelier_syntax::{Dict, Document, Object, Stream};
 
 pub use cmap::CMap;
-use system::{Family, Want};
+use system::{Family, Script, Want};
+pub use text_font::TextFont;
 
 /// Font descriptor flags (9.8.2).
 const FIXED_PITCH: i64 = 1;
@@ -56,6 +59,8 @@ enum Kind {
         cid_to_gid: Option<Vec<u16>>,
         /// The program is CID-keyed CFF: look glyphs up by CID.
         cid_keyed: bool,
+        /// Unicode by CID for the font's character collection.
+        cid_unicode: Option<Arc<Vec<u32>>>,
     },
     Type3 {
         matrix: Transform,
@@ -77,7 +82,34 @@ pub struct PdfFont {
     missing_width: f64,
     to_unicode: Option<CMap>,
     outlines: RefCell<HashMap<u32, Option<Rc<Path>>>>,
+    /// Rasterized glyphs, by glyph, scale and subpixel offset.
+    masks: RefCell<HashMap<MaskKey, Option<Rc<GlyphMask>>>>,
+    /// Characters to codes, built the first time something encodes text.
+    reverse: std::cell::OnceCell<HashMap<char, Vec<u8>>>,
 }
+
+/// Glyph id, the device matrix's a b c d in 1/256ths, and the origin's
+/// offset within its pixel in subpixel steps.
+type MaskKey = (u32, [i32; 4], u8, u8);
+
+/// A glyph's coverage, with its top-left pixel relative to the pixel that
+/// holds the glyph origin.
+#[derive(Debug)]
+pub struct GlyphMask {
+    pub dx: i64,
+    pub dy: i64,
+    pub coverage: Coverage,
+}
+
+/// Glyph positions are kept to a quarter of a pixel across and a sixteenth
+/// down: a line of text shares one vertical offset, so the finer steps
+/// there cost few extra glyphs.
+const SUBPIXEL_X: f64 = 4.0;
+const SUBPIXEL_Y: f64 = 16.0;
+/// Glyphs bigger than this many pixels are drawn directly, not cached.
+const MAX_MASK_PIXELS: usize = 256 * 256;
+/// Cached glyphs per font before the cache starts over.
+const MAX_MASKS: usize = 4096;
 
 fn name_of(doc: &Document, dict: &Dict, key: &[u8]) -> Option<String> {
     doc.get_key(dict, key)
@@ -133,7 +165,7 @@ fn load_program(
 }
 
 /// Picks a system font for a font that is not embedded.
-fn want_for(base: &str, flags: i64, std: Option<&Std14>, cjk: bool) -> Want {
+fn want_for(base: &str, flags: i64, std: Option<&Std14>, cjk: Option<Script>) -> Want {
     let lower = base.to_ascii_lowercase();
     let bold = std.is_some_and(Std14::is_bold)
         || flags & FORCE_BOLD != 0
@@ -144,8 +176,14 @@ fn want_for(base: &str, flags: i64, std: Option<&Std14>, cjk: bool) -> Want {
         || flags & ITALIC != 0
         || lower.contains("italic")
         || lower.contains("oblique");
-    let family = if cjk {
-        Family::Cjk
+    let family = if let Some(script) = cjk {
+        // Mincho, Song, Ming and Batang are the serif styles.
+        let serif = flags & SERIF != 0
+            || ["mincho", "ming", "song", "batang", "myeongjo", "serif"]
+                .iter()
+                .any(|k| lower.contains(k))
+                && !lower.contains("sans");
+        Family::Cjk { script, serif }
     } else if let Some(s) = std {
         match s.name {
             "Symbol" => Family::Symbol,
@@ -198,6 +236,8 @@ impl PdfFont {
             missing_width: 0.0,
             to_unicode: None,
             outlines: RefCell::new(HashMap::new()),
+            reverse: std::cell::OnceCell::new(),
+            masks: RefCell::new(HashMap::new()),
         }
     }
 
@@ -233,7 +273,7 @@ impl PdfFont {
         let embedded = load_program(doc, descriptor.as_ref(), warn);
         font.program = embedded.clone();
         if font.program.is_none() {
-            font.program = system::substitute(want_for(&base, flags, std, false));
+            font.program = system::substitute(want_for(&base, flags, std, None));
             font.substituted = true;
             if font.program.is_none() {
                 warn(format!("no font available to stand in for {}", font.name));
@@ -463,10 +503,20 @@ impl PdfFont {
 
     fn load_type0(doc: &Document, dict: &Dict, warn: &mut dyn FnMut(String)) -> PdfFont {
         let base = name_of(doc, dict, b"BaseFont").unwrap_or_default();
-        let cmap = match doc.get_key(dict, b"Encoding") {
+        let encoding = doc.get_key(dict, b"Encoding");
+        let cmap_name = match &encoding {
+            Ok(Object::Name(n)) => Some(n.as_bytes().to_vec()),
+            Ok(Object::Stream(s)) => s
+                .dict
+                .get(b"UseCMap")
+                .and_then(Object::as_name)
+                .map(|n| n.as_bytes().to_vec()),
+            _ => None,
+        };
+        let cmap = match encoding {
             Ok(Object::Name(n)) => CMap::predefined(n.as_bytes()).unwrap_or_else(|| {
                 warn(format!(
-                    "the {} CMap is not built in yet; reading codes as two-byte CIDs",
+                    "unknown CMap {}; reading codes as two-byte CIDs",
                     n.as_str_lossy()
                 ));
                 CMap::identity(n.as_bytes().ends_with(b"-V"))
@@ -537,12 +587,32 @@ impl PdfFont {
             .and_then(|d| doc.get_key(&d, b"Ordering").ok())
             .and_then(|o| o.as_string().map(|s| s.bytes.clone()))
             .unwrap_or_default();
-        let cjk = matches!(&ordering[..], b"Japan1" | b"GB1" | b"CNS1" | b"Korea1");
+        // The collection, from the font or else from its predefined CMap.
+        let ordering = match &ordering[..] {
+            b"" | b"Identity" => cmap_name
+                .as_deref()
+                .and_then(predefined::ordering)
+                .map(|o| o.as_bytes().to_vec())
+                .unwrap_or(ordering),
+            _ => ordering,
+        };
+        let script = match &ordering[..] {
+            b"Japan1" => Some(Script::Japanese),
+            b"GB1" => Some(Script::Simplified),
+            b"CNS1" => Some(Script::Traditional),
+            b"Korea1" | b"KR" => Some(Script::Korean),
+            _ => None,
+        };
+        // CID to Unicode from the collection, for fonts without a ToUnicode.
+        let cid_unicode = std::str::from_utf8(&ordering)
+            .ok()
+            .filter(|_| script.is_some())
+            .and_then(predefined::cid_to_unicode);
 
         let mut program = load_program(doc, descriptor.as_ref(), warn);
         let mut substituted = false;
         if program.is_none() {
-            program = system::substitute(want_for(&base, flags, None, cjk));
+            program = system::substitute(want_for(&base, flags, None, script));
             substituted = true;
             if program.is_none() {
                 warn(format!(
@@ -562,12 +632,20 @@ impl PdfFont {
                 w2,
                 cid_to_gid,
                 cid_keyed,
+                cid_unicode,
             },
         );
         font.program = program;
         font.substituted = substituted;
         font.to_unicode = load_to_unicode(doc, dict);
-        if substituted && font.to_unicode.is_none() {
+        let has_unicode = matches!(
+            &font.kind,
+            Kind::Cid {
+                cid_unicode: Some(_),
+                ..
+            }
+        );
+        if substituted && font.to_unicode.is_none() && !has_unicode {
             warn(format!(
                 "{} is not embedded and has no Unicode map; its text may show the wrong glyphs",
                 font.name
@@ -620,6 +698,7 @@ impl PdfFont {
                 w2,
                 cid_to_gid,
                 cid_keyed,
+                cid_unicode,
             } => {
                 let mut pos = 0;
                 while pos < bytes.len() {
@@ -632,7 +711,14 @@ impl PdfFont {
                             w2.get(&cid).copied().unwrap_or((dw2.1, width / 2.0, dw2.0));
                         (w1, vx, vy)
                     });
-                    let unicode = self.to_unicode.as_ref().and_then(|t| t.unicode(code));
+                    let unicode = self
+                        .to_unicode
+                        .as_ref()
+                        .and_then(|t| t.unicode(code))
+                        .or_else(|| {
+                            let u = *cid_unicode.as_ref()?.get(cid as usize)?;
+                            char::from_u32(u).filter(|_| u != 0).map(String::from)
+                        });
                     let gid =
                         self.cid_gid(cid, *cid_keyed, cid_to_gid.as_deref(), unicode.as_deref());
                     out.push(Glyph {
@@ -695,6 +781,66 @@ impl PdfFont {
         }
     }
 
+    /// Character codes that show `text` in this font, or None when some
+    /// character has no code here (or the embedded subset lacks its glyph).
+    pub fn encode(&self, text: &str) -> Option<Vec<u8>> {
+        let map = self.reverse.get_or_init(|| self.reverse_map());
+        let mut out = Vec::with_capacity(text.len());
+        for c in text.chars() {
+            out.extend_from_slice(map.get(&c)?);
+        }
+        Some(out)
+    }
+
+    /// Width of shown bytes in text space units (1.0 = font size).
+    pub fn width_of(&self, bytes: &[u8]) -> f64 {
+        self.decode(bytes).iter().map(|g| g.width).sum()
+    }
+
+    fn reverse_map(&self) -> HashMap<char, Vec<u8>> {
+        // An embedded program that is not a stand-in must actually hold the
+        // glyph; a subset usually holds only the characters it was made for.
+        let needs_glyph = self.program.is_some() && !self.substituted;
+        let mut map = HashMap::new();
+        let mut add = |code_bytes: Vec<u8>, glyph: Glyph| {
+            let Some(text) = glyph.unicode else { return };
+            let mut chars = text.chars();
+            let (Some(c), None) = (chars.next(), chars.next()) else {
+                return;
+            };
+            if needs_glyph && !glyph.gid.is_some_and(|g| g != 0) {
+                return;
+            }
+            map.entry(c).or_insert(code_bytes);
+        };
+        match &self.kind {
+            Kind::Simple { .. } => {
+                for code in 0..=255u8 {
+                    add(vec![code], self.simple_glyph(code));
+                }
+            }
+            Kind::Cid { cmap, .. } => {
+                let mut codes = self
+                    .to_unicode
+                    .as_ref()
+                    .map(CMap::unicode_codes)
+                    .unwrap_or_default();
+                if codes.is_empty() {
+                    return map;
+                }
+                codes.dedup_by_key(|e| e.0);
+                for (code, _) in codes {
+                    let bytes = cmap.code_bytes(code);
+                    if let Some(g) = self.decode(&bytes).into_iter().next() {
+                        add(bytes, g);
+                    }
+                }
+            }
+            Kind::Type3 { .. } => {}
+        }
+        map
+    }
+
     /// The outline of a glyph in text space (1.0 = font size), cached.
     pub fn outline(&self, gid: u32) -> Option<Rc<Path>> {
         if let Some(hit) = self.outlines.borrow().get(&gid) {
@@ -707,6 +853,67 @@ impl PdfFont {
             .map(Rc::new);
         self.outlines.borrow_mut().insert(gid, path.clone());
         path
+    }
+}
+
+impl PdfFont {
+    /// A glyph rasterized for the device matrix `m` (glyph space to device
+    /// pixels), and the device pixel its top-left corner goes to. Glyphs are
+    /// cached at subpixel positions, so text set many times over
+    /// rasterizes each glyph a few times only. `None` for glyphs with no
+    /// outline, nothing to draw, or too big to cache.
+    pub fn glyph_mask(&self, gid: u32, m: &Transform) -> Option<(Rc<GlyphMask>, i64, i64)> {
+        let fits = |v: f64| v.is_finite() && v.abs() < 1e7;
+        if ![m.a, m.b, m.c, m.d, m.e, m.f].into_iter().all(fits) {
+            return None;
+        }
+        let split = |v: f64, steps: f64| {
+            let whole = v.floor();
+            let step = ((v - whole) * steps).round() as i64;
+            let n = steps as i64;
+            (whole as i64 + step / n, (step % n) as u8)
+        };
+        let (ix, fx) = split(m.e, SUBPIXEL_X);
+        let (iy, fy) = split(m.f, SUBPIXEL_Y);
+        let scale = [m.a, m.b, m.c, m.d].map(|v| (v * 256.0).round() as i32);
+        let key = (gid, scale, fx, fy);
+        if let Some(hit) = self.masks.borrow().get(&key) {
+            return hit.clone().map(|g| (g.clone(), ix + g.dx, iy + g.dy));
+        }
+        let mask = self.make_mask(gid, m, fx, fy).map(Rc::new);
+        let mut masks = self.masks.borrow_mut();
+        if masks.len() >= MAX_MASKS {
+            masks.clear();
+        }
+        masks.insert(key, mask.clone());
+        mask.map(|g| (g.clone(), ix + g.dx, iy + g.dy))
+    }
+
+    fn make_mask(&self, gid: u32, m: &Transform, fx: u8, fy: u8) -> Option<GlyphMask> {
+        let outline = self.outline(gid)?;
+        let at = Transform::new(
+            m.a,
+            m.b,
+            m.c,
+            m.d,
+            f64::from(fx) / SUBPIXEL_X,
+            f64::from(fy) / SUBPIXEL_Y,
+        );
+        let path = outline.transform(&at);
+        let (min, max) = path.bounds()?;
+        let (dx, dy) = (min.x.floor(), min.y.floor());
+        let (w, h) = ((max.x - dx).ceil() + 1.0, (max.y - dy).ceil() + 1.0);
+        let area = w * h;
+        if area.is_nan() || area > MAX_MASK_PIXELS as f64 {
+            return None;
+        }
+        let shifted = path.transform(&Transform::translate(-dx, -dy));
+        let coverage = rasterize(&shifted, FillRule::NonZero, (w as usize, h as usize))?;
+        Some(GlyphMask {
+            dx: dx as i64 + coverage.x as i64,
+            dy: dy as i64 + coverage.y as i64,
+            coverage,
+        })
     }
 }
 

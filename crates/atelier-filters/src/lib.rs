@@ -7,18 +7,24 @@
 
 mod ascii85;
 mod asciihex;
+mod ccitt;
 mod dct;
 mod deflate;
 mod flate;
+mod jbig2;
+mod jpx;
 mod lzw;
 mod predictor;
 mod runlength;
 
 pub use ascii85::decode_ascii85;
 pub use asciihex::decode_ascii_hex;
+pub use ccitt::{CcittParams, decode_ccitt};
 pub use dct::{DecodedJpeg, decode_dct};
 pub use deflate::{adler32, encode_flate};
 pub use flate::{decode_flate, inflate};
+pub use jbig2::decode_jbig2;
+pub use jpx::{DecodedJpx, JpxColor, decode_jpx};
 pub use lzw::decode_lzw;
 pub use predictor::{Predictor, apply_predictor};
 pub use runlength::decode_run_length;
