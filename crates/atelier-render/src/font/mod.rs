@@ -13,7 +13,7 @@ use std::sync::Arc;
 use atelier_font::{
     Encoding, FontProgram, Std14, glyph_name_to_unicode, standard_font, strip_subset,
 };
-use atelier_raster::{Path, Transform};
+use atelier_raster::{Coverage, FillRule, Path, Transform, rasterize};
 use atelier_syntax::{Dict, Document, Object, Stream};
 
 pub use cmap::CMap;
@@ -80,7 +80,32 @@ pub struct PdfFont {
     missing_width: f64,
     to_unicode: Option<CMap>,
     outlines: RefCell<HashMap<u32, Option<Rc<Path>>>>,
+    /// Rasterized glyphs, by glyph, scale and subpixel offset.
+    masks: RefCell<HashMap<MaskKey, Option<Rc<GlyphMask>>>>,
 }
+
+/// Glyph id, the device matrix's a b c d in 1/256ths, and the origin's
+/// offset within its pixel in subpixel steps.
+type MaskKey = (u32, [i32; 4], u8, u8);
+
+/// A glyph's coverage, with its top-left pixel relative to the pixel that
+/// holds the glyph origin.
+#[derive(Debug)]
+pub struct GlyphMask {
+    pub dx: i64,
+    pub dy: i64,
+    pub coverage: Coverage,
+}
+
+/// Glyph positions are kept to a quarter of a pixel across and a sixteenth
+/// down: a line of text shares one vertical offset, so the finer steps
+/// there cost few extra glyphs.
+const SUBPIXEL_X: f64 = 4.0;
+const SUBPIXEL_Y: f64 = 16.0;
+/// Glyphs bigger than this many pixels are drawn directly, not cached.
+const MAX_MASK_PIXELS: usize = 256 * 256;
+/// Cached glyphs per font before the cache starts over.
+const MAX_MASKS: usize = 4096;
 
 fn name_of(doc: &Document, dict: &Dict, key: &[u8]) -> Option<String> {
     doc.get_key(dict, key)
@@ -207,6 +232,7 @@ impl PdfFont {
             missing_width: 0.0,
             to_unicode: None,
             outlines: RefCell::new(HashMap::new()),
+            masks: RefCell::new(HashMap::new()),
         }
     }
 
@@ -762,6 +788,67 @@ impl PdfFont {
             .map(Rc::new);
         self.outlines.borrow_mut().insert(gid, path.clone());
         path
+    }
+}
+
+impl PdfFont {
+    /// A glyph rasterized for the device matrix `m` (glyph space to device
+    /// pixels), and the device pixel its top-left corner goes to. Glyphs are
+    /// cached at subpixel positions, so text set many times over
+    /// rasterizes each glyph a few times only. `None` for glyphs with no
+    /// outline, nothing to draw, or too big to cache.
+    pub fn glyph_mask(&self, gid: u32, m: &Transform) -> Option<(Rc<GlyphMask>, i64, i64)> {
+        let fits = |v: f64| v.is_finite() && v.abs() < 1e7;
+        if ![m.a, m.b, m.c, m.d, m.e, m.f].into_iter().all(fits) {
+            return None;
+        }
+        let split = |v: f64, steps: f64| {
+            let whole = v.floor();
+            let step = ((v - whole) * steps).round() as i64;
+            let n = steps as i64;
+            (whole as i64 + step / n, (step % n) as u8)
+        };
+        let (ix, fx) = split(m.e, SUBPIXEL_X);
+        let (iy, fy) = split(m.f, SUBPIXEL_Y);
+        let scale = [m.a, m.b, m.c, m.d].map(|v| (v * 256.0).round() as i32);
+        let key = (gid, scale, fx, fy);
+        if let Some(hit) = self.masks.borrow().get(&key) {
+            return hit.clone().map(|g| (g.clone(), ix + g.dx, iy + g.dy));
+        }
+        let mask = self.make_mask(gid, m, fx, fy).map(Rc::new);
+        let mut masks = self.masks.borrow_mut();
+        if masks.len() >= MAX_MASKS {
+            masks.clear();
+        }
+        masks.insert(key, mask.clone());
+        mask.map(|g| (g.clone(), ix + g.dx, iy + g.dy))
+    }
+
+    fn make_mask(&self, gid: u32, m: &Transform, fx: u8, fy: u8) -> Option<GlyphMask> {
+        let outline = self.outline(gid)?;
+        let at = Transform::new(
+            m.a,
+            m.b,
+            m.c,
+            m.d,
+            f64::from(fx) / SUBPIXEL_X,
+            f64::from(fy) / SUBPIXEL_Y,
+        );
+        let path = outline.transform(&at);
+        let (min, max) = path.bounds()?;
+        let (dx, dy) = (min.x.floor(), min.y.floor());
+        let (w, h) = ((max.x - dx).ceil() + 1.0, (max.y - dy).ceil() + 1.0);
+        let area = w * h;
+        if area.is_nan() || area > MAX_MASK_PIXELS as f64 {
+            return None;
+        }
+        let shifted = path.transform(&Transform::translate(-dx, -dy));
+        let coverage = rasterize(&shifted, FillRule::NonZero, (w as usize, h as usize))?;
+        Some(GlyphMask {
+            dx: dx as i64 + coverage.x as i64,
+            dy: dy as i64 + coverage.y as i64,
+            coverage,
+        })
     }
 }
 

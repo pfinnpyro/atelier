@@ -271,3 +271,27 @@ fn predefined_cjk_cmaps_give_cids_and_text() {
     let x: Vec<f64> = t.glyphs.iter().map(|g| g.baseline.0.x).collect();
     assert_eq!(x, vec![0.0, 5.0, 15.0, 25.0]);
 }
+
+#[test]
+fn cached_glyphs_match_and_respect_the_clip() {
+    // The same glyph at the same pixel offset is stamped identically.
+    let doc = open(
+        b"BT /F1 30 Tf 10.3 40 Td (W) Tj 100 0 Td (W) Tj ET",
+        &truetype_font(),
+    );
+    let (p, _) = render(&doc);
+    assert!(ink(&p, 5, 30, 40, 80) > 50);
+    for y in 30..80 {
+        for x in 5..40 {
+            assert_eq!(p.pixel(x, y), p.pixel(x + 100, y), "({x}, {y})");
+        }
+    }
+    // A clip cuts a stamped glyph like any fill: the right part is gone.
+    let doc = open(
+        b"0 0 30 100 re W n BT /F1 40 Tf 10 30 Td (A) Tj ET",
+        &truetype_font(),
+    );
+    let (p, _) = render(&doc);
+    assert!(ink(&p, 10, 40, 30, 70) > 50);
+    assert_eq!(ink(&p, 30, 0, 200, 100), 0);
+}

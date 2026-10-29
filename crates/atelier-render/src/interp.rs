@@ -1378,8 +1378,12 @@ impl<'a> Interpreter<'a> {
             if font.is_type3() {
                 self.type3_glyph(&font, g.code, &to_user, resources, depth);
             } else if render >= 4 || (render != 3 && self.draw) {
-                if let Some(outline) = g.gid.and_then(|gid| font.outline(gid)) {
-                    self.paint_glyph(&outline, &to_user, render);
+                if let Some(gid) = g.gid {
+                    if !(render == 0 && self.stamp_glyph(&font, gid, &to_user)) {
+                        if let Some(outline) = font.outline(gid) {
+                            self.paint_glyph(&outline, &to_user, render);
+                        }
+                    }
                 }
             }
 
@@ -1399,6 +1403,39 @@ impl<'a> Interpreter<'a> {
             }
             .then(&self.tm);
         }
+    }
+
+    /// Fills a glyph from the font's cache of rasterized glyphs, when it is
+    /// filled with a plain colour. Returns false to have it drawn as a path.
+    fn stamp_glyph(&mut self, font: &PdfFont, gid: u32, to_user: &Transform) -> bool {
+        if !self.draw {
+            return true;
+        }
+        let pattern = matches!(self.gs.fill_space, ColorSpace::Pattern { .. });
+        if pattern && self.gs.forced.is_none() {
+            return false;
+        }
+        let device = to_user.then(&self.gs.ctm);
+        let Some((mask, x, y)) = font.glyph_mask(gid, &device) else {
+            // No outline at all draws nothing either way.
+            return font.outline(gid).is_none();
+        };
+        let Some(color) = self.gs.fill_color() else {
+            return true;
+        };
+        let area = self.drawable_area();
+        let Some(coverage) = mask.coverage.placed(x, y, area) else {
+            return true;
+        };
+        let bounds = Path::rect(
+            coverage.x as f64,
+            coverage.y as f64,
+            coverage.width as f64,
+            coverage.height as f64,
+        );
+        let clip = self.clip_mask(&bounds);
+        self.pixmap.fill_coverage(&coverage, color, clip.as_ref());
+        true
     }
 
     fn paint_glyph(&mut self, outline: &Path, to_user: &Transform, render: u8) {

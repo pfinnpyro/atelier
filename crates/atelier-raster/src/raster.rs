@@ -24,6 +24,39 @@ pub struct Coverage {
 }
 
 impl Coverage {
+    /// This coverage moved so its top-left pixel is at (x, y), which may be
+    /// off the device, and cut to the rectangle `(ax, ay, aw, ah)`. Used to
+    /// stamp a cached glyph mask. `None` when nothing is left.
+    pub fn placed(
+        &self,
+        x: i64,
+        y: i64,
+        (ax, ay, aw, ah): (usize, usize, usize, usize),
+    ) -> Option<Coverage> {
+        let (ax, ay) = (ax as i64, ay as i64);
+        let x0 = x.max(ax);
+        let y0 = y.max(ay);
+        let x1 = (x + self.width as i64).min(ax + aw as i64);
+        let y1 = (y + self.height as i64).min(ay + ah as i64);
+        if x0 >= x1 || y0 >= y1 {
+            return None;
+        }
+        let (w, h) = ((x1 - x0) as usize, (y1 - y0) as usize);
+        let (sx, sy) = ((x0 - x) as usize, (y0 - y) as usize);
+        let mut data = Vec::with_capacity(w * h);
+        for row in sy..sy + h {
+            let start = row * self.width + sx;
+            data.extend_from_slice(&self.data[start..start + w]);
+        }
+        Some(Coverage {
+            x: x0 as usize,
+            y: y0 as usize,
+            width: w,
+            height: h,
+            data,
+        })
+    }
+
     pub fn get(&self, x: usize, y: usize) -> u8 {
         if x < self.x || y < self.y || x >= self.x + self.width || y >= self.y + self.height {
             return 0;
@@ -235,6 +268,22 @@ impl Accumulator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn placed_cuts_to_the_area() {
+        let c = Coverage {
+            x: 0,
+            y: 0,
+            width: 3,
+            height: 2,
+            data: vec![1, 2, 3, 4, 5, 6],
+        };
+        let p = c.placed(-1, 4, (0, 0, 10, 5)).unwrap();
+        assert_eq!((p.x, p.y, p.width, p.height), (0, 4, 2, 1));
+        assert_eq!(p.data, vec![2, 3]);
+        assert!(c.placed(10, 0, (0, 0, 10, 5)).is_none());
+        assert_eq!(c.placed(2, 1, (0, 0, 10, 5)).unwrap().data, c.data);
+    }
     use crate::PathBuilder;
 
     fn poly(points: &[(f64, f64)]) -> Path {
