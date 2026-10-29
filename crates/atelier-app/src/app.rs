@@ -26,11 +26,13 @@ mod inspect;
 mod menu;
 mod pages;
 mod settings_window;
+mod sidebar;
 
 use form::FormView;
 use inspect::Inspector;
 use menu::MenuTarget;
 use settings_window::Window;
+use sidebar::Sidebar;
 
 use crate::settings::Settings;
 
@@ -82,6 +84,14 @@ struct Open {
     orienting: Option<pages::Orienting>,
     /// The form, when the document has one.
     form: Option<FormView>,
+    /// Small pictures of the pages for the sidebar.
+    thumbs: HashMap<usize, TextureHandle>,
+    /// Page pictures that show an old version of their page.
+    thumb_stale: HashSet<usize>,
+    /// The outline, once read: its entries, and whether they are headings
+    /// found in the text rather than bookmarks.
+    outline: Option<(Vec<atelier_view::OutlineItem>, bool)>,
+    outline_asked: bool,
     /// Tiles that still show a field's old value; they stay on screen
     /// until their replacements arrive.
     stale: HashSet<TileKey>,
@@ -143,6 +153,7 @@ pub struct Viewer {
     settings: Settings,
     /// The Settings or About window is open.
     window: Option<Window>,
+    sidebar: Sidebar,
 }
 
 /// An encrypted file the password prompt is open for.
@@ -187,6 +198,7 @@ impl Viewer {
             menu: None,
             settings: Settings::load(),
             window: None,
+            sidebar: Sidebar::default(),
         };
         if let Some(p) = path {
             v.open_path(&p);
@@ -258,6 +270,10 @@ impl Viewer {
             session: Session::new(doc.clone()),
             opened: self.generation,
             orienting: None,
+            thumbs: HashMap::new(),
+            thumb_stale: HashSet::new(),
+            outline: None,
+            outline_asked: false,
             doc,
             name,
             generation: self.generation,
@@ -273,6 +289,7 @@ impl Viewer {
         Self::load_form(&mut open);
         self.open = Some(open);
         self.inspector.reset();
+        self.sidebar.reset();
         self.update_title();
         self.error = None;
         self.zoom_mode = if self.settings.fit_page {
@@ -636,6 +653,28 @@ impl Viewer {
                         reveal = Some(0);
                     }
                 }
+                Done::Thumb {
+                    generation,
+                    page,
+                    size,
+                    rgba,
+                } if generation == o.generation => {
+                    let image = egui::ColorImage::from_rgba_premultiplied(size, &rgba);
+                    let tex = self.ctx.load_texture(
+                        format!("thumb{page}"),
+                        image,
+                        TextureOptions::LINEAR,
+                    );
+                    o.thumbs.insert(page, tex);
+                    o.thumb_stale.remove(&page);
+                }
+                Done::Outline {
+                    opened,
+                    items,
+                    from_headings,
+                } if opened == o.opened => {
+                    o.outline = Some((items, from_headings));
+                }
                 Done::Oriented {
                     generation,
                     rotations,
@@ -681,6 +720,9 @@ impl Viewer {
         }
         if turn(Key::Minus) {
             self.rotate_pages(-1);
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F4)) {
+            self.toggle_sidebar();
         }
         if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F12)) {
             self.inspector.open = !self.inspector.open;
@@ -734,6 +776,13 @@ impl Viewer {
         }
     }
 
+    fn toggle_sidebar(&mut self) {
+        self.settings.sidebar = !self.settings.sidebar;
+        if let Err(e) = self.settings.save() {
+            self.error = Some(format!("Could not save the settings: {e}"));
+        }
+    }
+
     fn copy_selection(&self) {
         let (Some(o), Some(sel)) = (&self.open, &self.selection) else {
             return;
@@ -771,6 +820,13 @@ impl Viewer {
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
+            if ui
+                .add(egui::Button::selectable(self.settings.sidebar, "◧"))
+                .on_hover_text("Page pictures and outline (F4)")
+                .clicked()
+            {
+                self.toggle_sidebar();
+            }
             if ui
                 .button("Open…")
                 .on_hover_text("Open a PDF (Ctrl+O)")
@@ -1274,6 +1330,19 @@ impl Viewer {
                 });
             }
         }
+        // Page pictures for the sidebar.
+        if self.settings.sidebar {
+            for &page in &self.sidebar.wanted {
+                if let Some(g) = o.layout.geom(page) {
+                    jobs.push(Job::Thumb {
+                        doc: o.doc.clone(),
+                        generation: o.generation,
+                        page,
+                        scale: sidebar::thumb_scale(g.size(), f64::from(ppp)),
+                    });
+                }
+            }
+        }
         add_tiles(
             &mut jobs,
             tiles_for_view(&o.layout, around(1.0, 2.0), f64::from(ppp)),
@@ -1431,6 +1500,9 @@ impl eframe::App for Viewer {
                     }
                 });
             });
+        }
+        if self.settings.sidebar {
+            self.sidebar_panel(ui);
         }
         if self.inspector.open {
             self.inspector_panel(ui);

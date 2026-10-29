@@ -41,6 +41,7 @@ impl Viewer {
             }
             for &p in pages {
                 o.tiles.remove_page(p);
+                o.thumbs.remove(&p);
             }
             o.stale.retain(|k| !pages.contains(&k.page));
         } else {
@@ -49,6 +50,7 @@ impl Viewer {
                 .flat_map(|p| o.tiles.page_tiles(*p).map(|(k, _)| *k).collect::<Vec<_>>())
                 .collect();
             o.stale.extend(stale);
+            o.thumb_stale.extend(pages.iter().copied());
         }
         o.failed.retain(|k| !pages.contains(&k.page));
         // Work queued for the old document is dropped when it comes back.

@@ -7,9 +7,9 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
-use atelier_render::{PageText, RenderOptions, extract_text, render_region};
+use atelier_render::{PageText, RenderOptions, extract_text, render_page, render_region};
 use atelier_syntax::Document;
-use atelier_view::{Basis, TileKey, find_in_page, upright_page};
+use atelier_view::{Basis, OutlineItem, TileKey, bookmarks, find_in_page, headings, upright_page};
 
 /// Work for the pool. Each job carries the document it is for, so a job
 /// queued before another file was opened still finishes cleanly.
@@ -26,6 +26,13 @@ pub enum Job {
         generation: u64,
         page: usize,
     },
+    /// A page drawn small for the sidebar, `scale` device pixels per point.
+    Thumb {
+        doc: Arc<Document>,
+        generation: u64,
+        page: usize,
+        scale: f64,
+    },
 }
 
 /// What a job makes, to tell two jobs for the same thing apart.
@@ -33,12 +40,15 @@ pub enum Job {
 enum JobKey {
     Tile(u64, TileKey),
     Text(u64, usize),
+    Thumb(u64, usize),
 }
 
 impl Job {
     fn generation(&self) -> u64 {
         match self {
-            Job::Tile { generation, .. } | Job::Text { generation, .. } => *generation,
+            Job::Tile { generation, .. }
+            | Job::Text { generation, .. }
+            | Job::Thumb { generation, .. } => *generation,
         }
     }
 
@@ -50,6 +60,9 @@ impl Job {
             Job::Text {
                 generation, page, ..
             } => JobKey::Text(*generation, *page),
+            Job::Thumb {
+                generation, page, ..
+            } => JobKey::Thumb(*generation, *page),
         }
     }
 }
@@ -84,6 +97,19 @@ pub enum Done {
     SearchEnded {
         generation: u64,
         search: u64,
+    },
+    Thumb {
+        generation: u64,
+        page: usize,
+        size: [usize; 2],
+        rgba: Vec<u8>,
+    },
+    /// The outline for the sidebar: bookmarks, or headings found in the
+    /// text (`from_headings`). `opened` is the file it is for.
+    Outline {
+        opened: u64,
+        items: Vec<OutlineItem>,
+        from_headings: bool,
     },
     /// Auto-orient: the upright /Rotate of each page and what it was
     /// judged from, None where a page gave nothing to go by.
@@ -263,6 +289,42 @@ impl Pool {
         });
     }
 
+    /// Reads the outline on its own thread: the bookmarks, or when there
+    /// are none, headings found in the text of the first pages.
+    pub fn outline(&self, doc: Arc<Document>, opened: u64, wake: impl Fn() + Send + 'static) {
+        /// Pages read for headings at most.
+        const MAX_PAGES: usize = 1500;
+        let tx = self.done_tx.clone();
+        let _ = thread::Builder::new()
+            .name("outline".into())
+            .spawn(move || {
+                let run = || {
+                    let items = bookmarks(&doc);
+                    if !items.is_empty() {
+                        return (items, false);
+                    }
+                    let texts: Vec<_> = doc
+                        .pages()
+                        .map(|p| {
+                            p.iter()
+                                .take(MAX_PAGES)
+                                .map(|p| extract_text(&doc, p).unwrap_or_default())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    (headings(&texts), true)
+                };
+                let (items, from_headings) =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)).unwrap_or_default();
+                let _ = tx.send(Done::Outline {
+                    opened,
+                    items,
+                    from_headings,
+                });
+                wake();
+            });
+    }
+
     /// Stops the running search, if any.
     pub fn stop_search(&self) {
         self.search.fetch_add(1, Ordering::SeqCst);
@@ -313,6 +375,12 @@ fn run(shared: &Shared, tx: &Sender<Done>, wake: &(dyn Fn() + Send + Sync)) {
                     page,
                     text: Arc::default(),
                 },
+                Job::Thumb { page, .. } => Done::Thumb {
+                    generation,
+                    page,
+                    size: [1, 1],
+                    rgba: vec![255; 4],
+                },
             });
         let sent = tx.send(done).is_ok();
         shared
@@ -358,6 +426,36 @@ fn work(job: Job) -> Done {
                     generation,
                     key,
                     error: e.to_string(),
+                },
+            }
+        }
+        Job::Thumb {
+            doc,
+            generation,
+            page,
+            scale,
+        } => {
+            let options = RenderOptions {
+                scale,
+                ..RenderOptions::default()
+            };
+            let r = doc
+                .pages()
+                .ok()
+                .and_then(|p| p.get(page))
+                .and_then(|p| render_page(&doc, p, &options).ok());
+            match r {
+                Some(r) => Done::Thumb {
+                    generation,
+                    page,
+                    size: [r.pixmap.width(), r.pixmap.height()],
+                    rgba: r.pixmap.data().to_vec(),
+                },
+                None => Done::Thumb {
+                    generation,
+                    page,
+                    size: [1, 1],
+                    rgba: vec![255; 4],
                 },
             }
         }
