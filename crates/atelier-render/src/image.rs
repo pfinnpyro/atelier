@@ -1,6 +1,6 @@
 //! Image XObjects and inline images (ISO 32000-2, 8.9) to RGBA.
 
-use atelier_filters::decode_dct;
+use atelier_filters::{decode_dct, decode_jpx};
 use atelier_raster::{Color, RgbaImage};
 use atelier_syntax::{Dict, Document, ImageFilter, Object, Stream};
 
@@ -26,6 +26,10 @@ struct CodecOutput {
     width: usize,
     height: usize,
     components: usize,
+    /// An opacity channel carried inside the image (JPEG 2000).
+    alpha: Option<Vec<u8>>,
+    /// JPEG 2000 images ignore /Decode (except as masks).
+    ignore_decode: bool,
 }
 
 /// Runs the image codec named by `filter`, if any.
@@ -46,9 +50,21 @@ fn run_codec(
                 height: j.height,
                 components: j.components,
                 data: j.data,
+                alpha: None,
+                ignore_decode: false,
             }))
         }
-        Some((f, _)) => Err(format!("{f:?} images are not decoded yet")),
+        Some((ImageFilter::Jpx, _)) => {
+            let j = decode_jpx(data).map_err(|e| format!("JPEG 2000 image: {e}"))?;
+            Ok(Some(CodecOutput {
+                width: j.width,
+                height: j.height,
+                components: j.components,
+                data: j.data,
+                alpha: j.alpha,
+                ignore_decode: true,
+            }))
+        }
     }
 }
 
@@ -93,13 +109,24 @@ pub fn decode(
         d.as_array()
             .map(|a| a.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect())
     });
+    let colour_decode = decode_array
+        .clone()
+        .filter(|_| !codec.as_ref().is_some_and(|c| c.ignore_decode));
 
     let image = if is_mask {
         // Stencil mask: sample 0 paints the fill colour, unless Decode is [1 0].
         let invert = decode_array
             .as_ref()
             .is_some_and(|d| d.first() == Some(&1.0));
-        let bits = unpack(data, width, height, 1, 1);
+        let bits = match &codec {
+            // A codec's mask comes out as 8-bit samples of its first channel.
+            Some(c) => data
+                .iter()
+                .step_by(c.components.max(1))
+                .map(|&v| u32::from(v >= 128))
+                .collect(),
+            None => unpack(data, width, height, 1, 1),
+        };
         let px = fill.to_premultiplied();
         let mut out = vec![0u8; width * height * 4];
         for (i, &v) in bits.iter().enumerate() {
@@ -126,8 +153,8 @@ pub fn decode(
             get(dict, b"ColorSpace", b"CS").and_then(|o| colorspace::parse(doc, o, resources));
         let cs = match (&codec, declared) {
             // The codec's component count wins over a missing or
-            // mismatched colour space.
-            (Some(c), Some(cs)) if cs.components() == c.components => cs,
+            // mismatched colour space; extra channels are dropped.
+            (Some(c), Some(cs)) if cs.components() <= c.components => cs,
             (Some(c), _) => match c.components {
                 1 => ColorSpace::Gray,
                 4 => ColorSpace::Cmyk,
@@ -139,10 +166,21 @@ pub fn decode(
             return None;
         }
         let n = cs.components();
+        let repacked: Vec<u8>;
+        let data = match &codec {
+            Some(c) if c.components > n => {
+                repacked = data
+                    .chunks_exact(c.components)
+                    .flat_map(|px| px[..n].iter().copied())
+                    .collect();
+                &repacked[..]
+            }
+            _ => data,
+        };
         let samples = unpack(data, width, height, n, bpc);
         let max = ((1u32 << bpc) - 1) as f32;
         let ranges: Vec<(f32, f32)> = (0..n)
-            .map(|i| match &decode_array {
+            .map(|i| match &colour_decode {
                 Some(d) if d.len() >= 2 * n => (d[2 * i], d[2 * i + 1]),
                 _ => cs.decode_range(bpc),
             })
@@ -215,6 +253,14 @@ pub fn decode(
     } else if let Some(Object::Stream(mask)) = resolve(dict.get(b"Mask")) {
         if let Some(alpha) = mask_alpha(doc, &mask, true) {
             apply_alpha(&mut image, &alpha);
+        }
+    } else if let Some(alpha) = codec.and_then(|c| c.alpha) {
+        // SMaskInData: a JPEG 2000 image's own opacity channel.
+        let in_data = resolve(dict.get(b"SMaskInData"))
+            .and_then(|o| o.as_i64())
+            .unwrap_or(0);
+        if in_data != 0 && alpha.len() == width * height {
+            apply_alpha(&mut image, &(width, height, alpha));
         }
     }
     Some(ImageInfo { image, interpolate })

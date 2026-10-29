@@ -694,6 +694,65 @@ fn ccitt_group_4_image() {
     assert_eq!(at(&p, 80, 50), WHITE);
 }
 
+/// A JPEG 2000 fixture from atelier-filters and OpenJPEG's decode of it.
+fn jpx_fixture(name: &str) -> Vec<u8> {
+    std::fs::read(format!(
+        "{}/../atelier-filters/tests/data/jpx/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap()
+}
+
+fn jpx_page(file: &str, dict_extra: &str) -> Pixmap {
+    let image = stream(
+        &format!(
+            "/Type /XObject /Subtype /Image /Width 67 /Height 45 /Filter /JPXDecode {dict_extra}"
+        ),
+        &jpx_fixture(file),
+    );
+    // One pixel per unit, top left corner at the top of the page.
+    render_with(
+        "",
+        b"67 0 0 45 0 55 cm /Im Do",
+        "<< /XObject << /Im 5 0 R >> >>",
+        &[image],
+    )
+}
+
+#[test]
+fn jpx_image_matches_openjpeg() {
+    let p = jpx_page("rgb-layers.j2k", "");
+    let expected = jpx_fixture("rgb-layers.pnm");
+    let pixels = &expected[expected.len() - 67 * 45 * 3..];
+    for y in 0..45 {
+        for x in 0..67 {
+            let i = (y * 67 + x) * 3;
+            assert_eq!(
+                at(&p, x, 99 - y),
+                [pixels[i], pixels[i + 1], pixels[i + 2]],
+                "({x}, {y})"
+            );
+        }
+    }
+    // A declared one-component space keeps only the first channel.
+    let gray = jpx_page("rgb-layers.j2k", "/ColorSpace /DeviceGray");
+    assert_eq!(at(&gray, 5, 95), [pixels[5 * 3 + 4 * 67 * 3]; 3]);
+}
+
+#[test]
+fn jpx_alpha_needs_smask_in_data() {
+    // rgba.jp2's opacity runs from 0 at the left to 251 at the right.
+    let opaque = jpx_page("rgba.jp2", "");
+    let blended = jpx_page("rgba.jp2", "/SMaskInData 1");
+    assert_ne!(at(&opaque, 0, 80), WHITE);
+    assert_eq!(at(&blended, 0, 80), WHITE);
+    let (a, b) = (at(&blended, 66, 80), at(&opaque, 66, 80));
+    assert!(
+        a.iter().zip(b).all(|(&a, b)| a.abs_diff(b) <= 5),
+        "{a:?} {b:?}"
+    );
+}
+
 #[test]
 fn jbig2_image_with_globals() {
     // jbig2enc's symbol coding of a 400 x 120 page, with the symbol

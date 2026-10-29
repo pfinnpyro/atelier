@@ -25,3 +25,8 @@ all = { level = "warn", priority = -1 }
 
 [profile.release]
 debug = 1
+
+# The image codecs are unusably slow unoptimised; keep them fast in debug
+# builds and tests too.
+[profile.dev.package.atelier-filters]
+opt-level = 2

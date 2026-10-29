@@ -91,6 +91,7 @@ impl<'a> ArithDecoder<'a> {
         u32::from(self.data.get(i).copied().unwrap_or(0xff))
     }
 
+    #[inline]
     fn byte_in(&mut self) {
         if self.byte(self.pos) == 0xff {
             if self.byte(self.pos + 1) > 0x8f {
@@ -117,6 +118,7 @@ impl<'a> ArithDecoder<'a> {
     }
 
     /// Decodes one bit with the state in `cx[i]`.
+    #[inline]
     pub fn bit(&mut self, cx: &mut [u8], i: usize) -> u8 {
         let state = cx[i];
         let mut index = (state >> 1) as usize;
