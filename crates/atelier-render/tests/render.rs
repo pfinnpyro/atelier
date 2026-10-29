@@ -918,3 +918,92 @@ fn output_intent_profiles_device_cmyk() {
     // DeviceRGB is left alone.
     assert_eq!(at(&p, 75, 50), RED);
 }
+
+fn annot_page(annot: &str, extra: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+    let mut objects = vec![annot.as_bytes().to_vec()];
+    objects.extend(extra);
+    objects
+}
+
+#[test]
+fn annotation_appearance_is_fitted_to_its_rect() {
+    // A 10x10 appearance box stretched over the rect 20..60.
+    let objects = annot_page(
+        "<< /Type /Annot /Subtype /Square /Rect [20 20 60 60] /AP << /N 6 0 R >> >>",
+        vec![stream(
+            "/Type /XObject /Subtype /Form /BBox [0 0 10 10]",
+            b"1 0 0 rg 0 0 10 10 re f",
+        )],
+    );
+    let p = render_with("/Annots [5 0 R]", b"", "<< >>", &objects);
+    assert_eq!(at(&p, 25, 25), RED);
+    assert_eq!(at(&p, 55, 55), RED);
+    assert_eq!(at(&p, 65, 65), WHITE);
+    assert_eq!(at(&p, 15, 15), WHITE);
+}
+
+#[test]
+fn appearance_state_is_chosen_by_as() {
+    let objects = annot_page(
+        "<< /Type /Annot /Subtype /Widget /FT /Btn /Rect [10 10 30 30] /AS /Yes /AP << /N << /Yes 6 0 R /Off 7 0 R >> >> >>",
+        vec![
+            stream(
+                "/Type /XObject /Subtype /Form /BBox [0 0 20 20]",
+                b"0 0 1 rg 0 0 20 20 re f",
+            ),
+            stream(
+                "/Type /XObject /Subtype /Form /BBox [0 0 20 20]",
+                b"1 0 0 rg 0 0 20 20 re f",
+            ),
+        ],
+    );
+    let p = render_with("/Annots [5 0 R]", b"", "<< >>", &objects);
+    assert_eq!(at(&p, 20, 20), BLUE);
+}
+
+#[test]
+fn hidden_and_suppressed_annotations_are_skipped() {
+    let ap = || {
+        stream(
+            "/Type /XObject /Subtype /Form /BBox [0 0 10 10]",
+            b"1 0 0 rg 0 0 10 10 re f",
+        )
+    };
+    // Flag 2 is Hidden.
+    let objects = annot_page(
+        "<< /Type /Annot /Subtype /Square /F 2 /Rect [10 10 20 20] /AP << /N 6 0 R >> >>",
+        vec![ap()],
+    );
+    let p = render_with("/Annots [5 0 R]", b"", "<< >>", &objects);
+    assert_eq!(at(&p, 15, 15), WHITE);
+
+    // The viewer hides an annotation it is editing itself.
+    let objects = annot_page(
+        "<< /Type /Annot /Subtype /Square /Rect [10 10 20 20] /AP << /N 6 0 R >> >>",
+        vec![ap()],
+    );
+    let doc = Document::open(build("/Annots [5 0 R]", b"", "<< >>", &objects)).unwrap();
+    let page = &doc.pages().unwrap()[0];
+    let mut options = RenderOptions {
+        scale: 1.0,
+        ..RenderOptions::default()
+    };
+    assert_eq!(
+        at(&render_page(&doc, page, &options).unwrap().pixmap, 15, 15),
+        RED
+    );
+    options.hidden_annotations = vec![atelier_syntax::ObjRef {
+        num: 5,
+        generation: 0,
+    }];
+    assert_eq!(
+        at(&render_page(&doc, page, &options).unwrap().pixmap, 15, 15),
+        WHITE
+    );
+    options.hidden_annotations.clear();
+    options.annotations = false;
+    assert_eq!(
+        at(&render_page(&doc, page, &options).unwrap().pixmap, 15, 15),
+        WHITE
+    );
+}

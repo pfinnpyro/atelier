@@ -13,6 +13,7 @@ mod lexer;
 mod object;
 mod page;
 mod parser;
+mod write;
 mod xref;
 
 pub use content::{ContentParser, Operation};
@@ -24,4 +25,5 @@ pub use lexer::{Lexer, Token};
 pub use object::{Dict, Name, ObjRef, Object, PdfString, Stream};
 pub use page::{Page, Rect};
 pub use parser::Parser;
+pub use write::{Update, serialize};
 pub use xref::XrefEntry;

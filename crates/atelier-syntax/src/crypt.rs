@@ -134,6 +134,64 @@ impl Security {
         }
     }
 
+    fn encrypt(&self, r: ObjRef, method: Method, data: &[u8]) -> Vec<u8> {
+        match method {
+            Method::Identity => data.to_vec(),
+            Method::Rc4 => rc4(&self.object_key(r, method), data),
+            Method::Aes128 | Method::Aes256 => {
+                let key = self.object_key(r, method);
+                let Some(aes) = Aes::new(&key) else {
+                    return data.to_vec();
+                };
+                // A fresh IV per object and content, without a random
+                // source: the hash of the key, the object and the data.
+                let mut seed = key.clone();
+                seed.extend_from_slice(&r.num.to_le_bytes());
+                seed.extend_from_slice(&r.generation.to_le_bytes());
+                seed.extend_from_slice(data);
+                let mut iv = [0u8; 16];
+                iv.copy_from_slice(&sha256(&seed)[..16]);
+                let pad = 16 - data.len() % 16;
+                let mut padded = data.to_vec();
+                padded.extend(std::iter::repeat_n(pad as u8, pad));
+                let mut out = iv.to_vec();
+                out.extend(aes_cbc_encrypt(&aes, &iv, &padded));
+                out
+            }
+        }
+    }
+
+    /// Encrypts every string inside `obj` and, for a stream, its data, to
+    /// be written as object `r`. The inverse of reading.
+    pub fn encrypt_object(&self, r: ObjRef, obj: &mut Object) {
+        if self.dict_ref == Some(r) {
+            return;
+        }
+        self.encrypt_strings(r, obj);
+        if let Object::Stream(stream) = obj {
+            let skip = stream.dict.is_type(b"XRef")
+                || (stream.dict.is_type(b"Metadata") && !self.encrypt_metadata)
+                || crate::document::has_identity_crypt_filter(&stream.dict);
+            if !skip {
+                stream.data = self.encrypt(r, self.streams, &stream.data).into();
+            }
+        }
+    }
+
+    fn encrypt_strings(&self, r: ObjRef, obj: &mut Object) {
+        match obj {
+            Object::String(s) => s.bytes = self.encrypt(r, self.strings, &s.bytes),
+            Object::Array(a) => a.iter_mut().for_each(|o| self.encrypt_strings(r, o)),
+            Object::Dict(d) => d.0.iter_mut().for_each(|(_, o)| self.encrypt_strings(r, o)),
+            Object::Stream(s) => s
+                .dict
+                .0
+                .iter_mut()
+                .for_each(|(_, o)| self.encrypt_strings(r, o)),
+            _ => {}
+        }
+    }
+
     pub fn decrypt_string(&self, r: ObjRef, data: &[u8]) -> Vec<u8> {
         self.decrypt(r, self.strings, data)
     }

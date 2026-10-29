@@ -166,6 +166,12 @@ impl Dict {
         }
     }
 
+    /// Removes a key, returning its value.
+    pub fn remove(&mut self, key: &[u8]) -> Option<Object> {
+        let i = self.0.iter().position(|(k, _)| k.0 == key)?;
+        Some(self.0.remove(i).1)
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (&Name, &Object)> {
         self.0.iter().map(|(k, v)| (k, v))
     }

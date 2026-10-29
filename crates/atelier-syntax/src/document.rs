@@ -195,6 +195,29 @@ impl Document {
         }
     }
 
+    /// Where the last cross-reference section starts, as `startxref`
+    /// says, when that is usable.
+    pub fn startxref(&self) -> Option<usize> {
+        xref::find_startxref(&self.data).ok()
+    }
+
+    /// The security handler, when the file is encrypted.
+    pub(crate) fn security(&self) -> Option<&Security> {
+        self.security.as_ref()
+    }
+
+    /// The number one past the highest object number in use.
+    pub fn next_object_number(&self) -> u32 {
+        let size = self
+            .trailer
+            .get(b"Size")
+            .and_then(Object::as_i64)
+            .and_then(|s| u32::try_from(s).ok())
+            .unwrap_or(0);
+        let max = self.entries.keys().max().map_or(0, |m| m + 1);
+        size.max(max).max(1)
+    }
+
     pub fn data(&self) -> &[u8] {
         &self.data
     }
@@ -470,7 +493,7 @@ impl Document {
 }
 
 /// Whether a stream opts out of encryption with the Identity crypt filter.
-fn has_identity_crypt_filter(dict: &Dict) -> bool {
+pub(crate) fn has_identity_crypt_filter(dict: &Dict) -> bool {
     let as_list = |o: Option<&Object>| -> Vec<Object> {
         match o {
             Some(Object::Array(a)) => a.clone(),
