@@ -2,6 +2,7 @@
 //! selects, how wide it is, and what text it stands for.
 
 mod cmap;
+mod predefined;
 mod system;
 
 use std::cell::RefCell;
@@ -16,7 +17,7 @@ use atelier_raster::{Path, Transform};
 use atelier_syntax::{Dict, Document, Object, Stream};
 
 pub use cmap::CMap;
-use system::{Family, Want};
+use system::{Family, Script, Want};
 
 /// Font descriptor flags (9.8.2).
 const FIXED_PITCH: i64 = 1;
@@ -56,6 +57,8 @@ enum Kind {
         cid_to_gid: Option<Vec<u16>>,
         /// The program is CID-keyed CFF: look glyphs up by CID.
         cid_keyed: bool,
+        /// Unicode by CID for the font's character collection.
+        cid_unicode: Option<Arc<Vec<u32>>>,
     },
     Type3 {
         matrix: Transform,
@@ -133,7 +136,7 @@ fn load_program(
 }
 
 /// Picks a system font for a font that is not embedded.
-fn want_for(base: &str, flags: i64, std: Option<&Std14>, cjk: bool) -> Want {
+fn want_for(base: &str, flags: i64, std: Option<&Std14>, cjk: Option<Script>) -> Want {
     let lower = base.to_ascii_lowercase();
     let bold = std.is_some_and(Std14::is_bold)
         || flags & FORCE_BOLD != 0
@@ -144,8 +147,14 @@ fn want_for(base: &str, flags: i64, std: Option<&Std14>, cjk: bool) -> Want {
         || flags & ITALIC != 0
         || lower.contains("italic")
         || lower.contains("oblique");
-    let family = if cjk {
-        Family::Cjk
+    let family = if let Some(script) = cjk {
+        // Mincho, Song, Ming and Batang are the serif styles.
+        let serif = flags & SERIF != 0
+            || ["mincho", "ming", "song", "batang", "myeongjo", "serif"]
+                .iter()
+                .any(|k| lower.contains(k))
+                && !lower.contains("sans");
+        Family::Cjk { script, serif }
     } else if let Some(s) = std {
         match s.name {
             "Symbol" => Family::Symbol,
@@ -233,7 +242,7 @@ impl PdfFont {
         let embedded = load_program(doc, descriptor.as_ref(), warn);
         font.program = embedded.clone();
         if font.program.is_none() {
-            font.program = system::substitute(want_for(&base, flags, std, false));
+            font.program = system::substitute(want_for(&base, flags, std, None));
             font.substituted = true;
             if font.program.is_none() {
                 warn(format!("no font available to stand in for {}", font.name));
@@ -463,10 +472,20 @@ impl PdfFont {
 
     fn load_type0(doc: &Document, dict: &Dict, warn: &mut dyn FnMut(String)) -> PdfFont {
         let base = name_of(doc, dict, b"BaseFont").unwrap_or_default();
-        let cmap = match doc.get_key(dict, b"Encoding") {
+        let encoding = doc.get_key(dict, b"Encoding");
+        let cmap_name = match &encoding {
+            Ok(Object::Name(n)) => Some(n.as_bytes().to_vec()),
+            Ok(Object::Stream(s)) => s
+                .dict
+                .get(b"UseCMap")
+                .and_then(Object::as_name)
+                .map(|n| n.as_bytes().to_vec()),
+            _ => None,
+        };
+        let cmap = match encoding {
             Ok(Object::Name(n)) => CMap::predefined(n.as_bytes()).unwrap_or_else(|| {
                 warn(format!(
-                    "the {} CMap is not built in yet; reading codes as two-byte CIDs",
+                    "unknown CMap {}; reading codes as two-byte CIDs",
                     n.as_str_lossy()
                 ));
                 CMap::identity(n.as_bytes().ends_with(b"-V"))
@@ -537,12 +556,32 @@ impl PdfFont {
             .and_then(|d| doc.get_key(&d, b"Ordering").ok())
             .and_then(|o| o.as_string().map(|s| s.bytes.clone()))
             .unwrap_or_default();
-        let cjk = matches!(&ordering[..], b"Japan1" | b"GB1" | b"CNS1" | b"Korea1");
+        // The collection, from the font or else from its predefined CMap.
+        let ordering = match &ordering[..] {
+            b"" | b"Identity" => cmap_name
+                .as_deref()
+                .and_then(predefined::ordering)
+                .map(|o| o.as_bytes().to_vec())
+                .unwrap_or(ordering),
+            _ => ordering,
+        };
+        let script = match &ordering[..] {
+            b"Japan1" => Some(Script::Japanese),
+            b"GB1" => Some(Script::Simplified),
+            b"CNS1" => Some(Script::Traditional),
+            b"Korea1" | b"KR" => Some(Script::Korean),
+            _ => None,
+        };
+        // CID to Unicode from the collection, for fonts without a ToUnicode.
+        let cid_unicode = std::str::from_utf8(&ordering)
+            .ok()
+            .filter(|_| script.is_some())
+            .and_then(predefined::cid_to_unicode);
 
         let mut program = load_program(doc, descriptor.as_ref(), warn);
         let mut substituted = false;
         if program.is_none() {
-            program = system::substitute(want_for(&base, flags, None, cjk));
+            program = system::substitute(want_for(&base, flags, None, script));
             substituted = true;
             if program.is_none() {
                 warn(format!(
@@ -562,12 +601,20 @@ impl PdfFont {
                 w2,
                 cid_to_gid,
                 cid_keyed,
+                cid_unicode,
             },
         );
         font.program = program;
         font.substituted = substituted;
         font.to_unicode = load_to_unicode(doc, dict);
-        if substituted && font.to_unicode.is_none() {
+        let has_unicode = matches!(
+            &font.kind,
+            Kind::Cid {
+                cid_unicode: Some(_),
+                ..
+            }
+        );
+        if substituted && font.to_unicode.is_none() && !has_unicode {
             warn(format!(
                 "{} is not embedded and has no Unicode map; its text may show the wrong glyphs",
                 font.name
@@ -620,6 +667,7 @@ impl PdfFont {
                 w2,
                 cid_to_gid,
                 cid_keyed,
+                cid_unicode,
             } => {
                 let mut pos = 0;
                 while pos < bytes.len() {
@@ -632,7 +680,14 @@ impl PdfFont {
                             w2.get(&cid).copied().unwrap_or((dw2.1, width / 2.0, dw2.0));
                         (w1, vx, vy)
                     });
-                    let unicode = self.to_unicode.as_ref().and_then(|t| t.unicode(code));
+                    let unicode = self
+                        .to_unicode
+                        .as_ref()
+                        .and_then(|t| t.unicode(code))
+                        .or_else(|| {
+                            let u = *cid_unicode.as_ref()?.get(cid as usize)?;
+                            char::from_u32(u).filter(|_| u != 0).map(String::from)
+                        });
                     let gid =
                         self.cid_gid(cid, *cid_keyed, cid_to_gid.as_deref(), unicode.as_deref());
                     out.push(Glyph {

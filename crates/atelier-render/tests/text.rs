@@ -252,3 +252,22 @@ fn hostile_text_does_not_hang_or_panic() {
     let _ = render(&doc2);
     let _ = text(&doc);
 }
+
+#[test]
+fn predefined_cjk_cmaps_give_cids_and_text() {
+    // Shift-JIS through 90ms-RKSJ-H, with no ToUnicode: the text comes from
+    // the Adobe-Japan1 collection. The font is embedded with Identity
+    // CIDToGIDMap so no system font is involved; CID widths prove the CIDs.
+    let extra = vec![
+        b"<< /Type /Font /Subtype /Type0 /BaseFont /Lib /Encoding /90ms-RKSJ-H /DescendantFonts [6 0 R] >>".to_vec(),
+        b"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Lib /CIDSystemInfo << /Registry (Adobe) /Ordering (Japan1) /Supplement 6 >> /FontDescriptor 7 0 R /DW 1000 /W [843 [500]] >>".to_vec(),
+        b"<< /Type /FontDescriptor /FontName /Lib /Flags 4 /FontFile2 8 0 R >>".to_vec(),
+        stream("", LIBERATION),
+    ];
+    // あ (82A0, CID 843), 日本 (93FA 967B), then an ASCII A.
+    let doc = open(b"BT /F1 10 Tf 0 0 Td <82A093FA967B41> Tj ET", &extra);
+    let t = text(&doc);
+    assert_eq!(t.plain_text(), "あ日本A");
+    let x: Vec<f64> = t.glyphs.iter().map(|g| g.baseline.0.x).collect();
+    assert_eq!(x, vec![0.0, 5.0, 15.0, 25.0]);
+}

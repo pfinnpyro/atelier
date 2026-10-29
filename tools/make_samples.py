@@ -562,6 +562,37 @@ SAMPLES["output-intent"] = pdf([
 ])
 
 
+def cid_font(base, cmap, ordering, vertical=False):
+    """A Type 0 font that is not embedded, in an Adobe character collection."""
+    return (b"<< /Type /Font /Subtype /Type0 /BaseFont /" + base + b" /Encoding /" + cmap
+            + b" /DescendantFonts [<< /Type /Font /Subtype /CIDFontType0 /BaseFont /" + base
+            + b" /CIDSystemInfo << /Registry (Adobe) /Ordering (" + ordering + b") /Supplement 2 >>"
+            + b" /FontDescriptor << /Type /FontDescriptor /FontName /" + base
+            + b" /Flags 4 /FontBBox [0 -120 1000 880] /ItalicAngle 0 /Ascent 880 /Descent -120"
+            + b" /CapHeight 700 /StemV 80 >> /DW 1000 >>] >>")
+
+
+def hexstr(b):
+    return b"<" + b.hex().encode() + b">"
+
+
+# Japanese in Shift-JIS, Chinese in UCS-2 and vertical Japanese, none
+# embedded: the viewer maps CIDs to Unicode and draws with system fonts.
+SAMPLES["cjk"] = single_page(
+    b"BT /F1 28 Tf 20 340 Td " + hexstr("日本語のテキスト".encode("cp932")) + b" Tj ET\n"
+    + b"BT /F2 28 Tf 20 280 Td " + hexstr("中文简体字示例".encode("utf-16-be")) + b" Tj ET\n"
+    + b"BT /F3 28 Tf 20 220 Td " + hexstr("한국어 텍스트".encode("utf-16-be")) + b" Tj ET\n"
+    + b"BT /F4 28 Tf 340 380 Td " + hexstr("縦書きの文".encode("utf-16-be")) + b" Tj ET\n",
+    resources=b"<< /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R /F4 8 0 R >> >>",
+    extra_objects=[
+        cid_font(b"MS-Gothic", b"90ms-RKSJ-H", b"Japan1"),
+        cid_font(b"SimSun", b"UniGB-UCS2-H", b"GB1"),
+        cid_font(b"Batang", b"UniKS-UCS2-H", b"Korea1"),
+        cid_font(b"MS-Mincho", b"UniJIS-UCS2-V", b"Japan1", vertical=True),
+    ],
+)
+
+
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else "samples"
     os.makedirs(out_dir, exist_ok=True)
