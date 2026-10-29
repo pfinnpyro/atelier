@@ -28,3 +28,6 @@ image = "0.25.10"
 
 [lints]
 workspace = true
+
+[target."cfg(windows)".dependencies]
+winreg = "0.55"

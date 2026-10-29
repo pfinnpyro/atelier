@@ -10,6 +10,7 @@
 mod inspect;
 mod layout;
 mod orient;
+mod outline;
 mod search;
 mod select;
 mod tiles;
@@ -19,6 +20,7 @@ pub use inspect::{
 };
 pub use layout::{Layout, PageGeom, ViewRect};
 pub use orient::{Basis, gray_of_rgba, upright_from_image, upright_page, upright_rotation};
+pub use outline::{OutlineItem, bookmarks, headings};
 pub use search::{SearchMatch, find_in_page};
 pub use select::{Caret, Selection, hit_test, word_at};
 pub use tiles::{

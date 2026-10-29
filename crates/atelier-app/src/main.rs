@@ -3,6 +3,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod default_app;
+mod settings;
 mod worker;
 
 use std::path::PathBuf;
