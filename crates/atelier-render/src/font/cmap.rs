@@ -282,6 +282,45 @@ impl CMap {
         None
     }
 
+    /// Every code with Unicode text, for building a reverse map. Ranges are
+    /// capped so a hostile CMap cannot make this huge.
+    pub fn unicode_codes(&self) -> Vec<(u32, String)> {
+        let mut out: Vec<(u32, String)> =
+            self.unicode.iter().map(|(&c, s)| (c, s.clone())).collect();
+        let mut budget = 1 << 16;
+        for &(lo, hi, _) in &self.unicode_ranges {
+            for code in lo..=hi {
+                if budget == 0 {
+                    break;
+                }
+                budget -= 1;
+                if let Some(s) = self.unicode(code) {
+                    out.push((code, s));
+                }
+            }
+        }
+        out.sort_by_key(|e| e.0);
+        out
+    }
+
+    /// The bytes of `code` as it appears in a string: as many as the
+    /// smallest code space range that holds it.
+    pub fn code_bytes(&self, code: u32) -> Vec<u8> {
+        let len = if self.identity {
+            2
+        } else {
+            self.codespace
+                .iter()
+                .filter(|(n, lo, hi)| {
+                    *n <= 4 && be(lo) <= code && code <= be(hi) && (*n == 4 || code >> (8 * n) == 0)
+                })
+                .map(|e| e.0)
+                .min()
+                .unwrap_or(if code > 0xFF { 2 } else { 1 })
+        };
+        code.to_be_bytes()[4 - len..].to_vec()
+    }
+
     pub fn has_unicode(&self) -> bool {
         !self.unicode.is_empty() || !self.unicode_ranges.is_empty()
     }

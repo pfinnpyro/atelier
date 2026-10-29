@@ -42,6 +42,8 @@ pub struct Document {
     warnings: Mutex<Vec<String>>,
     /// Set when the file is encrypted and a password opened it.
     security: Option<Security>,
+    /// The password that opened an encrypted file, for [`Document::reopen`].
+    password: Vec<u8>,
     /// Values other crates derive from the document, computed once.
     memo: Mutex<Memo>,
 }
@@ -102,6 +104,12 @@ impl Document {
         Ok(doc)
     }
 
+    /// Opens new bytes of the same file, such as this one with an update
+    /// appended, with the password that opened this one.
+    pub fn reopen(&self, data: impl Into<Arc<[u8]>>) -> Result<Self> {
+        Self::open_with_password(data, &self.password)
+    }
+
     fn build(
         data: Arc<[u8]>,
         version: String,
@@ -123,6 +131,7 @@ impl Document {
             pages: OnceLock::new(),
             warnings: Mutex::new(warnings),
             security: None,
+            password: Vec::new(),
             memo: Mutex::new(HashMap::new()),
         }
     }
@@ -142,6 +151,7 @@ impl Document {
             cache.clear();
         }
         self.security = Some(security);
+        self.password = password.to_vec();
         Ok(self)
     }
 
@@ -193,6 +203,29 @@ impl Document {
             Some(v) if v > self.version => v,
             _ => self.version.clone(),
         }
+    }
+
+    /// Where the last cross-reference section starts, as `startxref`
+    /// says, when that is usable.
+    pub fn startxref(&self) -> Option<usize> {
+        xref::find_startxref(&self.data).ok()
+    }
+
+    /// The security handler, when the file is encrypted.
+    pub(crate) fn security(&self) -> Option<&Security> {
+        self.security.as_ref()
+    }
+
+    /// The number one past the highest object number in use.
+    pub fn next_object_number(&self) -> u32 {
+        let size = self
+            .trailer
+            .get(b"Size")
+            .and_then(Object::as_i64)
+            .and_then(|s| u32::try_from(s).ok())
+            .unwrap_or(0);
+        let max = self.entries.keys().max().map_or(0, |m| m + 1);
+        size.max(max).max(1)
     }
 
     pub fn data(&self) -> &[u8] {
@@ -470,7 +503,7 @@ impl Document {
 }
 
 /// Whether a stream opts out of encryption with the Identity crypt filter.
-fn has_identity_crypt_filter(dict: &Dict) -> bool {
+pub(crate) fn has_identity_crypt_filter(dict: &Dict) -> bool {
     let as_list = |o: Option<&Object>| -> Vec<Object> {
         match o {
             Some(Object::Array(a)) => a.clone(),

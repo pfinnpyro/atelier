@@ -13,6 +13,7 @@ atelier-color = { path = "crates/atelier-color" }
 atelier-crypto = { path = "crates/atelier-crypto" }
 atelier-filters = { path = "crates/atelier-filters" }
 atelier-font = { path = "crates/atelier-font" }
+atelier-form = { path = "crates/atelier-form" }
 atelier-syntax = { path = "crates/atelier-syntax" }
 atelier-raster = { path = "crates/atelier-raster" }
 atelier-render = { path = "crates/atelier-render" }

@@ -15,6 +15,7 @@ mod shading;
 mod text;
 
 pub use colorspace::ColorSpace;
+pub use font::TextFont;
 pub use interp::{
     RenderOptions, Rendered, extract_text, page_transform, render_page, render_region,
 };

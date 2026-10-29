@@ -99,7 +99,7 @@ pub(crate) fn read(data: &[u8], shift: usize) -> Result<XrefTable> {
     Ok(table)
 }
 
-fn find_startxref(data: &[u8]) -> Result<usize> {
+pub(crate) fn find_startxref(data: &[u8]) -> Result<usize> {
     let tail_start = data.len().saturating_sub(4096);
     let pos = rfind(&data[tail_start..], b"startxref")
         .map(|p| p + tail_start)

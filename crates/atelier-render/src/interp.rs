@@ -9,7 +9,7 @@ use atelier_raster::{
     stroke_to_path,
 };
 use atelier_syntax::{
-    ContentParser, Dict, Document, Name, ObjRef, Object, Operation, Page, Result, Stream,
+    ContentParser, Dict, Document, Name, ObjRef, Object, Operation, Page, Rect, Result, Stream,
 };
 
 use crate::colorspace::{self, ColorSpace};
@@ -32,6 +32,11 @@ pub struct RenderOptions {
     /// Device pixels per PDF point (72 per inch). 1.0 is 72 dpi.
     pub scale: f64,
     pub background: Color,
+    /// Draw annotations and form fields from their appearance streams.
+    pub annotations: bool,
+    /// Annotations to leave out, such as a form field the viewer is
+    /// editing and draws itself.
+    pub hidden_annotations: Vec<ObjRef>,
 }
 
 impl Default for RenderOptions {
@@ -39,6 +44,8 @@ impl Default for RenderOptions {
         Self {
             scale: 150.0 / 72.0,
             background: Color::WHITE,
+            annotations: true,
+            hidden_annotations: Vec::new(),
         }
     }
 }
@@ -88,6 +95,9 @@ pub fn render_region(
     let content = page.contents(doc)?;
     let mut interp = Interpreter::new(doc, &mut pixmap, ctm);
     interp.run(&content, &page.resources, 0);
+    if options.annotations {
+        interp.annotations(page, ctm, &options.hidden_annotations);
+    }
     let warnings = interp.warnings;
     Ok(Rendered { pixmap, warnings })
 }
@@ -131,6 +141,30 @@ impl Default for TextState {
             render: 0,
             rise: 0.0,
         }
+    }
+}
+
+/// An annotation's appearance stream for `kind` (N, R or D): the stream
+/// itself, or the one its /AS state picks from a dictionary of states.
+pub(crate) fn appearance(
+    doc: &Document,
+    annot: &Dict,
+    kind: &[u8],
+) -> Option<(Stream, Option<ObjRef>)> {
+    let ap = doc.get_key(annot, b"AP").ok()?;
+    let entry = ap.as_dict()?.get(kind)?.clone();
+    let resolved = doc.resolve(&entry).ok()?;
+    match resolved {
+        Object::Stream(s) => Some((s, entry.as_reference())),
+        Object::Dict(states) => {
+            let state = doc.get_key(annot, b"AS").ok()?;
+            let entry = states.get(state.as_name()?.as_bytes())?.clone();
+            match doc.resolve(&entry).ok()? {
+                Object::Stream(s) => Some((s, entry.as_reference())),
+                _ => None,
+            }
+        }
+        _ => None,
     }
 }
 
@@ -308,6 +342,85 @@ impl<'a> Interpreter<'a> {
             pattern_depth: 0,
             soft_masks: HashMap::new(),
             devices: [ColorSpace::Gray, ColorSpace::Rgb, ColorSpace::Cmyk],
+        }
+    }
+
+    /// Draws the page's annotations from their normal appearance streams
+    /// (ISO 32000-2, 12.5.5): each appearance's bounding box, after its
+    /// matrix, is fitted to the annotation's rectangle.
+    fn annotations(&mut self, page: &Page, page_ctm: Transform, hidden: &[ObjRef]) {
+        let doc = self.doc;
+        let Ok(Object::Array(annots)) = doc.get_key(&page.dict, b"Annots") else {
+            return;
+        };
+        for entry in annots.iter().take(10_000) {
+            if entry.as_reference().is_some_and(|r| hidden.contains(&r)) {
+                continue;
+            }
+            let Ok(Object::Dict(annot)) = doc.resolve(entry) else {
+                continue;
+            };
+            let Some((stream, r)) = appearance(doc, &annot, b"N") else {
+                continue;
+            };
+            let flags = doc
+                .get_key(&annot, b"F")
+                .ok()
+                .and_then(|f| f.as_i64())
+                .unwrap_or(0);
+            // Hidden (2) and NoView (32); popups only show when opened.
+            if flags & (2 | 32) != 0
+                || doc
+                    .get_key(&annot, b"Subtype")
+                    .ok()
+                    .is_some_and(|s| s.as_name().is_some_and(|n| *n == b"Popup"))
+            {
+                continue;
+            }
+            let Some(rect) = doc
+                .get_key(&annot, b"Rect")
+                .ok()
+                .and_then(|r| Rect::from_array(r.as_array()?))
+            else {
+                continue;
+            };
+            let (matrix, _) = self.form_geometry(&stream);
+            let Some(bbox) = doc
+                .get_key(&stream.dict, b"BBox")
+                .ok()
+                .and_then(|b| Rect::from_array(b.as_array()?))
+            else {
+                continue;
+            };
+            // The box after the form matrix, then the map onto the rectangle.
+            let corners = [
+                (bbox.x0, bbox.y0),
+                (bbox.x1, bbox.y0),
+                (bbox.x0, bbox.y1),
+                (bbox.x1, bbox.y1),
+            ]
+            .map(|(x, y)| matrix.apply(Point::new(x, y)));
+            let min_x = corners.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
+            let max_x = corners
+                .iter()
+                .map(|p| p.x)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let min_y = corners.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
+            let max_y = corners
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let (w, h) = (max_x - min_x, max_y - min_y);
+            if !(w > 1e-9 && h > 1e-9) {
+                continue;
+            }
+            let (sx, sy) = (rect.width() / w, rect.height() / h);
+            let fit = Transform::new(sx, 0.0, 0.0, sy, rect.x0 - min_x * sx, rect.y0 - min_y * sy);
+            self.gs = GraphicsState::new(fit.then(&page_ctm));
+            self.stack.clear();
+            self.path = PathBuilder::new();
+            self.text_clip = None;
+            self.form(&stream, r, &page.resources, 0);
         }
     }
 

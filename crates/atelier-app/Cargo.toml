@@ -12,6 +12,7 @@ name = "atelier-viewer"
 path = "src/main.rs"
 
 [dependencies]
+atelier-form.workspace = true
 atelier-raster.workspace = true
 atelier-render.workspace = true
 atelier-syntax.workspace = true

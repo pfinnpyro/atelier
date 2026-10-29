@@ -1,0 +1,17 @@
+[package]
+name = "atelier-form"
+description = "Interactive forms (AcroForm): the field tree, filling values and drawing field appearances"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+atelier-render.workspace = true
+atelier-syntax.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+atelier-raster.workspace = true
