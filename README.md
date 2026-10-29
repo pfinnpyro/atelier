@@ -73,6 +73,22 @@ and `SHA256SUMS.txt`. Atelier checks GitHub for a newer release when it starts
 against `SHA256SUMS.txt`, and installs it: through the installer for an
 installed copy, or by replacing the program file for a portable one.
 
+## Organizing pages
+
+In the sidebar's page list:
+
+- Click a page to go to it; Ctrl+click and Shift+click pick several.
+- Drag pages to move them (in the one-column view).
+- Right-click for: rotate, save the pages as a new file, remove them, and add
+  the pages of another PDF before this page or at the end. **+ Add pages**
+  adds a file's pages at the end, which is how files are merged.
+- Delete removes the picked pages while the pointer is over the list.
+
+Changes are saved like any other. Once pages are removed, saving writes the
+file out whole without them, so their content is gone from the file's bytes
+and not only from its page list. Saving pages as a new file leaves out
+everything the other pages used, including the form and bookmarks.
+
 ## Viewer keys
 
 | Key | Does |
@@ -97,6 +113,12 @@ atelier render <file.pdf> <page|all> [--dpi N] [-o out.png]
 atelier text <file.pdf> [page|all] [--glyphs]
                                          print the text of pages; --glyphs prints each
                                          glyph with its box
+atelier arrange <file.pdf> <pages> -o <out.pdf>
+                                         keep the pages listed, in that order (3,1-2)
+atelier extract <file.pdf> <pages> -o <out.pdf>
+                                         save the pages listed as a new file
+atelier merge <file.pdf> <more.pdf...> -o <out.pdf>
+                                         add the other files' pages at the end
 ```
 
 ## Comparing against a reference renderer

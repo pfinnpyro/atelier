@@ -7,6 +7,7 @@
 mod appearance;
 mod da;
 mod fill;
+mod pages;
 mod scripts;
 mod session;
 mod text_layer;
@@ -17,6 +18,7 @@ use atelier_syntax::{Dict, Document, ObjRef, Object, Rect, Result};
 
 pub use da::DefaultAppearance;
 pub use fill::FillWarning;
+pub use pages::PageSlot;
 pub use scripts::{Action, document_actions};
 pub use session::{Built, Session};
 
