@@ -276,6 +276,9 @@ struct Interpreter<'a> {
     pattern_depth: usize,
     /// Soft masks already rendered, by mask group and transform.
     soft_masks: HashMap<(ObjRef, [u64; 6]), Rc<Coverage>>,
+    /// What DeviceGray, DeviceRGB and DeviceCMYK mean in the content being
+    /// run (Default spaces, an output intent).
+    devices: [ColorSpace; 3],
 }
 
 fn nums(ops: &[Object]) -> Vec<f64> {
@@ -304,6 +307,7 @@ impl<'a> Interpreter<'a> {
             base_ctm: ctm,
             pattern_depth: 0,
             soft_masks: HashMap::new(),
+            devices: [ColorSpace::Gray, ColorSpace::Rgb, ColorSpace::Cmyk],
         }
     }
 
@@ -315,6 +319,18 @@ impl<'a> Interpreter<'a> {
     }
 
     fn run(&mut self, content: &[u8], resources: &Dict, depth: usize) {
+        let devices = [1, 3, 4].map(|n| colorspace::device(self.doc, resources, n));
+        if self.operations == 0 && self.gs.fill_space == ColorSpace::Gray {
+            // The page starts out painting black in DeviceGray.
+            self.gs.fill_space = devices[0].clone();
+            self.gs.stroke_space = devices[0].clone();
+        }
+        let outer = std::mem::replace(&mut self.devices, devices);
+        self.run_with(content, resources, depth);
+        self.devices = outer;
+    }
+
+    fn run_with(&mut self, content: &[u8], resources: &Dict, depth: usize) {
         let base_depth = self.stack.len();
         for op in ContentParser::new(content) {
             self.operations += 1;
@@ -452,12 +468,12 @@ impl<'a> Interpreter<'a> {
                     self.gs.fill_pattern = self.set_pattern(o, resources, false);
                 }
             }
-            b"G" if !n.is_empty() => self.set_stroke(ColorSpace::Gray, &n[..1]),
-            b"g" if !n.is_empty() => self.set_fill(ColorSpace::Gray, &n[..1]),
-            b"RG" if n.len() >= 3 => self.set_stroke(ColorSpace::Rgb, &n[..3]),
-            b"rg" if n.len() >= 3 => self.set_fill(ColorSpace::Rgb, &n[..3]),
-            b"K" if n.len() >= 4 => self.set_stroke(ColorSpace::Cmyk, &n[..4]),
-            b"k" if n.len() >= 4 => self.set_fill(ColorSpace::Cmyk, &n[..4]),
+            b"G" if !n.is_empty() => self.set_stroke(self.devices[0].clone(), &n[..1]),
+            b"g" if !n.is_empty() => self.set_fill(self.devices[0].clone(), &n[..1]),
+            b"RG" if n.len() >= 3 => self.set_stroke(self.devices[1].clone(), &n[..3]),
+            b"rg" if n.len() >= 3 => self.set_fill(self.devices[1].clone(), &n[..3]),
+            b"K" if n.len() >= 4 => self.set_stroke(self.devices[2].clone(), &n[..4]),
+            b"k" if n.len() >= 4 => self.set_fill(self.devices[2].clone(), &n[..4]),
 
             // XObjects and images
             b"Do" => {

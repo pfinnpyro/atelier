@@ -1,5 +1,6 @@
 //! A loaded PDF file with lazy object access.
 
+use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -9,6 +10,9 @@ use crate::page::{Page, collect_pages};
 use crate::parser::find;
 use crate::xref::{self, XrefEntry, XrefTable};
 use crate::{Dict, Error, Lexer, ObjRef, Object, Parser, Result, Stream, Token};
+
+/// Values derived from the document, by kind and key.
+type Memo = HashMap<(&'static str, u64), Arc<dyn Any + Send + Sync>>;
 
 /// Reference chains and object-stream lookups deeper than this are treated as
 /// cycles.
@@ -38,6 +42,8 @@ pub struct Document {
     warnings: Mutex<Vec<String>>,
     /// Set when the file is encrypted and a password opened it.
     security: Option<Security>,
+    /// Values other crates derive from the document, computed once.
+    memo: Mutex<Memo>,
 }
 
 impl Document {
@@ -117,6 +123,7 @@ impl Document {
             pages: OnceLock::new(),
             warnings: Mutex::new(warnings),
             security: None,
+            memo: Mutex::new(HashMap::new()),
         }
     }
 
@@ -136,6 +143,32 @@ impl Document {
         }
         self.security = Some(security);
         Ok(self)
+    }
+
+    /// A value derived from this document, computed by `make` the first
+    /// time (`kind`, `key`) is asked for and shared after that. Lets other
+    /// crates cache things like parsed colour profiles for exactly as long
+    /// as the document lives.
+    pub fn memo<T: Any + Send + Sync>(
+        &self,
+        kind: &'static str,
+        key: u64,
+        make: impl FnOnce() -> T,
+    ) -> Arc<T> {
+        let found = self
+            .memo
+            .lock()
+            .ok()
+            .and_then(|m| m.get(&(kind, key)).cloned())
+            .and_then(|v| v.downcast::<T>().ok());
+        if let Some(v) = found {
+            return v;
+        }
+        let v = Arc::new(make());
+        if let Ok(mut m) = self.memo.lock() {
+            m.insert((kind, key), v.clone());
+        }
+        v
     }
 
     /// For an encrypted file, which password opened it.

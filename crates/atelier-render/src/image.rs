@@ -1,5 +1,8 @@
 //! Image XObjects and inline images (ISO 32000-2, 8.9) to RGBA.
 
+use std::sync::Arc;
+
+use atelier_color::{Intent, Profile, Sampled};
 use atelier_filters::{decode_dct, decode_jpx};
 use atelier_raster::{Color, RgbaImage};
 use atelier_syntax::{Dict, Document, ImageFilter, Object, Stream};
@@ -30,6 +33,9 @@ struct CodecOutput {
     alpha: Option<Vec<u8>>,
     /// JPEG 2000 images ignore /Decode (except as masks).
     ignore_decode: bool,
+    /// The codec's own colour space (a JPEG 2000 ICC profile), used when
+    /// the image dictionary names none.
+    space: Option<ColorSpace>,
 }
 
 /// Runs the image codec named by `filter`, if any.
@@ -52,11 +58,19 @@ fn run_codec(
                 data: j.data,
                 alpha: None,
                 ignore_decode: false,
+                space: None,
             }))
         }
         Some((ImageFilter::Jpx, _)) => {
             let j = decode_jpx(data).map_err(|e| format!("JPEG 2000 image: {e}"))?;
+            let space = j
+                .icc
+                .as_deref()
+                .and_then(|icc| Profile::parse(icc, Intent::RelativeColorimetric))
+                .filter(|p| p.components() == j.components)
+                .map(|p| ColorSpace::Icc(Arc::new(p)));
             Ok(Some(CodecOutput {
+                space,
                 width: j.width,
                 height: j.height,
                 components: j.components,
@@ -155,10 +169,17 @@ pub fn decode(
             // The codec's component count wins over a missing or
             // mismatched colour space; extra channels are dropped.
             (Some(c), Some(cs)) if cs.components() <= c.components => cs,
-            (Some(c), _) => match c.components {
-                1 => ColorSpace::Gray,
-                4 => ColorSpace::Cmyk,
-                _ => ColorSpace::Rgb,
+            (Some(c), _) => match &c.space {
+                Some(space) => space.clone(),
+                None => colorspace::device(
+                    doc,
+                    resources,
+                    match c.components {
+                        1 | 2 => 1,
+                        4 => 4,
+                        _ => 3,
+                    },
+                ),
             },
             (None, cs) => cs?,
         };
@@ -210,6 +231,26 @@ pub fn decode(
                 })
                 .collect()
         });
+        // Costly spaces (ICC, calibrated, DeviceN with tint functions) are
+        // sampled on a grid once and interpolated per pixel.
+        let grid = ((2..=4).contains(&n) && cs.is_costly() && width * height > 16_384)
+            .then(|| {
+                let points = match n {
+                    2 => 65,
+                    3 => 33,
+                    _ => 17,
+                };
+                Sampled::new(n, points, |x| {
+                    let comps: Vec<f32> = x
+                        .iter()
+                        .zip(&ranges)
+                        .map(|(&v, &(lo, hi))| lo + v * (hi - lo))
+                        .collect();
+                    cs.to_rgb(&comps).map_or([0.0; 3], |c| [c.r, c.g, c.b])
+                })
+            })
+            .flatten();
+        let mut unit = vec![0f32; n];
         let mut cache: Option<(Vec<u32>, [u8; 4])> = None;
         for p in 0..width * height {
             let raw = &samples[p * n..(p + 1) * n];
@@ -226,6 +267,15 @@ pub fn decode(
             let px = match (&table, &cache) {
                 (Some(t), _) => t[(raw[0] as usize).min(t.len() - 1)],
                 (None, Some((k, px))) if k.as_slice() == raw => *px,
+                _ if grid.is_some() => {
+                    for (u, &v) in unit.iter_mut().zip(raw) {
+                        *u = v as f32 / max;
+                    }
+                    let rgb = grid.as_ref().map_or([0.0; 3], |g| g.eval(&unit));
+                    let px = Color::rgb(rgb[0], rgb[1], rgb[2]).to_premultiplied();
+                    cache = Some((raw.to_vec(), px));
+                    px
+                }
                 _ => {
                     for (i, &v) in raw.iter().enumerate() {
                         let (lo, hi) = ranges[i];

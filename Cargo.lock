@@ -386,6 +386,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "atelier-color"
+version = "0.1.0"
+
+[[package]]
 name = "atelier-crypto"
 version = "0.1.0"
 
@@ -411,6 +415,7 @@ version = "0.1.0"
 name = "atelier-render"
 version = "0.1.0"
 dependencies = [
+ "atelier-color",
  "atelier-filters",
  "atelier-font",
  "atelier-raster",

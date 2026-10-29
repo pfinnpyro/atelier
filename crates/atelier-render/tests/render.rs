@@ -14,8 +14,18 @@ fn stream(dict: &str, data: &[u8]) -> Vec<u8> {
 }
 
 fn build(page_extra: &str, content: &[u8], resources: &str, extra: &[Vec<u8>]) -> Vec<u8> {
+    build_with_catalog("", page_extra, content, resources, extra)
+}
+
+fn build_with_catalog(
+    catalog_extra: &str,
+    page_extra: &str,
+    content: &[u8],
+    resources: &str,
+    extra: &[Vec<u8>],
+) -> Vec<u8> {
     let mut objects: Vec<Vec<u8>> = vec![
-        b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+        format!("<< /Type /Catalog /Pages 2 0 R {catalog_extra} >>").into_bytes(),
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
         format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] {page_extra} /Resources {resources} /Contents 4 0 R >>")
             .into_bytes(),
@@ -49,6 +59,16 @@ fn build(page_extra: &str, content: &[u8], resources: &str, extra: &[Vec<u8>]) -
 
 fn render_with(page_extra: &str, content: &[u8], resources: &str, extra: &[Vec<u8>]) -> Pixmap {
     let doc = Document::open(build(page_extra, content, resources, extra)).unwrap();
+    let page = &doc.pages().unwrap()[0];
+    let options = RenderOptions {
+        scale: 1.0,
+        ..RenderOptions::default()
+    };
+    render_page(&doc, page, &options).unwrap().pixmap
+}
+
+fn render_doc(data: Vec<u8>) -> Pixmap {
+    let doc = Document::open(data).unwrap();
     let page = &doc.pages().unwrap()[0];
     let options = RenderOptions {
         scale: 1.0,
@@ -789,4 +809,112 @@ fn jbig2_image_with_globals() {
         }
     }
     assert!(black > 500, "the test area should hold text");
+}
+
+/// An ICC test profile and what Little CMS converts `input` to with it
+/// (see tools/icc_samples.py).
+fn icc_fixture(name: &str, input: &[u8]) -> (Vec<u8>, [u8; 3]) {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../atelier-color/tests/data/");
+    let profile = std::fs::read(format!("{dir}{name}.icc")).unwrap();
+    let reference = std::fs::read(format!("{dir}{name}.ref")).unwrap();
+    let n = input.len();
+    let expected = reference
+        .chunks(n + 3)
+        .find(|row| &row[..n] == input)
+        .map(|row| [row[n], row[n + 1], row[n + 2]])
+        .unwrap();
+    (profile, expected)
+}
+
+fn close(a: [u8; 3], b: [u8; 3], tolerance: i32) -> bool {
+    a.iter()
+        .zip(b)
+        .all(|(&x, y)| (x as i32 - y as i32).abs() <= tolerance)
+}
+
+fn operands(input: &[u8]) -> String {
+    input
+        .iter()
+        .map(|&v| format!("{} ", v as f32 / 255.0))
+        .collect()
+}
+
+#[test]
+fn icc_based_colour_matches_little_cms() {
+    let input = [255, 51, 0];
+    let (profile, expected) = icc_fixture("rgb-matrix", &input);
+    let content = format!("/C cs {}sc 0 0 100 100 re f", operands(&input));
+    let p = render_with(
+        "",
+        content.as_bytes(),
+        "<< /ColorSpace << /C [/ICCBased 5 0 R] >> >>",
+        &[stream("/N 3", &profile)],
+    );
+    assert!(
+        close(at(&p, 50, 50), expected, 2),
+        "{:?} vs {expected:?}",
+        at(&p, 50, 50)
+    );
+}
+
+#[test]
+fn icc_profile_with_the_wrong_component_count_uses_the_alternate() {
+    let (profile, _) = icc_fixture("rgb-matrix", &[0, 0, 0]);
+    let p = render_with(
+        "",
+        b"/C cs 0.5 sc 0 0 100 100 re f",
+        "<< /ColorSpace << /C [/ICCBased 5 0 R] >> >>",
+        &[stream("/N 1 /Alternate /DeviceGray", &profile)],
+    );
+    assert!(
+        close(at(&p, 50, 50), [128, 128, 128], 1),
+        "{:?}",
+        at(&p, 50, 50)
+    );
+}
+
+#[test]
+fn default_rgb_replaces_device_rgb() {
+    let input = [255, 51, 0];
+    let (profile, expected) = icc_fixture("rgb-matrix", &input);
+    let content = format!("{}rg 0 0 50 100 re f", operands(&input));
+    let p = render_with(
+        "",
+        content.as_bytes(),
+        "<< /ColorSpace << /DefaultRGB [/ICCBased 5 0 R] >> >>",
+        &[stream("/N 3", &profile)],
+    );
+    assert!(
+        close(at(&p, 25, 50), expected, 2),
+        "{:?} vs {expected:?}",
+        at(&p, 25, 50)
+    );
+    // Without it, DeviceRGB is sRGB.
+    let plain = render(content.as_bytes());
+    assert_eq!(at(&plain, 25, 50), [255, 51, 0]);
+}
+
+#[test]
+fn output_intent_profiles_device_cmyk() {
+    let input = [191, 64, 0, 128];
+    let (profile, expected) = icc_fixture("cmyk-lut16", &input);
+    let content = format!(
+        "{}k 0 0 50 100 re f 1 0 0 rg 50 0 50 100 re f",
+        operands(&input)
+    );
+    let data = build_with_catalog(
+        "/OutputIntents [<< /Type /OutputIntent /S /GTS_PDFX /DestOutputProfile 5 0 R >>]",
+        "",
+        content.as_bytes(),
+        "<< >>",
+        &[stream("/N 4", &profile)],
+    );
+    let p = render_doc(data);
+    assert!(
+        close(at(&p, 25, 50), expected, 2),
+        "{:?} vs {expected:?}",
+        at(&p, 25, 50)
+    );
+    // DeviceRGB is left alone.
+    assert_eq!(at(&p, 75, 50), RED);
 }
