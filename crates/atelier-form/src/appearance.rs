@@ -513,28 +513,38 @@ pub(crate) fn button_appearance(
     } else {
         frame.draw(&mut background);
     }
-    let unit = font.width(&[ca]).max(0.1);
-    let size = if da.size > 0.0 {
-        da.size
-    } else {
-        // A dot fills half the button; a check most of it.
-        let room = w.min(h) - 2.0 * frame.padding();
-        let fraction = if radio { 0.5 } else { 0.8 };
-        ((w.min(h) * fraction).min(room.max(1.0) / unit)).max(1.0)
-    };
-    let (asc, desc) = (font.ascent(), font.descent());
-    let x = (w - unit * size) / 2.0;
-    let y = baseline_centred(h, size, asc, desc);
     let mut on = background.clone();
-    let _ = writeln!(
-        on,
-        "q BT /ZaDb {} Tf {} 1 0 0 1 {} {} Tm {} Tj ET Q",
-        num(size),
-        da.color,
-        num(x),
-        num(y),
-        PdfString::literal(vec![ca])
-    );
+    // Common marks are drawn as shapes, so they show in any viewer whether
+    // or not it has a ZapfDingbats font; other characters are text.
+    let side = ((w.min(h) - 2.0 * frame.padding()) * if radio { 0.6 } else { 0.85 }).max(1.0);
+    let side = if da.size > 0.0 {
+        side.min(da.size)
+    } else {
+        side
+    };
+    if let Some(shape) = mark_shape(ca, (w - side) / 2.0, (h - side) / 2.0, side) {
+        let _ = writeln!(on, "q {} {shape} Q", da.color);
+    } else {
+        let unit = font.width(&[ca]).max(0.1);
+        let size = if da.size > 0.0 {
+            da.size
+        } else {
+            let room = w.min(h) - 2.0 * frame.padding();
+            ((w.min(h) * 0.8).min(room.max(1.0) / unit)).max(1.0)
+        };
+        let (asc, desc) = (font.ascent(), font.descent());
+        let x = (w - unit * size) / 2.0;
+        let y = baseline_centred(h, size, asc, desc);
+        let _ = writeln!(
+            on,
+            "q BT /ZaDb {} Tf {} 1 0 0 1 {} {} Tm {} Tj ET Q",
+            num(size),
+            da.color,
+            num(x),
+            num(y),
+            PdfString::literal(vec![ca])
+        );
+    }
     let mut fonts = Dict::new();
     fonts.insert("ZaDb", Object::Dict(zadb));
     let mut resources = Dict::new();
@@ -543,6 +553,55 @@ pub(crate) fn button_appearance(
         frame.finish(on, resources.clone()),
         frame.finish(background, resources),
     )
+}
+
+/// A ZapfDingbats mark as a filled path in the square at (x, y) of
+/// side `s`: check (4), cross (8), dot (l), square (n), diamond (u), star (H).
+fn mark_shape(ca: u8, x: f64, y: f64, s: f64) -> Option<String> {
+    let poly = |pts: &[(f64, f64)]| {
+        let mut out = String::new();
+        for (i, (px, py)) in pts.iter().enumerate() {
+            let op = if i == 0 { "m" } else { "l" };
+            let _ = write!(out, "{} {} {op} ", num(x + px * s), num(y + py * s));
+        }
+        out.push('h');
+        out
+    };
+    Some(match ca {
+        b'4' => format!(
+            "{} f",
+            poly(&[
+                (0.0, 0.52),
+                (0.14, 0.66),
+                (0.38, 0.40),
+                (0.86, 0.96),
+                (1.0, 0.84),
+                (0.38, 0.12)
+            ])
+        ),
+        b'8' => format!(
+            "{} {} f",
+            poly(&[(0.0, 0.12), (0.12, 0.0), (1.0, 0.88), (0.88, 1.0)]),
+            poly(&[(0.0, 0.88), (0.88, 0.0), (1.0, 0.12), (0.12, 1.0)])
+        ),
+        b'l' => format!("{} f", circle(x + s / 2.0, y + s / 2.0, s / 2.0)),
+        b'n' => format!("{} {} {} {} re f", num(x), num(y), num(s), num(s)),
+        b'u' => format!(
+            "{} f",
+            poly(&[(0.5, 0.0), (1.0, 0.5), (0.5, 1.0), (0.0, 0.5)])
+        ),
+        b'H' => {
+            let pts: Vec<(f64, f64)> = (0..10)
+                .map(|i| {
+                    let r = if i % 2 == 0 { 0.5 } else { 0.2 };
+                    let a = std::f64::consts::FRAC_PI_2 + f64::from(i) * std::f64::consts::PI / 5.0;
+                    (0.5 + r * a.cos(), 0.5 + r * a.sin())
+                })
+                .collect();
+            format!("{} f", poly(&pts))
+        }
+        _ => return None,
+    })
 }
 
 /// The text a choice field shows, and for list boxes every option with

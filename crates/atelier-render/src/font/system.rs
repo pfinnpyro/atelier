@@ -182,7 +182,14 @@ fn candidates(w: Want) -> Vec<&'static str> {
             "DejaVuSans.ttf",
             "FreeSerif.ttf",
         ],
-        Family::Dingbats => vec!["wingding.ttf", "DejaVuSans.ttf", "FreeSerif.ttf"],
+        // ZapfDingbats glyphs are found by Unicode (a20 is U+2714), which
+        // Segoe UI Symbol covers on Windows; Wingdings uses its own codes.
+        Family::Dingbats => vec![
+            "seguisym.ttf",
+            "DejaVuSans.ttf",
+            "FreeSerif.ttf",
+            "wingding.ttf",
+        ],
         Family::Cjk { script, serif } => cjk(script, serif),
     }
 }
