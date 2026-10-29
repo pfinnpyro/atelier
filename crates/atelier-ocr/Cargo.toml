@@ -1,0 +1,20 @@
+[package]
+name = "atelier-ocr"
+description = "Reads the words in scanned pages, so they can be searched, copied and turned upright."
+version.workspace = true
+edition.workspace = true
+# The OCR runtime (rten) needs a newer compiler than the other crates.
+rust-version = "1.94"
+publish.workspace = true
+
+[dependencies]
+atelier-crypto.workspace = true
+atelier-raster.workspace = true
+atelier-render.workspace = true
+atelier-syntax.workspace = true
+atelier-view.workspace = true
+ocrs = { version = "0.13", default-features = false, features = ["onnx"] }
+rten = { version = "0.26", default-features = false, features = ["onnx_format"] }
+
+[lints]
+workspace = true

@@ -17,6 +17,7 @@ atelier-form = { path = "crates/atelier-form" }
 atelier-syntax = { path = "crates/atelier-syntax" }
 atelier-raster = { path = "crates/atelier-raster" }
 atelier-render = { path = "crates/atelier-render" }
+atelier-ocr = { path = "crates/atelier-ocr" }
 atelier-view = { path = "crates/atelier-view" }
 
 [workspace.lints.rust]

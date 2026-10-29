@@ -355,6 +355,8 @@ pub enum Basis {
     Text,
     /// The look of the page image, for scans with no text layer.
     Image,
+    /// Words read from the page image with OCR.
+    Ocr,
 }
 
 /// Page images are judged at about this resolution.
