@@ -9,14 +9,18 @@
 
 mod inspect;
 mod layout;
+mod orient;
 mod search;
 mod select;
 mod tiles;
 
-pub use inspect::{Fact, children, has_children, overview, preview, revisions, summary};
+pub use inspect::{
+    Fact, Picked, children, has_children, object_at, overview, preview, revisions, summary,
+};
 pub use layout::{Layout, PageGeom, ViewRect};
+pub use orient::upright_rotation;
 pub use search::{SearchMatch, find_in_page};
-pub use select::{Caret, Selection, hit_test};
+pub use select::{Caret, Selection, hit_test, word_at};
 pub use tiles::{
     PREVIEW_SCALE, TILE_SIZE, TileCache, TileKey, scale_key, tiles_at_scale, tiles_for_view,
 };

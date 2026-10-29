@@ -289,7 +289,7 @@ fn a_session_rebuilds_from_the_original_each_time() {
     use atelier_form::Session;
     use std::sync::Arc;
     let doc = Arc::new(Document::open(sample()).unwrap());
-    let mut s = Session::new(doc.clone()).unwrap().unwrap();
+    let mut s = Session::new(doc.clone());
     assert!(!s.is_dirty());
     // Nothing changed: the original document comes back as is.
     assert!(Arc::ptr_eq(&s.build().unwrap().doc, &doc));
@@ -299,7 +299,10 @@ fn a_session_rebuilds_from_the_original_each_time() {
     s.set(2, Value::State("Yes".into()));
     assert!(s.is_dirty());
     let built = s.build().unwrap();
-    assert_eq!(built.form.fields[0].value, Value::Text("second".into()));
+    assert_eq!(
+        built.form.unwrap().fields[0].value,
+        Value::Text("second".into())
+    );
     // One appended section on top of the original, not one per change.
     let data = built.doc.data();
     assert!(data.starts_with(doc.data()));
@@ -353,15 +356,17 @@ fn encrypted_forms_fill_and_stay_encrypted() {
     );
     let data = std::fs::read(path).unwrap();
     let doc = Arc::new(Document::open_with_password(data, b"user").unwrap());
-    let mut s = Session::new(doc).unwrap().unwrap();
+    let mut s = Session::new(doc);
     let name = s
         .original()
+        .unwrap()
         .fields
         .iter()
         .position(|f| f.name == "name")
         .unwrap();
     let colour = s
         .original()
+        .unwrap()
         .fields
         .iter()
         .position(|f| f.name == "colour")
@@ -384,4 +389,35 @@ fn encrypted_forms_fill_and_stay_encrypted() {
     assert_eq!(form.fields[colour].value, Value::Text("Blue".into()));
     let page = render(&reopened);
     assert!(page.width() > 0);
+}
+
+#[test]
+fn rotations_are_saved_with_the_fields() {
+    use atelier_form::Session;
+    use std::sync::Arc;
+    let doc = Arc::new(Document::open(sample()).unwrap());
+    let mut s = Session::new(doc.clone());
+    assert_eq!(s.rotation(0), 0);
+    s.rotate(0, -90);
+    assert_eq!(s.rotation(0), 270);
+    assert!(s.is_dirty());
+    s.set(0, Value::Text("turned".into()));
+    let built = s.build().unwrap();
+    let page = &built.doc.pages().unwrap()[0];
+    assert_eq!(page.rotate, 270);
+    assert_eq!(
+        built.form.unwrap().fields[0].value,
+        Value::Text("turned".into())
+    );
+    // Turning back to the original drops the change.
+    s.rotate(0, 360);
+    s.set(0, Value::Text("old".into()));
+    assert!(!s.is_dirty());
+
+    // Documents without a form still take rotations.
+    let plain = Arc::new(Document::open(build("<< >>", "[]", &[])).unwrap());
+    let mut s = Session::new(plain);
+    assert!(s.original().is_none());
+    s.rotate(0, 180);
+    assert_eq!(s.build().unwrap().doc.pages().unwrap()[0].rotate, 180);
 }

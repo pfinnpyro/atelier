@@ -9,7 +9,7 @@ use std::thread;
 
 use atelier_render::{PageText, RenderOptions, extract_text, render_region};
 use atelier_syntax::Document;
-use atelier_view::{TileKey, find_in_page};
+use atelier_view::{TileKey, find_in_page, upright_rotation};
 
 /// Work for the pool. Each job carries the document it is for, so a job
 /// queued before another file was opened still finishes cleanly.
@@ -84,6 +84,12 @@ pub enum Done {
     SearchEnded {
         generation: u64,
         search: u64,
+    },
+    /// Auto-orient: the upright /Rotate of each page, None where a page
+    /// has too little text to tell.
+    Oriented {
+        generation: u64,
+        rotations: Vec<Option<u16>>,
     },
 }
 
@@ -209,6 +215,35 @@ impl Pool {
             });
         }
         id
+    }
+
+    /// Works out which way up each page reads, on its own thread.
+    pub fn orient(&self, doc: Arc<Document>, generation: u64, wake: impl Fn() + Send + 'static) {
+        let tx = self.done_tx.clone();
+        let _ = thread::Builder::new().name("orient".into()).spawn(move || {
+            let rotations = doc
+                .pages()
+                .map(|pages| {
+                    pages
+                        .iter()
+                        .map(|p| {
+                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                extract_text(&doc, p)
+                                    .ok()
+                                    .and_then(|t| upright_rotation(&t))
+                            }))
+                            .ok()
+                            .flatten()
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let _ = tx.send(Done::Oriented {
+                generation,
+                rotations,
+            });
+            wake();
+        });
     }
 
     /// Stops the running search, if any.
