@@ -7,9 +7,9 @@ mod default_app;
 mod settings;
 mod worker;
 
+use ::image;
 use std::path::PathBuf;
 use std::sync::Arc;
-use ::image;
 
 fn main() -> eframe::Result {
     let icon = load_icon();

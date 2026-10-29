@@ -4958,7 +4958,7 @@ dependencies = [
  "cfg-if",
  "windows-sys 0.59.0",
 ]
- 
+
 [[package]]
 name = "winresource"
 version = "0.1.34"

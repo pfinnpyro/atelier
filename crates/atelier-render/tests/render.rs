@@ -1007,3 +1007,49 @@ fn hidden_and_suppressed_annotations_are_skipped() {
         WHITE
     );
 }
+
+#[test]
+fn picks_spot_colour_and_lists_spots() {
+    use atelier_render::{PaintKind, probe_color, spot_colors};
+    // A spot colour with a CMYK tint transform (exponential, C0 = white).
+    let sep = "[/Separation /PANTONE#20185#20C /DeviceCMYK \
+               << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 0.91 0.76 0] /N 1 >>]";
+    let resources = format!("<< /ColorSpace << /CS0 {sep} >> >>");
+    let data = build(
+        "",
+        b"/CS0 cs 0.5 scn 10 10 40 40 re f 0 0 1 RG 4 w 60 50 m 90 50 l S",
+        &resources,
+        &[],
+    );
+    let doc = Document::open(data).unwrap();
+    let page = &doc.pages().unwrap()[0];
+    let options = RenderOptions {
+        scale: 1.0,
+        ..RenderOptions::default()
+    };
+    // Inside the box (user 30,30 -> device 30,70).
+    let p = probe_color(&doc, page, &options, (30, 70)).unwrap();
+    let paint = p.paint.unwrap();
+    assert_eq!(paint.kind, PaintKind::Fill);
+    assert_eq!(paint.spots, vec!["PANTONE 185 C".to_string()]);
+    assert_eq!(paint.components, vec![0.5]);
+    let (alt, values) = paint.alternate.unwrap();
+    assert_eq!(alt, "DeviceCMYK");
+    assert!((values[1] - 0.455).abs() < 1e-3);
+    assert!(p.rgb[0] > p.rgb[1]);
+    // On the blue line.
+    let p = probe_color(&doc, page, &options, (75, 50)).unwrap();
+    let paint = p.paint.unwrap();
+    assert_eq!(
+        (paint.kind, paint.space.as_str()),
+        (PaintKind::Stroke, "DeviceRGB")
+    );
+    assert_eq!(paint.components, vec![0.0, 0.0, 1.0]);
+    // Bare paper.
+    let p = probe_color(&doc, page, &options, (95, 5)).unwrap();
+    assert_eq!((p.rgb, p.paint), (WHITE, None));
+    let spots = spot_colors(&doc);
+    assert_eq!(spots.len(), 1);
+    assert_eq!(spots[0].name, "PANTONE 185 C");
+    assert!(spots[0].space.starts_with("Separation PANTONE 185 C"));
+}
