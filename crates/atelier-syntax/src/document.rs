@@ -42,6 +42,8 @@ pub struct Document {
     warnings: Mutex<Vec<String>>,
     /// Set when the file is encrypted and a password opened it.
     security: Option<Security>,
+    /// The password that opened an encrypted file, for [`Document::reopen`].
+    password: Vec<u8>,
     /// Values other crates derive from the document, computed once.
     memo: Mutex<Memo>,
 }
@@ -102,6 +104,12 @@ impl Document {
         Ok(doc)
     }
 
+    /// Opens new bytes of the same file, such as this one with an update
+    /// appended, with the password that opened this one.
+    pub fn reopen(&self, data: impl Into<Arc<[u8]>>) -> Result<Self> {
+        Self::open_with_password(data, &self.password)
+    }
+
     fn build(
         data: Arc<[u8]>,
         version: String,
@@ -123,6 +131,7 @@ impl Document {
             pages: OnceLock::new(),
             warnings: Mutex::new(warnings),
             security: None,
+            password: Vec::new(),
             memo: Mutex::new(HashMap::new()),
         }
     }
@@ -142,6 +151,7 @@ impl Document {
             cache.clear();
         }
         self.security = Some(security);
+        self.password = password.to_vec();
         Ok(self)
     }
 

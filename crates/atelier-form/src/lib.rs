@@ -8,6 +8,7 @@ mod appearance;
 mod da;
 mod fill;
 mod scripts;
+mod session;
 
 use std::collections::{HashMap, HashSet};
 
@@ -16,6 +17,7 @@ use atelier_syntax::{Dict, Document, ObjRef, Object, Rect, Result};
 pub use da::DefaultAppearance;
 pub use fill::FillWarning;
 pub use scripts::{Action, document_actions};
+pub use session::{Built, Session};
 
 /// Field flags (ISO 32000-2, tables 226, 229, 231 and 233).
 pub mod flags {
@@ -90,6 +92,22 @@ impl Value {
         }
     }
 
+    /// Whether two values mean the same: no value, an empty text and the
+    /// Off state are all "nothing", and one choice is the same as its text.
+    pub fn same_as(&self, other: &Value) -> bool {
+        fn norm(v: &Value) -> Value {
+            match v {
+                Value::Text(t) if t.is_empty() => Value::None,
+                Value::State(s) if s == "Off" => Value::None,
+                Value::Choices(c) if c.is_empty() => Value::None,
+                Value::Choices(c) if c.len() == 1 => Value::Text(c[0].clone()),
+                Value::State(s) => Value::Text(s.clone()),
+                v => v.clone(),
+            }
+        }
+        norm(self) == norm(other)
+    }
+
     fn from_object(obj: &Object, doc: &Document) -> Self {
         match doc.resolve(obj).unwrap_or_default() {
             Object::String(s) => Self::Text(s.to_text()),
@@ -128,6 +146,8 @@ pub struct Widget {
     pub obj: ObjRef,
     /// Index of the page that lists it in /Annots.
     pub page: Option<usize>,
+    /// Its position in that page's /Annots, the default Tab order.
+    pub annot_index: Option<usize>,
     pub rect: Rect,
     /// Annotation flags (/F).
     pub annot_flags: u32,
@@ -305,7 +325,7 @@ impl Form {
         doc: &Document,
         r: ObjRef,
         parent: &Inherited,
-        pages: &HashMap<ObjRef, usize>,
+        pages: &HashMap<ObjRef, (usize, usize)>,
         seen: &mut HashSet<ObjRef>,
         depth: usize,
     ) {
@@ -484,7 +504,7 @@ fn widget(
     doc: &Document,
     r: ObjRef,
     dict: &Dict,
-    pages: &HashMap<ObjRef, usize>,
+    pages: &HashMap<ObjRef, (usize, usize)>,
 ) -> Option<Widget> {
     let rect = doc
         .get_key(dict, b"Rect")
@@ -518,7 +538,8 @@ fn widget(
         .map_or(0, |r| r.rem_euclid(360) as u16 / 90 * 90);
     Some(Widget {
         obj: r,
-        page: pages.get(&r).copied(),
+        page: pages.get(&r).map(|p| p.0),
+        annot_index: pages.get(&r).map(|p| p.1),
         rect,
         annot_flags: doc
             .get_key(dict, b"F")
@@ -530,8 +551,9 @@ fn widget(
     })
 }
 
-/// Every annotation that a page lists, mapped to the page's index.
-fn widget_pages(doc: &Document) -> HashMap<ObjRef, usize> {
+/// Every annotation that a page lists, mapped to the page's index and its
+/// position in the page's /Annots.
+fn widget_pages(doc: &Document) -> HashMap<ObjRef, (usize, usize)> {
     let mut out = HashMap::new();
     let Ok(pages) = doc.pages() else {
         return out;
@@ -540,9 +562,9 @@ fn widget_pages(doc: &Document) -> HashMap<ObjRef, usize> {
         let Ok(annots) = doc.get_key(&page.dict, b"Annots") else {
             continue;
         };
-        for a in annots.as_array().unwrap_or_default() {
+        for (j, a) in annots.as_array().unwrap_or_default().iter().enumerate() {
             if let Some(r) = a.as_reference() {
-                out.entry(r).or_insert(i);
+                out.entry(r).or_insert((i, j));
             }
         }
     }

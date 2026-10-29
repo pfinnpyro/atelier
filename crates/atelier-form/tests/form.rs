@@ -283,3 +283,105 @@ fn actions_are_listed_not_run() {
     let launch = actions.iter().find(|a| a.kind == "Launch").unwrap();
     assert_eq!(launch.target.as_deref(), Some("calc.exe"));
 }
+
+#[test]
+fn a_session_rebuilds_from_the_original_each_time() {
+    use atelier_form::Session;
+    use std::sync::Arc;
+    let doc = Arc::new(Document::open(sample()).unwrap());
+    let mut s = Session::new(doc.clone()).unwrap().unwrap();
+    assert!(!s.is_dirty());
+    // Nothing changed: the original document comes back as is.
+    assert!(Arc::ptr_eq(&s.build().unwrap().doc, &doc));
+
+    s.set(0, Value::Text("first".into()));
+    s.set(0, Value::Text("second".into()));
+    s.set(2, Value::State("Yes".into()));
+    assert!(s.is_dirty());
+    let built = s.build().unwrap();
+    assert_eq!(built.form.fields[0].value, Value::Text("second".into()));
+    // One appended section on top of the original, not one per change.
+    let data = built.doc.data();
+    assert!(data.starts_with(doc.data()));
+    assert_eq!(count(data, b"%%EOF"), 2);
+
+    // Setting a field back to how it was drops the change.
+    s.set(0, Value::Text("old".into()));
+    s.set(2, Value::State("Off".into()));
+    assert!(!s.is_dirty());
+    assert_eq!(s.pages_of(1), [0]);
+}
+
+fn count(hay: &[u8], needle: &[u8]) -> usize {
+    hay.windows(needle.len()).filter(|w| *w == needle).count()
+}
+
+#[test]
+fn tab_order_and_hit_testing() {
+    let doc = Document::open(sample()).unwrap();
+    let form = Form::load(&doc).unwrap().unwrap();
+    // /Annots order: name, both radios, the checkbox, the list.
+    assert_eq!(
+        form.tab_order(&doc),
+        [(0, 0), (1, 0), (1, 1), (2, 0), (3, 0)]
+    );
+    assert_eq!(form.widget_at(0, 50.0, 110.0), Some((1, 1)));
+    assert_eq!(form.widget_at(0, 100.0, 165.0), Some((0, 0)));
+    assert_eq!(form.widget_at(0, 100.0, 90.0), None);
+    assert_eq!(form.widget_at(1, 100.0, 165.0), None);
+
+    // Rows order on a page with /Tabs /R: top to bottom, then left to right.
+    let data = String::from_utf8_lossy(&sample()).replace(
+        "/Annots [4 0 R 6 0 R 7 0 R 8 0 R 9 0 R]",
+        "/Annots [9 0 R 8 0 R 7 0 R 6 0 R 4 0 R] /Tabs /R",
+    );
+    let doc = Document::open(data.into_bytes()).unwrap();
+    let form = Form::load(&doc).unwrap().unwrap();
+    assert_eq!(
+        form.tab_order(&doc),
+        [(0, 0), (1, 0), (1, 1), (2, 0), (3, 0)]
+    );
+}
+
+#[test]
+fn encrypted_forms_fill_and_stay_encrypted() {
+    use atelier_form::Session;
+    use std::sync::Arc;
+    let path = format!(
+        "{}/tests/data/encrypted-form.pdf",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let data = std::fs::read(path).unwrap();
+    let doc = Arc::new(Document::open_with_password(data, b"user").unwrap());
+    let mut s = Session::new(doc).unwrap().unwrap();
+    let name = s
+        .original()
+        .fields
+        .iter()
+        .position(|f| f.name == "name")
+        .unwrap();
+    let colour = s
+        .original()
+        .fields
+        .iter()
+        .position(|f| f.name == "colour")
+        .unwrap();
+    s.set(name, Value::Text("Grace Hopper".into()));
+    s.set(colour, Value::Text("Blue".into()));
+    let built = s.build().unwrap();
+    let saved = built.doc.data().to_vec();
+    assert!(
+        !saved.windows(12).any(|w| w == b"Grace Hopper"),
+        "the value must be encrypted"
+    );
+    assert!(matches!(
+        Document::open(saved.clone()),
+        Err(atelier_syntax::Error::Password)
+    ));
+    let reopened = Document::open_with_password(saved, b"user").unwrap();
+    let form = Form::load(&reopened).unwrap().unwrap();
+    assert_eq!(form.fields[name].value, Value::Text("Grace Hopper".into()));
+    assert_eq!(form.fields[colour].value, Value::Text("Blue".into()));
+    let page = render(&reopened);
+    assert!(page.width() > 0);
+}
