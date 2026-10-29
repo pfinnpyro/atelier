@@ -2,14 +2,14 @@
 //! never waits on the document.
 
 use std::collections::{HashSet, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
 use atelier_render::{PageText, RenderOptions, extract_text, render_region};
 use atelier_syntax::Document;
-use atelier_view::{TileKey, find_in_page, upright_rotation};
+use atelier_view::{Basis, TileKey, find_in_page, upright_page};
 
 /// Work for the pool. Each job carries the document it is for, so a job
 /// queued before another file was opened still finishes cleanly.
@@ -85,11 +85,11 @@ pub enum Done {
         generation: u64,
         search: u64,
     },
-    /// Auto-orient: the upright /Rotate of each page, None where a page
-    /// has too little text to tell.
+    /// Auto-orient: the upright /Rotate of each page and what it was
+    /// judged from, None where a page gave nothing to go by.
     Oriented {
         generation: u64,
-        rotations: Vec<Option<u16>>,
+        rotations: Vec<Option<(u16, Basis)>>,
     },
 }
 
@@ -217,27 +217,44 @@ impl Pool {
         id
     }
 
-    /// Works out which way up each page reads, on its own thread.
-    pub fn orient(&self, doc: Arc<Document>, generation: u64, wake: impl Fn() + Send + 'static) {
+    /// Works out which way up each page reads, on threads of its own.
+    /// `done` counts the pages finished, for showing progress.
+    pub fn orient(
+        &self,
+        doc: Arc<Document>,
+        generation: u64,
+        done: Arc<AtomicUsize>,
+        wake: impl Fn() + Send + Sync + 'static,
+    ) {
         let tx = self.done_tx.clone();
         let _ = thread::Builder::new().name("orient".into()).spawn(move || {
-            let rotations = doc
-                .pages()
-                .map(|pages| {
-                    pages
-                        .iter()
-                        .map(|p| {
-                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                extract_text(&doc, p)
-                                    .ok()
-                                    .and_then(|t| upright_rotation(&t))
+            let count = doc.pages().map_or(0, <[_]>::len);
+            let next = AtomicUsize::new(0);
+            let results = Mutex::new(vec![None; count]);
+            let threads = thread::available_parallelism()
+                .map_or(2, |n| n.get())
+                .clamp(1, 8);
+            thread::scope(|s| {
+                for _ in 0..threads {
+                    s.spawn(|| {
+                        let Ok(pages) = doc.pages() else { return };
+                        loop {
+                            let i = next.fetch_add(1, Ordering::SeqCst);
+                            let Some(page) = pages.get(i) else { break };
+                            // A page that panics the renderer is left as it is.
+                            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                upright_page(&doc, page)
                             }))
                             .ok()
-                            .flatten()
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
+                            .flatten();
+                            results.lock().unwrap_or_else(|e| e.into_inner())[i] = r;
+                            done.fetch_add(1, Ordering::SeqCst);
+                            wake();
+                        }
+                    });
+                }
+            });
+            let rotations = results.into_inner().unwrap_or_else(|e| e.into_inner());
             let _ = tx.send(Done::Oriented {
                 generation,
                 rotations,

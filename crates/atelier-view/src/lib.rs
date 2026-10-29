@@ -18,7 +18,7 @@ pub use inspect::{
     Fact, Picked, children, has_children, object_at, overview, preview, revisions, summary,
 };
 pub use layout::{Layout, PageGeom, ViewRect};
-pub use orient::upright_rotation;
+pub use orient::{Basis, gray_of_rgba, upright_from_image, upright_page, upright_rotation};
 pub use search::{SearchMatch, find_in_page};
 pub use select::{Caret, Selection, hit_test, word_at};
 pub use tiles::{

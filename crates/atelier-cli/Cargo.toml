@@ -15,6 +15,7 @@ atelier-filters.workspace = true
 atelier-form.workspace = true
 atelier-render.workspace = true
 atelier-syntax.workspace = true
+atelier-view.workspace = true
 
 [lints]
 workspace = true

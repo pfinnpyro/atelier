@@ -386,6 +386,7 @@ dependencies = [
  "atelier-form",
  "atelier-render",
  "atelier-syntax",
+ "atelier-view",
 ]
 
 [[package]]

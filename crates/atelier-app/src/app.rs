@@ -62,8 +62,9 @@ struct Open {
     session: Session,
     /// The generation the file was opened with, which outlives edits.
     opened: u64,
-    /// Auto-orient is working out which way up the pages go.
-    orienting: bool,
+    /// Auto-orient is working out which way up the pages go: pages done
+    /// so far, and how many there are.
+    orienting: Option<(Arc<std::sync::atomic::AtomicUsize>, usize)>,
     /// The form, when the document has one.
     form: Option<FormView>,
     /// Tiles that still show a field's old value; they stay on screen
@@ -236,7 +237,7 @@ impl Viewer {
         let mut open = Open {
             session: Session::new(doc.clone()),
             opened: self.generation,
-            orienting: false,
+            orienting: None,
             doc,
             name,
             generation: self.generation,
@@ -604,6 +605,8 @@ impl Viewer {
         }
         if let Some((opened, rotations)) = oriented {
             self.oriented(opened, &rotations);
+        } else {
+            self.orient_progress();
         }
         if let Some(i) = reveal {
             self.reveal_hit(i);
@@ -827,7 +830,7 @@ impl Viewer {
                 {
                     self.rotate_pages(1);
                 }
-                let orienting = self.open.as_ref().is_some_and(|o| o.orienting);
+                let orienting = self.open.as_ref().is_some_and(|o| o.orienting.is_some());
                 if ui
                     .add_enabled(!orienting, egui::Button::new("Auto-orient"))
                     .on_hover_text("Turn each page so its text reads upright")

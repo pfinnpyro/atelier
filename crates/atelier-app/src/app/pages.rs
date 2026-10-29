@@ -4,7 +4,10 @@
 
 use std::collections::HashSet;
 
-use atelier_view::{Layout, PageGeom};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use atelier_view::{Basis, Layout, PageGeom};
 
 use super::Viewer;
 
@@ -83,47 +86,68 @@ impl Viewer {
     /// Starts working out which way up each page reads.
     pub(super) fn auto_orient(&mut self) {
         let Some(o) = &mut self.open else { return };
-        if o.orienting {
+        if o.orienting.is_some() {
             return;
         }
-        o.orienting = true;
-        self.notice = Some("Auto-orient: reading the pages…".into());
+        let done = Arc::new(AtomicUsize::new(0));
+        o.orienting = Some((done.clone(), o.layout.page_count()));
         let wake = self.ctx.clone();
-        self.pool
-            .orient(o.doc.clone(), o.opened, move || wake.request_repaint());
+        self.pool.orient(o.doc.clone(), o.opened, done, move || {
+            wake.request_repaint()
+        });
+        self.orient_progress();
+    }
+
+    /// Shows how far auto-orient has got.
+    pub(super) fn orient_progress(&mut self) {
+        let Some((done, total)) = self.open.as_ref().and_then(|o| o.orienting.clone()) else {
+            return;
+        };
+        let done = done.load(Ordering::SeqCst).min(total);
+        self.notice = Some(format!(
+            "Auto-orient: reading page {} of {total}…",
+            (done + 1).min(total)
+        ));
     }
 
     /// Turns the pages auto-orient found to be on their side or upside
     /// down.
-    pub(super) fn oriented(&mut self, opened: u64, rotations: &[Option<u16>]) {
+    pub(super) fn oriented(&mut self, opened: u64, rotations: &[Option<(u16, Basis)>]) {
         let Some(o) = &mut self.open else { return };
-        if o.opened != opened || !o.orienting {
+        if o.opened != opened || o.orienting.is_none() {
             return;
         }
-        o.orienting = false;
+        o.orienting = None;
         let mut turned = HashSet::new();
+        let mut from_image = 0;
         for (p, r) in rotations.iter().enumerate() {
-            if let Some(r) = *r
+            if let Some((r, basis)) = *r
                 && r != o.session.rotation(p)
             {
                 o.session.rotate(p, i32::from(r));
                 turned.insert(p);
+                if basis == Basis::Image {
+                    from_image += 1;
+                }
             }
         }
         let unknown = rotations.iter().filter(|r| r.is_none()).count();
         let mut msg = match turned.len() {
             0 => "Auto-orient: every page is already upright.".to_string(),
-            1 => "Auto-orient turned 1 page.".to_string(),
-            n => format!("Auto-orient turned {n} pages."),
+            1 => "Auto-orient turned 1 page".to_string(),
+            n => format!("Auto-orient turned {n} pages"),
         };
-        if unknown > 0 {
-            let pages = if unknown == 1 {
-                "page has"
+        if !turned.is_empty() {
+            if from_image > 0 {
+                msg.push_str(&format!(" ({from_image} judged from the scanned image)."));
             } else {
-                "pages have"
-            };
+                msg.push('.');
+            }
+        }
+        if unknown > 0 {
+            let pages = if unknown == 1 { "page" } else { "pages" };
             msg.push_str(&format!(
-                " {unknown} {pages} too little text to tell; turn those by hand."
+                " {unknown} {pages} had no text to go by; turn those by hand."
             ));
         }
         self.notice = Some(msg);
