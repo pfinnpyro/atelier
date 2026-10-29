@@ -9,7 +9,6 @@ use crate::{Dict, Error, Name, Object, Result};
 pub enum ImageFilter {
     Dct,
     Jpx,
-    Jbig2,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,7 +47,6 @@ pub(crate) fn decode(
         let image = match name.as_bytes() {
             b"DCTDecode" | b"DCT" => Some(ImageFilter::Dct),
             b"JPXDecode" => Some(ImageFilter::Jpx),
-            b"JBIG2Decode" => Some(ImageFilter::Jbig2),
             _ => None,
         };
         if let Some(image) = image {
@@ -72,6 +70,20 @@ pub(crate) fn decode(
             b"ASCII85Decode" | b"A85" => filters::decode_ascii85(&current),
             b"ASCIIHexDecode" | b"AHx" => filters::decode_ascii_hex(&current),
             b"RunLengthDecode" | b"RL" => filters::decode_run_length(&current),
+            b"JBIG2Decode" => {
+                // Global segments shared by several images live in their
+                // own stream.
+                let globals = match params.get(b"JBIG2Globals").map(resolve) {
+                    Some(Object::Stream(g)) => Some(decode(&g.data, &g.dict, resolve, warn)?.data),
+                    _ => None,
+                };
+                filters::decode_jbig2(&current, globals.as_deref()).map(|(data, warnings)| {
+                    for w in warnings {
+                        warn(w);
+                    }
+                    data
+                })
+            }
             b"CCITTFaxDecode" | b"CCF" => {
                 let int = |k: &[u8]| params.get(k).and_then(Object::as_i64);
                 let flag = |k: &[u8], default: bool| {

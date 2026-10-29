@@ -693,3 +693,41 @@ fn ccitt_group_4_image() {
     assert_eq!(at(&p, 40, 75), [0, 0, 0]);
     assert_eq!(at(&p, 80, 50), WHITE);
 }
+
+#[test]
+fn jbig2_image_with_globals() {
+    // jbig2enc's symbol coding of a 400 x 120 page, with the symbol
+    // dictionary in a JBIG2Globals stream. Drawn at one pixel per unit, so
+    // the top left 100 x 100 must match the source bitmap exactly.
+    let data = |name: &str| {
+        std::fs::read(format!(
+            "{}/../atelier-filters/tests/data/jbig2/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
+    let image = stream(
+        "/Type /XObject /Subtype /Image /Width 400 /Height 120 /ColorSpace /DeviceGray \
+         /BitsPerComponent 1 /Filter /JBIG2Decode /DecodeParms << /JBIG2Globals 6 0 R >>",
+        &data("symbol.jb2"),
+    );
+    let globals = stream("", &data("symbol-globals.jb2"));
+    let p = render_with(
+        "",
+        b"400 0 0 120 0 -20 cm /Im Do",
+        "<< /XObject << /Im 5 0 R >> >>",
+        &[image, globals],
+    );
+    let pbm = data("symbol.pbm");
+    let pixels = &pbm[pbm.len() - 50 * 120..];
+    let mut black = 0;
+    for y in 0..100 {
+        for x in 0..100 {
+            let bit = (pixels[y * 50 + x / 8] >> (7 - x % 8)) & 1;
+            let expected = if bit == 1 { [0, 0, 0] } else { WHITE };
+            assert_eq!(at(&p, x, 99 - y), expected, "({x}, {y})");
+            black += usize::from(bit);
+        }
+    }
+    assert!(black > 500, "the test area should hold text");
+}

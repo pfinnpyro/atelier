@@ -402,6 +402,37 @@ fn row_1d(bits: &mut Bits, columns: usize) -> Option<Vec<usize>> {
 /// to a whole byte. Pixels that are black come out as 0 unless
 /// `black_is_1`, as PDF expects for 1-bit DeviceGray.
 pub fn decode_ccitt(data: &[u8], params: &CcittParams) -> Result<Vec<u8>> {
+    let run = run(data, params);
+    match run.failed_row {
+        None => Ok(run.out),
+        Some(row) => Err(FilterError::new(
+            "CCITTFaxDecode",
+            format!("bad code in row {}", row + 1),
+            run.out,
+        )),
+    }
+}
+
+/// Decodes MMR data inside a JBIG2 stream: Group 4 with `params.rows`
+/// rows. Damaged rows come out white. Returns the rows and how many bytes
+/// of `data` they used, including an end-of-block code.
+pub(crate) fn decode_mmr(data: &[u8], params: &CcittParams) -> (Vec<u8>, usize) {
+    let mut run = run(data, params);
+    let row_bytes = params.columns.clamp(1, 1 << 20).div_ceil(8);
+    let white = if params.black_is_1 { 0 } else { 0xff };
+    run.out.resize(params.rows * row_bytes, white);
+    (run.out, run.end_bit.div_ceil(8).min(data.len()))
+}
+
+struct Run {
+    out: Vec<u8>,
+    /// Where decoding stopped, in bits.
+    end_bit: usize,
+    /// The row where a bad code was found, if any.
+    failed_row: Option<usize>,
+}
+
+fn run(data: &[u8], params: &CcittParams) -> Run {
     let columns = params.columns.clamp(1, 1 << 20);
     let row_bytes = columns.div_ceil(8);
     let mut out = Vec::new();
@@ -422,6 +453,7 @@ pub fn decode_ccitt(data: &[u8], params: &CcittParams) -> Result<Vec<u8>> {
         let two_d = if params.k < 0 {
             // Group 4: end-of-facsimile-block is two EOLs.
             if params.end_of_block && bits.peek(24) == 0x001001 {
+                bits.skip(24);
                 break;
             }
             true
@@ -466,11 +498,11 @@ pub fn decode_ccitt(data: &[u8], params: &CcittParams) -> Result<Vec<u8>> {
                     let white = if params.black_is_1 { 0 } else { 0xff };
                     out.resize(params.rows * row_bytes, white);
                 }
-                return Err(FilterError::new(
-                    "CCITTFaxDecode",
-                    format!("bad code in row {}", rows + 1),
+                return Run {
                     out,
-                ));
+                    end_bit: bits.pos,
+                    failed_row: Some(rows),
+                };
             }
             break;
         };
@@ -480,7 +512,15 @@ pub fn decode_ccitt(data: &[u8], params: &CcittParams) -> Result<Vec<u8>> {
         reference.push(columns);
         rows += 1;
     }
-    Ok(out)
+    // A Group 4 end-of-block may follow the last row.
+    if params.k < 0 && params.end_of_block && bits.peek(24) == 0x001001 {
+        bits.skip(24);
+    }
+    Run {
+        out,
+        end_bit: bits.pos,
+        failed_row: None,
+    }
 }
 
 /// Appends one row of packed pixels from its changing elements.
