@@ -18,6 +18,7 @@ atelier-syntax = { path = "crates/atelier-syntax" }
 atelier-raster = { path = "crates/atelier-raster" }
 atelier-render = { path = "crates/atelier-render" }
 atelier-ocr = { path = "crates/atelier-ocr" }
+atelier-print = { path = "crates/atelier-print" }
 atelier-view = { path = "crates/atelier-view" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 

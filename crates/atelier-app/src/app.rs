@@ -26,6 +26,7 @@ mod form;
 mod inspect;
 mod menu;
 mod pages;
+mod print;
 mod settings_window;
 mod sidebar;
 
@@ -159,6 +160,7 @@ pub struct Viewer {
     /// The OCR models being downloaded.
     ocr_download: Option<settings_window::Download>,
     colors: colors::Colors,
+    print: print::PrintDialog,
     sidebar: Sidebar,
 }
 
@@ -206,6 +208,7 @@ impl Viewer {
             window: None,
             ocr_download: None,
             colors: colors::Colors::default(),
+            print: print::PrintDialog::default(),
             sidebar: Sidebar::default(),
         };
         if let Some(p) = path {
@@ -752,6 +755,9 @@ impl Viewer {
         if shortcut(Key::O) {
             self.pick_file();
         }
+        if shortcut(Key::P) {
+            self.open_print();
+        }
         let turn = |k| ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, k));
         if turn(Key::Plus) || turn(Key::Equals) {
             self.rotate_pages(1);
@@ -910,6 +916,13 @@ impl Viewer {
             });
             if dirty {
                 ui.label("●").on_hover_text("Unsaved changes");
+            }
+            if ui
+                .add_enabled(self.open.is_some(), egui::Button::new("Print…"))
+                .on_hover_text("Print (Ctrl+P)")
+                .clicked()
+            {
+                self.open_print();
             }
             if let Some(fv) = self.open.as_ref().and_then(|o| o.form.as_ref()) {
                 let on = fv.highlight;
@@ -1213,6 +1226,7 @@ impl Viewer {
         let shift = self.centre_shift();
         let painter = ui.painter();
         painter.rect_filled(viewport.translate(origin.to_vec2()), 0.0, BACKDROP);
+        let print_page = self.print_preview_page();
         let Some(o) = &mut self.open else { return };
         o.tiles.next_frame();
         let zoom = o.layout.zoom();
@@ -1382,9 +1396,15 @@ impl Viewer {
                 });
             }
         }
-        // Page pictures for the sidebar.
-        if self.settings.sidebar {
-            for &page in &self.sidebar.wanted {
+        // Page pictures for the sidebar and the print preview.
+        let preview = print_page.filter(|p| !o.thumbs.contains_key(p) || o.thumb_stale.contains(p));
+        if self.settings.sidebar || preview.is_some() {
+            let sidebar = if self.settings.sidebar {
+                &self.sidebar.wanted[..]
+            } else {
+                &[]
+            };
+            for &page in preview.iter().chain(sidebar) {
                 if let Some(g) = o.layout.geom(page) {
                     jobs.push(Job::Thumb {
                         doc: o.doc.clone(),
@@ -1568,6 +1588,7 @@ impl eframe::App for Viewer {
         self.password_window(&ctx);
         self.settings_window(&ctx);
         self.colors_window(&ctx);
+        self.print_window(&ctx);
         self.download_progress(&ctx);
         self.confirm_window(&ctx);
     }
