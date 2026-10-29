@@ -355,6 +355,16 @@ impl Viewer {
         }
     }
 
+    /// Gives a widget keyboard focus and scrolls to it.
+    pub(super) fn focus_widget(&mut self, at: (usize, usize)) {
+        self.finish_editing(true);
+        if let Some(fv) = self.open.as_mut().and_then(|o| o.form.as_mut()) {
+            fv.focus = Some(at);
+            fv.combo = None;
+        }
+        self.reveal_widget(at);
+    }
+
     /// Scrolls a widget into view.
     fn reveal_widget(&mut self, at: (usize, usize)) {
         let Some(r) = self.widget_rect(at, Pos2::ZERO) else {
@@ -440,6 +450,17 @@ impl Viewer {
         let Some(ed) = &mut fv.editor else { return };
         // Escape cancels; the text box would otherwise just lose focus.
         let escape = ui.input(|i| i.key_pressed(Key::Escape));
+        // Small fields at low zoom get a box big enough to read and type
+        // in, grown around the field.
+        let font_px = (size * zoom).max(11.0);
+        let min_h = font_px * 1.3 + 4.0;
+        let rect = if rect.height() >= min_h {
+            rect
+        } else if ed.multiline {
+            Rect::from_min_size(rect.min, Vec2::new(rect.width(), min_h))
+        } else {
+            Rect::from_center_size(rect.center(), Vec2::new(rect.width(), min_h))
+        };
         ui.painter().rect_filled(rect, 0.0, Color32::WHITE);
         let mut edit = if ed.multiline {
             egui::TextEdit::multiline(&mut ed.text)
@@ -447,7 +468,7 @@ impl Viewer {
             egui::TextEdit::singleline(&mut ed.text)
         }
         .id_salt(("field-editor", at))
-        .font(FontId::proportional(size * zoom))
+        .font(FontId::proportional(font_px))
         .text_color(Color32::BLACK)
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::symmetric((2.0 * zoom) as i8, 0))

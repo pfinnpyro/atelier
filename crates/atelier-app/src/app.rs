@@ -21,8 +21,10 @@ use eframe::egui::{
 use crate::worker::{Done, Job, Pool};
 
 mod form;
+mod inspect;
 
 use form::FormView;
+use inspect::Inspector;
 
 const MIN_ZOOM: f64 = 0.05;
 const MAX_ZOOM: f64 = 64.0;
@@ -107,6 +109,7 @@ pub struct Viewer {
     confirm: Option<Pending>,
     /// Closing was confirmed; let the window go.
     closing: bool,
+    inspector: Inspector,
 }
 
 /// An encrypted file the password prompt is open for.
@@ -146,6 +149,7 @@ impl Viewer {
             locked: None,
             confirm: None,
             closing: false,
+            inspector: Inspector::default(),
         };
         if let Some(p) = path {
             v.open_path(&p);
@@ -229,6 +233,7 @@ impl Viewer {
         };
         Self::load_form(&mut open);
         self.open = Some(open);
+        self.inspector.reset();
         self.update_title();
         self.error = None;
         self.zoom_mode = ZoomMode::FitWidth;
@@ -605,6 +610,9 @@ impl Viewer {
         if shortcut(Key::O) {
             self.pick_file();
         }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F12)) {
+            self.inspector.open = !self.inspector.open;
+        }
         self.form_keys();
         if shortcut(Key::F) {
             self.focus_search = true;
@@ -718,6 +726,16 @@ impl Viewer {
                 {
                     self.toggle_highlight();
                 }
+            }
+            if ui
+                .add_enabled(
+                    self.open.is_some(),
+                    egui::Button::selectable(self.inspector.open, "Inspect"),
+                )
+                .on_hover_text("Objects, fields and scripts in this file (F12)")
+                .clicked()
+            {
+                self.inspector.open = !self.inspector.open;
             }
             ui.separator();
             let count = self.open.as_ref().map_or(0, |o| o.layout.page_count());
@@ -1249,6 +1267,9 @@ impl eframe::App for Viewer {
                     }
                 });
             });
+        }
+        if self.inspector.open {
+            self.inspector_panel(ui);
         }
         egui::CentralPanel::no_frame().show(ui, |ui| self.page_view(ui));
         if self.show_warnings {
