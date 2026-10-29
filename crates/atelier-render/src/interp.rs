@@ -1,5 +1,6 @@
 //! The content stream interpreter (ISO 32000-2, chapter 8).
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
@@ -17,6 +18,7 @@ use crate::font::PdfFont;
 use crate::function::Functions;
 use crate::image;
 use crate::pattern::{Cell, Pattern, PatternKind};
+use crate::probe::{Paint, PaintKind, Probed};
 use crate::shading::Shading;
 use crate::text::{PageText, TextGlyph};
 
@@ -100,6 +102,35 @@ pub fn render_region(
     }
     let warnings = interp.warnings;
     Ok(Rendered { pixmap, warnings })
+}
+
+/// Picks the colour at device pixel `(x, y)` of the page drawn at
+/// `options.scale`: the colour shown there and the paint that put it
+/// there. Draws just that one pixel.
+pub fn probe_color(
+    doc: &Document,
+    page: &Page,
+    options: &RenderOptions,
+    (x, y): (usize, usize),
+) -> Result<Probed> {
+    let (page_ctm, _, _) = page_transform(page, options.scale);
+    let ctm = page_ctm.then(&Transform::translate(-(x as f64), -(y as f64)));
+    let mut pixmap = Pixmap::filled(1, 1, options.background);
+    let content = page.contents(doc)?;
+    let found = Rc::new(RefCell::new(None));
+    {
+        let mut interp = Interpreter::new(doc, &mut pixmap, ctm);
+        interp.probe = Some(found.clone());
+        interp.run(&content, &page.resources, 0);
+        if options.annotations {
+            interp.annotations(page, ctm, &options.hidden_annotations);
+        }
+    }
+    let d = pixmap.data();
+    // Premultiplied over an opaque background, so the alpha is full.
+    let rgb = [d[0], d[1], d[2]];
+    let paint = found.borrow_mut().take();
+    Ok(Probed { rgb, paint })
 }
 
 /// The text of a page, with each glyph's position in default user space.
@@ -313,6 +344,11 @@ struct Interpreter<'a> {
     /// What DeviceGray, DeviceRGB and DeviceCMYK mean in the content being
     /// run (Default spaces, an output intent).
     devices: [ColorSpace; 3],
+    /// When picking a colour: the last paint that changed the (single)
+    /// pixel being drawn.
+    pub(crate) probe: Option<Rc<RefCell<Option<Paint>>>>,
+    /// Glyph outlines are being painted, so a fill counts as text.
+    painting_text: bool,
 }
 
 fn nums(ops: &[Object]) -> Vec<f64> {
@@ -342,6 +378,8 @@ impl<'a> Interpreter<'a> {
             pattern_depth: 0,
             soft_masks: HashMap::new(),
             devices: [ColorSpace::Gray, ColorSpace::Rgb, ColorSpace::Cmyk],
+            probe: None,
+            painting_text: false,
         }
     }
 
@@ -715,6 +753,17 @@ impl<'a> Interpreter<'a> {
     /// Fills a device-space shape with the current fill (or stroke) paint:
     /// a solid colour or a pattern.
     fn paint_device(&mut self, device: &Path, rule: FillRule, stroke: bool) {
+        let before = self.probe_pixel();
+        self.paint_device_inner(device, rule, stroke);
+        let kind = match (stroke, self.painting_text) {
+            (true, _) => PaintKind::Stroke,
+            (false, true) => PaintKind::Text,
+            (false, false) => PaintKind::Fill,
+        };
+        self.probe_paint(before, kind, stroke);
+    }
+
+    fn paint_device_inner(&mut self, device: &Path, rule: FillRule, stroke: bool) {
         let (is_pattern, pattern, alpha) = if stroke {
             (
                 matches!(self.gs.stroke_space, ColorSpace::Pattern { .. }),
@@ -956,7 +1005,9 @@ impl<'a> Interpreter<'a> {
         }
         let ctm = self.gs.ctm;
         let alpha = self.gs.fill_alpha;
+        let before = self.probe_pixel();
         shading.paint(self.pixmap, &coverage, clip.as_ref(), &ctm, alpha);
+        self.probe_record(before, PaintKind::Shading, shading.space(), &[]);
     }
 
     /// The clip mask for drawing a device-space shape, or `None` when
@@ -1176,6 +1227,7 @@ impl<'a> Interpreter<'a> {
         let ctm = self.gs.ctm.then(&shift);
         let (operations, warnings) = {
             let mut sub = self.sub_interpreter(&mut layer, ctm);
+            sub.probe = self.probe.clone();
             // The group starts with a fresh compositing state; the clip is
             // applied when the layer is composited.
             sub.gs = GraphicsState {
@@ -1424,6 +1476,7 @@ impl<'a> Interpreter<'a> {
             ImageSampling::Bilinear
         };
         let clip = self.clip_mask(&Path::rect(0.0, 0.0, 1.0, 1.0).transform(&ctm));
+        let before = self.probe_pixel();
         draw_image(
             self.pixmap,
             &info.image,
@@ -1432,6 +1485,73 @@ impl<'a> Interpreter<'a> {
             self.gs.fill_alpha,
             clip.as_ref(),
         );
+        if before.is_some() {
+            let mask = dict
+                .get(b"ImageMask")
+                .or_else(|| dict.get(b"IM"))
+                .and_then(Object::as_bool)
+                .unwrap_or(false);
+            if mask {
+                self.probe_paint(before, PaintKind::Image, false);
+            } else {
+                let space = dict
+                    .get(b"ColorSpace")
+                    .or_else(|| dict.get(b"CS"))
+                    .and_then(|cs| colorspace::parse(self.doc, cs, resources));
+                match space {
+                    Some(space) => self.probe_record(before, PaintKind::Image, &space, &[]),
+                    None => self.probe_record(before, PaintKind::Image, &ColorSpace::Rgb, &[]),
+                }
+            }
+        }
+    }
+
+    // ----- Colour picking ------------------------------------------------
+
+    /// The pixel being picked, before a paint, when picking.
+    fn probe_pixel(&self) -> Option<[u8; 4]> {
+        self.probe.as_ref()?;
+        let d = self.pixmap.data();
+        (d.len() >= 4).then(|| [d[0], d[1], d[2], d[3]])
+    }
+
+    /// Records the current fill or stroke colour if the paint just done
+    /// changed the picked pixel.
+    fn probe_paint(&mut self, before: Option<[u8; 4]>, kind: PaintKind, stroke: bool) {
+        if before.is_none() {
+            return;
+        }
+        let (space, comps) = if stroke {
+            (self.gs.stroke_space.clone(), self.gs.stroke_color.clone())
+        } else {
+            (self.gs.fill_space.clone(), self.gs.fill.clone())
+        };
+        self.probe_record(before, kind, &space, &comps);
+    }
+
+    fn probe_record(
+        &mut self,
+        before: Option<[u8; 4]>,
+        kind: PaintKind,
+        space: &ColorSpace,
+        comps: &[f32],
+    ) {
+        let (Some(before), Some(probe)) = (before, &self.probe) else {
+            return;
+        };
+        if self.probe_pixel() == Some(before) {
+            return;
+        }
+        *probe.borrow_mut() = Some(Paint {
+            kind,
+            space: space.describe(),
+            components: comps.to_vec(),
+            spots: space.spot_names(),
+            colorants: space.colorants().to_vec(),
+            alternate: space
+                .alternate(comps)
+                .map(|(alt, values)| (alt.describe(), values)),
+        });
     }
 
     fn next_line(&mut self, tx: f64, ty: f64) {
@@ -1547,7 +1667,9 @@ impl<'a> Interpreter<'a> {
             coverage.height as f64,
         );
         let clip = self.clip_mask(&bounds);
+        let before = self.probe_pixel();
         self.pixmap.fill_coverage(&coverage, color, clip.as_ref());
+        self.probe_paint(before, PaintKind::Text, false);
         true
     }
 
@@ -1562,6 +1684,7 @@ impl<'a> Interpreter<'a> {
         if !self.draw {
             return;
         }
+        self.painting_text = true;
         if matches!(render, 0 | 2 | 4 | 6) {
             let device = user.transform(&self.gs.ctm);
             self.paint_device(&device, FillRule::NonZero, false);
@@ -1570,6 +1693,7 @@ impl<'a> Interpreter<'a> {
             let outline = stroke_to_path(&user, &self.gs.stroke, &self.gs.ctm);
             self.paint_device(&outline, FillRule::NonZero, true);
         }
+        self.painting_text = false;
     }
 
     /// Draws a Type 3 glyph by running its content stream.

@@ -26,6 +26,13 @@ pub struct Shading {
     kind: Kind,
 }
 
+impl Shading {
+    /// The colour space the shading's colours are in.
+    pub(crate) fn space(&self) -> &ColorSpace {
+        &self.space
+    }
+}
+
 enum Kind {
     Function {
         domain: [f32; 4],

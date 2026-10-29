@@ -9,7 +9,10 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
 use atelier_ocr::{Engine, read_page};
-use atelier_render::{PageText, RenderOptions, extract_text, render_page, render_region};
+use atelier_render::{
+    PageText, Probed, RenderOptions, SpotColor, extract_text, probe_color, render_page,
+    render_region, spot_colors,
+};
 use atelier_syntax::{Document, Page};
 use atelier_view::{
     Basis, OutlineItem, TileKey, bookmarks, find_in_page, headings, upright_page, upright_rotation,
@@ -170,6 +173,17 @@ pub enum Done {
     /// The OCR models could not be loaded.
     OcrFailed {
         error: String,
+    },
+    /// A picked colour.
+    Probed {
+        generation: u64,
+        page: usize,
+        result: Result<Probed, String>,
+    },
+    /// The spot colours of the file opened as `opened`.
+    Spots {
+        opened: u64,
+        spots: Vec<SpotColor>,
     },
 }
 
@@ -409,6 +423,54 @@ impl Pool {
                 });
                 wake();
             });
+    }
+
+    /// Works out the colour at device pixel `xy` of `page` drawn at
+    /// `scale`, on a thread of its own.
+    pub fn probe(
+        &self,
+        doc: Arc<Document>,
+        generation: u64,
+        page: usize,
+        scale: f64,
+        xy: (usize, usize),
+        wake: impl Fn() + Send + 'static,
+    ) {
+        let tx = self.done_tx.clone();
+        let _ = thread::Builder::new().name("probe".into()).spawn(move || {
+            let run = || {
+                let p = doc
+                    .pages()
+                    .map_err(|e| e.to_string())?
+                    .get(page)
+                    .ok_or("no such page")?;
+                let options = RenderOptions {
+                    scale,
+                    ..RenderOptions::default()
+                };
+                probe_color(&doc, p, &options, xy).map_err(|e| e.to_string())
+            };
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(run))
+                .unwrap_or_else(|_| Err("The page could not be drawn.".into()));
+            let _ = tx.send(Done::Probed {
+                generation,
+                page,
+                result,
+            });
+            wake();
+        });
+    }
+
+    /// Lists the file's spot colours on a thread of its own.
+    pub fn spots(&self, doc: Arc<Document>, opened: u64, wake: impl Fn() + Send + 'static) {
+        let tx = self.done_tx.clone();
+        let _ = thread::Builder::new().name("spots".into()).spawn(move || {
+            let spots =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| spot_colors(&doc)))
+                    .unwrap_or_default();
+            let _ = tx.send(Done::Spots { opened, spots });
+            wake();
+        });
     }
 
     /// Stops the running search, if any.

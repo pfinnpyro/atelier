@@ -38,12 +38,97 @@ pub enum ColorSpace {
     Spot {
         components: usize,
         none: bool,
+        /// The colorant names: one for Separation, one each for DeviceN.
+        names: Vec<String>,
+        /// Separation rather than DeviceN.
+        separation: bool,
         alt: Box<ColorSpace>,
         tint: Option<Arc<Function>>,
     },
 }
 
 impl ColorSpace {
+    /// The space in a few words, as the file names it: "DeviceCMYK",
+    /// "Separation PANTONE 185 C (alternate DeviceCMYK)".
+    pub fn describe(&self) -> String {
+        match self {
+            Self::Gray => "DeviceGray".into(),
+            Self::Rgb => "DeviceRGB".into(),
+            Self::Cmyk => "DeviceCMYK".into(),
+            Self::Lab { .. } => "Lab".into(),
+            Self::CalGray(_) => "CalGray".into(),
+            Self::CalRgb(_) => "CalRGB".into(),
+            Self::Icc(p) => format!(
+                "ICCBased ({})",
+                match p.components() {
+                    1 => "grey",
+                    3 => "RGB or Lab",
+                    4 => "CMYK",
+                    _ => "other",
+                }
+            ),
+            Self::Indexed { base, hival, .. } => {
+                format!(
+                    "Indexed, {} colours of {}",
+                    u16::from(*hival) + 1,
+                    base.describe()
+                )
+            }
+            Self::Pattern { .. } => "Pattern".into(),
+            Self::Spot {
+                names,
+                separation,
+                alt,
+                ..
+            } => {
+                let kind = if *separation { "Separation" } else { "DeviceN" };
+                format!("{kind} {} (alternate {})", names.join(", "), alt.describe())
+            }
+        }
+    }
+
+    /// The colorant names of a Separation or DeviceN space, one per
+    /// component; empty for other spaces.
+    pub fn colorants(&self) -> &[String] {
+        match self {
+            Self::Spot { names, .. } => names,
+            _ => &[],
+        }
+    }
+
+    /// The spot colour names this space paints with, if any: its
+    /// colorants other than the process inks and None/All.
+    pub fn spot_names(&self) -> Vec<String> {
+        match self {
+            Self::Spot { names, .. } => names
+                .iter()
+                .filter(|n| {
+                    !matches!(
+                        n.as_str(),
+                        "None" | "All" | "Cyan" | "Magenta" | "Yellow" | "Black"
+                    )
+                })
+                .cloned()
+                .collect(),
+            Self::Indexed { base, .. } => base.spot_names(),
+            Self::Pattern { base: Some(b) } => b.spot_names(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// For a spot colour, the alternate space and the tint mapped into it.
+    pub fn alternate(&self, c: &[f32]) -> Option<(&ColorSpace, Vec<f32>)> {
+        match self {
+            Self::Spot {
+                alt, tint: Some(f), ..
+            } => {
+                let tints: Vec<f32> = c.iter().map(|v| v.clamp(0.0, 1.0)).collect();
+                Some((&**alt, f.eval(&tints)))
+            }
+            _ => None,
+        }
+    }
+
     pub fn components(&self) -> usize {
         match self {
             Self::Gray | Self::Indexed { .. } | Self::CalGray(_) => 1,
@@ -362,6 +447,20 @@ fn parse_depth(
                 b"Separation" | b"DeviceN" => {
                     let separation = family.as_name()?.as_bytes() == b"Separation";
                     let names = doc.resolve(items.get(1)?).ok()?;
+                    let colorants: Vec<String> = if separation {
+                        names
+                            .as_name()
+                            .map(|n| n.as_str_lossy().into_owned())
+                            .into_iter()
+                            .collect()
+                    } else {
+                        names
+                            .as_array()
+                            .unwrap_or(&[])
+                            .iter()
+                            .filter_map(|n| n.as_name().map(|n| n.as_str_lossy().into_owned()))
+                            .collect()
+                    };
                     let (components, none) = if separation {
                         (1, names.as_name().is_some_and(|n| *n == b"None"))
                     } else {
@@ -386,6 +485,8 @@ fn parse_depth(
                     Some(ColorSpace::Spot {
                         components,
                         none,
+                        names: colorants,
+                        separation,
                         alt: Box::new(alt),
                         tint,
                     })

@@ -21,6 +21,7 @@ use eframe::egui::{
 
 use crate::worker::{Done, Job, Pool};
 
+mod colors;
 mod form;
 mod inspect;
 mod menu;
@@ -157,6 +158,7 @@ pub struct Viewer {
     window: Option<Window>,
     /// The OCR models being downloaded.
     ocr_download: Option<settings_window::Download>,
+    colors: colors::Colors,
     sidebar: Sidebar,
 }
 
@@ -203,6 +205,7 @@ impl Viewer {
             settings: Settings::load(),
             window: None,
             ocr_download: None,
+            colors: colors::Colors::default(),
             sidebar: Sidebar::default(),
         };
         if let Some(p) = path {
@@ -296,6 +299,7 @@ impl Viewer {
         self.open = Some(open);
         self.inspector.reset();
         self.sidebar.reset();
+        self.colors.reset();
         self.update_title();
         self.error = None;
         self.zoom_mode = if self.settings.fit_page {
@@ -702,6 +706,17 @@ impl Viewer {
                 Done::OcrFailed { error } => {
                     self.error = Some(format!("OCR is off for now: {error}"));
                 }
+                Done::Probed {
+                    generation,
+                    page,
+                    result,
+                } if generation == o.generation => {
+                    self.colors.waiting = false;
+                    self.colors.last = Some((page, result));
+                }
+                Done::Spots { opened, spots } if opened == o.opened => {
+                    self.colors.spots = Some(spots);
+                }
                 _ => {}
             }
         }
@@ -743,6 +758,9 @@ impl Viewer {
         }
         if turn(Key::Minus) {
             self.rotate_pages(-1);
+        }
+        if self.open.is_some() && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F6)) {
+            self.toggle_colors();
         }
         if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F4)) {
             self.toggle_sidebar();
@@ -912,6 +930,16 @@ impl Viewer {
                 .clicked()
             {
                 self.inspector.open = !self.inspector.open;
+            }
+            if ui
+                .add_enabled(
+                    self.open.is_some(),
+                    egui::Button::selectable(self.colors.open, "Colours"),
+                )
+                .on_hover_text("Pick a colour from the page; list the spot colours (F6)")
+                .clicked()
+            {
+                self.toggle_colors();
             }
             ui.separator();
             let count = self.open.as_ref().map_or(0, |o| o.layout.page_count());
@@ -1395,7 +1423,9 @@ impl Viewer {
             self.zoom_by(f64::from(zoom_delta).sqrt(), anchor);
         }
 
-        if self.pick_pointer(ui, response, response.hover_pos().map(to_layout)) {
+        if self.color_pointer(ui, response, response.hover_pos().map(to_layout))
+            || self.pick_pointer(ui, response, response.hover_pos().map(to_layout))
+        {
             return;
         }
         if let Some(p) = response.hover_pos() {
@@ -1537,6 +1567,7 @@ impl eframe::App for Viewer {
         }
         self.password_window(&ctx);
         self.settings_window(&ctx);
+        self.colors_window(&ctx);
         self.download_progress(&ctx);
         self.confirm_window(&ctx);
     }
