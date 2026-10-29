@@ -7,8 +7,11 @@
 
 mod colorspace;
 mod font;
+mod function;
 mod image;
 mod interp;
+mod pattern;
+mod shading;
 mod text;
 
 pub use colorspace::ColorSpace;

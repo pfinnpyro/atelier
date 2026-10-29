@@ -312,6 +312,171 @@ SAMPLES["rotated"] = single_page(
     media=b"[0 0 400 600]", rotate=90)
 
 
+def ps_function(domain, rng, code):
+    return stream(b"/FunctionType 4 /Domain " + domain + b" /Range " + rng, code, compress=False)
+
+
+SAMPLES["shadings"] = single_page(
+    b"""
+q 20 220 170 160 re W n /Ax sh Q
+q 210 220 170 160 re W n /Rad sh Q
+q 20 20 170 160 re W n /Fun sh Q
+q 210 20 170 160 re W n /Stitch sh Q
+""",
+    resources=b"<< /Shading << /Ax 5 0 R /Rad 6 0 R /Fun 7 0 R /Stitch 8 0 R >> >>",
+    extra_objects=[
+        # 5: axial, extended both ways, red to blue.
+        b"<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [60 300 150 300] /Extend [true true]"
+        b" /Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >>",
+        # 6: radial from a small circle to a big one, not extended.
+        b"<< /ShadingType 3 /ColorSpace /DeviceRGB /Coords [270 280 5 300 300 75]"
+        b" /Function << /FunctionType 2 /Domain [0 1] /C0 [1 1 0] /C1 [0 0.5 0] /N 1 >> >>",
+        # 7: function-based: a sampled 2 x 2 grid stretched over the box.
+        b"<< /ShadingType 1 /ColorSpace /DeviceRGB /Domain [0 1 0 1]"
+        b" /Matrix [170 0 0 160 20 20] /Function 9 0 R >>",
+        # 8: axial with a stitching function, in CMYK.
+        b"<< /ShadingType 2 /ColorSpace /DeviceCMYK /Coords [210 20 380 180]"
+        b" /Function << /FunctionType 3 /Domain [0 1] /Bounds [0.5] /Encode [0 1 0 1] /Functions ["
+        b" << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [1 0 0 0] /N 1 >>"
+        b" << /FunctionType 2 /Domain [0 1] /C0 [0 1 0 0] /C1 [0 0 1 0] /N 2 >> ] >> >>",
+        stream(
+            b"/FunctionType 0 /Domain [0 1 0 1] /Range [0 1 0 1 0 1] /Size [2 2] /BitsPerSample 8",
+            bytes([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]),
+        ),
+    ],
+)
+
+
+def mesh_bytes(items):
+    """items: tuples of (bits, value) packed big-endian."""
+    out, acc, n = bytearray(), 0, 0
+    for bits, value in items:
+        acc = (acc << bits) | value
+        n += bits
+        while n >= 8:
+            n -= 8
+            out.append((acc >> n) & 0xFF)
+    if n:
+        out.append((acc << (8 - n)) & 0xFF)
+    return bytes(out)
+
+
+def coord(v):
+    return (16, int(v / 400 * 65535))
+
+
+def comp(v):
+    return (8, int(round(v * 255)))
+
+
+def type4():
+    data = bytearray()
+    verts = [
+        (0, 20, 220, (1, 0, 0)),
+        (0, 180, 220, (0, 1, 0)),
+        (0, 100, 380, (0, 0, 1)),
+        (1, 20, 380, (1, 1, 0)),
+    ]
+    for f, x, y, c in verts:
+        data += mesh_bytes([(8, f), coord(x), coord(y)] + [comp(v) for v in c])
+    return stream(
+        b"/ShadingType 4 /ColorSpace /DeviceRGB /BitsPerCoordinate 16 /BitsPerComponent 8"
+        b" /BitsPerFlag 8 /Decode [0 400 0 400 0 1 0 1 0 1]",
+        bytes(data),
+    )
+
+
+def type5():
+    items = []
+    for row in range(3):
+        for col in range(3):
+            x, y = 220 + col * 80, 220 + row * 80
+            items += [coord(x), coord(y), comp(col / 2), comp(row / 2), comp(1 - col / 2)]
+    return stream(
+        b"/ShadingType 5 /ColorSpace /DeviceRGB /BitsPerCoordinate 16 /BitsPerComponent 8"
+        b" /VerticesPerRow 3 /Decode [0 400 0 400 0 1 0 1 0 1]",
+        mesh_bytes(items),
+    )
+
+
+def patch(kind, x0, y0, bend):
+    # Data order: p00 p01 p02 p03 p13 p23 p33 p32 p31 p30 p20 p10 (+ inner 4).
+    w = 160
+    pts = [
+        (x0, y0), (x0 - bend, y0 + w / 3), (x0 + bend, y0 + 2 * w / 3), (x0, y0 + w),
+        (x0 + w / 3, y0 + w + bend), (x0 + 2 * w / 3, y0 + w - bend), (x0 + w, y0 + w),
+        (x0 + w + bend, y0 + 2 * w / 3), (x0 + w - bend, y0 + w / 3), (x0 + w, y0),
+        (x0 + 2 * w / 3, y0 - bend), (x0 + w / 3, y0 + bend),
+    ]
+    if kind == 7:
+        pts += [(x0 + w / 3, y0 + w / 3), (x0 + w / 3, y0 + 2 * w / 3),
+                (x0 + 2 * w / 3, y0 + 2 * w / 3), (x0 + 2 * w / 3, y0 + w / 3)]
+    items = [(8, 0)]
+    for x, y in pts:
+        items += [coord(x), coord(y)]
+    for c in [(1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 0)]:
+        items += [comp(v) for v in c]
+    return stream(
+        b"/ShadingType %d /ColorSpace /DeviceRGB /BitsPerCoordinate 16 /BitsPerComponent 8"
+        b" /BitsPerFlag 8 /Decode [0 400 0 400 0 1 0 1 0 1]" % kind,
+        mesh_bytes(items),
+    )
+
+
+SAMPLES["meshes"] = single_page(
+    b"/T4 sh /T5 sh /T6 sh /T7 sh",
+    resources=b"<< /Shading << /T4 5 0 R /T5 6 0 R /T6 7 0 R /T7 8 0 R >> >>",
+    extra_objects=[type4(), type5(), patch(6, 20, 20, 20), patch(7, 220, 20, 0)],
+)
+
+SAMPLES["patterns"] = single_page(
+    b"""
+/Pattern cs /Checks scn 20 220 170 160 re f
+/P2 cs 0.8 0 0 /Dots scn 210 220 170 160 re f
+/Pattern cs /Grad scn 20 20 170 160 re f
+/Pattern CS /Grad SCN 18 w 230 40 m 370 160 l S
+BT /F1 60 Tf 220 60 Td /Pattern cs /Checks scn (Ab) Tj ET
+""",
+    resources=b"<< /Pattern << /Checks 5 0 R /Dots 6 0 R /Grad 7 0 R >>"
+    b" /ColorSpace << /P2 [/Pattern /DeviceRGB] >>"
+    b" /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >>",
+    extra_objects=[
+        # 5: coloured 20 x 20 checkerboard cell, rotated a little.
+        stream(
+            b"/PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 20 20] /XStep 20 /YStep 20"
+            b" /Matrix [0.94 0.34 -0.34 0.94 0 0] /Resources << >>",
+            b"0 0 1 rg 0 0 10 10 re f 1 0.5 0 rg 10 10 10 10 re f",
+        ),
+        # 6: uncoloured dots with gaps between cells.
+        stream(
+            b"/PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 10 10] /XStep 16 /YStep 16"
+            b" /Resources << >>",
+            b"5 0 m 10 0 10 10 5 10 c 0 10 0 0 5 0 c f",
+        ),
+        # 7: a shading pattern.
+        b"<< /PatternType 2 /Shading << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 400 0]"
+        b" /Function << /FunctionType 2 /Domain [0 1] /C0 [0 0.6 0.3] /C1 [0.6 0 0.6] /N 1 >>"
+        b" /Extend [true true] >> >>",
+    ],
+)
+
+SAMPLES["spot"] = single_page(
+    b"""
+/Orange cs 1 sc 20 220 170 160 re f
+0.4 sc 210 220 170 160 re f
+/Duo cs 1 0 sc 20 20 110 160 re f
+0 1 sc 145 20 110 160 re f
+0.5 0.5 sc 270 20 110 160 re f
+""",
+    resources=b"<< /ColorSpace << /Orange [/Separation /Orange /DeviceCMYK 5 0 R]"
+    b" /Duo [/DeviceN [/Cyan /Pantone485] /DeviceCMYK 6 0 R] >> >>",
+    extra_objects=[
+        ps_function(b"[0 1]", b"[0 1 0 1 0 1 0 1]", b"{ dup 0.5 mul exch 0 exch 0 4 1 roll 3 1 roll }"),
+        ps_function(b"[0 1 0 1]", b"[0 1 0 1 0 1 0 1]", b"{ 2 copy 0 exch 4 2 roll pop 0 0 4 2 roll pop }"),
+    ],
+)
+
+
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else "samples"
     os.makedirs(out_dir, exist_ok=True)

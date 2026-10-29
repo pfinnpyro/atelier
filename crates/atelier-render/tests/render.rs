@@ -373,3 +373,159 @@ fn region_matches_the_same_area_of_the_full_page() {
         }
     }
 }
+
+const AXIAL_RED_BLUE: &str = "<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [20 0 80 0] \
+     /Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >>";
+
+#[test]
+fn axial_shading_blends_and_extends() {
+    let p = render_with(
+        "",
+        b"/S sh",
+        &format!("<< /Shading << /S {AXIAL_RED_BLUE} >> >>"),
+        &[],
+    );
+    // Without Extend nothing is painted outside the axis.
+    assert_eq!(at(&p, 10, 50), WHITE);
+    assert_eq!(at(&p, 90, 50), WHITE);
+    assert!(near(at(&p, 21, 50), [251, 0, 4]));
+    assert!(near(at(&p, 50, 50), [128, 0, 127]));
+    assert!(near(at(&p, 79, 50), [4, 0, 251]));
+
+    let extended = AXIAL_RED_BLUE.replace(">> >>", ">> /Extend [true true] >>");
+    let p = render_with(
+        "",
+        b"/S sh",
+        &format!("<< /Shading << /S {extended} >> >>"),
+        &[],
+    );
+    assert_eq!(at(&p, 5, 50), RED);
+    assert_eq!(at(&p, 95, 50), BLUE);
+}
+
+#[test]
+fn radial_shading_is_round() {
+    let shading = "<< /ShadingType 3 /ColorSpace /DeviceGray /Coords [50 50 0 50 50 40] \
+         /Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >> >>";
+    let p = render_with(
+        "",
+        b"/S sh",
+        &format!("<< /Shading << /S {shading} >> >>"),
+        &[],
+    );
+    assert!(near(at(&p, 50, 50), [0, 0, 0]));
+    // Same distance from the centre, same colour.
+    assert_eq!(at(&p, 70, 50), at(&p, 50, 70));
+    assert!(near(at(&p, 70, 50), [128, 128, 128]));
+    // Outside the end circle, unextended.
+    assert_eq!(at(&p, 95, 95), WHITE);
+}
+
+#[test]
+fn shading_respects_the_clip() {
+    let extended = AXIAL_RED_BLUE.replace(">> >>", ">> /Extend [true true] >>");
+    let p = render_with(
+        "",
+        b"q 40 40 20 20 re W n /S sh Q",
+        &format!("<< /Shading << /S {extended} >> >>"),
+        &[],
+    );
+    assert_eq!(at(&p, 30, 50), WHITE);
+    assert_eq!(at(&p, 50, 30), WHITE);
+    assert!(near(at(&p, 50, 50), [128, 0, 127]));
+}
+
+#[test]
+fn triangle_mesh_interpolates_vertex_colours() {
+    // Free-form mesh: 8-bit coordinates over [0 100], 8-bit RGB.
+    // Each vertex is a flag byte, x, y, then r, g, b.
+    let data = [
+        0u8, 0, 0, 255, 0, 0, // red at (0, 0)
+        0, 255, 0, 0, 255, 0, // green at (100, 0)
+        0, 0, 255, 0, 0, 255, // blue at (0, 100)
+    ];
+    let mesh = stream(
+        "/ShadingType 4 /ColorSpace /DeviceRGB /BitsPerCoordinate 8 /BitsPerComponent 8 \
+         /BitsPerFlag 8 /Decode [0 100 0 100 0 1 0 1 0 1]",
+        &data,
+    );
+    let p = render_with("", b"/M sh", "<< /Shading << /M 5 0 R >> >>", &[mesh]);
+    assert!(near(at(&p, 2, 2), [250, 4, 4]));
+    assert!(near(at(&p, 96, 2), [10, 245, 0]));
+    assert!(near(at(&p, 2, 96), [10, 0, 245]));
+    // The other half of the square is outside the triangle.
+    assert_eq!(at(&p, 80, 80), WHITE);
+}
+
+#[test]
+fn coloured_tiling_pattern_repeats() {
+    // 10 x 10 cell: red square in the lower left quarter.
+    let cell = stream(
+        "/PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 \
+         /Resources << >>",
+        b"1 0 0 rg 0 0 5 5 re f",
+    );
+    let p = render_with(
+        "",
+        b"/Pattern cs /P scn 0 0 100 100 re f",
+        "<< /Pattern << /P 5 0 R >> >>",
+        &[cell],
+    );
+    for (x, y) in [(2, 2), (32, 72), (92, 12)] {
+        assert_eq!(at(&p, x, y), RED, "({x}, {y})");
+    }
+    for (x, y) in [(7, 2), (2, 7), (37, 77)] {
+        assert_eq!(at(&p, x, y), WHITE, "({x}, {y})");
+    }
+}
+
+#[test]
+fn uncoloured_pattern_takes_the_fill_colour_and_matrix() {
+    // Stencil cell drawn in whatever colour is set; the matrix moves it by 5.
+    let cell = stream(
+        "/PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 10 10] /XStep 20 /YStep 20 \
+         /Matrix [1 0 0 1 5 5] /Resources << >>",
+        b"1 0 0 rg 0 0 10 10 re f",
+    );
+    let p = render_with(
+        "",
+        b"/P2 cs 0 0 1 /P scn 0 0 100 100 re f",
+        "<< /Pattern << /P 5 0 R >> /ColorSpace << /P2 [/Pattern /DeviceRGB] >> >>",
+        &[cell],
+    );
+    // The cell's own red is ignored.
+    assert_eq!(at(&p, 10, 10), BLUE);
+    assert_eq!(at(&p, 50, 30), BLUE);
+    assert_eq!(at(&p, 2, 2), WHITE);
+    assert_eq!(at(&p, 20, 10), WHITE);
+}
+
+#[test]
+fn shading_pattern_fills_and_strokes() {
+    let extended = AXIAL_RED_BLUE.replace(">> >>", ">> /Extend [true true] >>");
+    let p = render_with(
+        "",
+        b"/Pattern cs /P scn 0 0 100 40 re f /Pattern CS /P SCN 10 w 0 70 m 100 70 l S",
+        &format!("<< /Pattern << /P << /PatternType 2 /Shading {extended} >> >> >>"),
+        &[],
+    );
+    assert_eq!(at(&p, 5, 20), RED);
+    assert_eq!(at(&p, 95, 20), BLUE);
+    assert!(near(at(&p, 50, 70), [128, 0, 127]));
+    assert_eq!(at(&p, 50, 50), WHITE);
+}
+
+#[test]
+fn separation_uses_its_tint_transform() {
+    // Tint t maps to RGB (t, 0, 1 - t).
+    let resources = "<< /ColorSpace << /Spot [/Separation /Spot /DeviceRGB \
+         << /FunctionType 2 /Domain [0 1] /C0 [0 0 1] /C1 [1 0 0] /N 1 >>] >> >>";
+    let p = render_with(
+        "",
+        b"/Spot cs 1 sc 0 0 50 100 re f 0 sc 50 0 50 100 re f",
+        resources,
+        &[],
+    );
+    assert_eq!(at(&p, 25, 50), RED);
+    assert_eq!(at(&p, 75, 50), BLUE);
+}
