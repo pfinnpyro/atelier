@@ -39,7 +39,12 @@ impl Viewer {
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .show(ctx, |ui| match which {
                 Window::Settings => self.settings_ui(ui),
-                Window::About => about_ui(ui),
+                Window::About => {
+                    about_ui(ui);
+                    ui.separator();
+                    ui.heading("Updates");
+                    self.updates_ui(ui);
+                }
             });
         if !open {
             self.window = None;
@@ -135,6 +140,20 @@ impl Viewer {
                  and uses them to turn the pages upright. Runs on this computer.",
             );
         self.ocr_models_ui(ui);
+        ui.add_space(6.0);
+        ui.heading("Updates");
+        let s = &mut self.settings;
+        ui.checkbox(
+            &mut s.check_updates,
+            "Check for updates when Atelier starts",
+        )
+        .on_hover_text("Asks GitHub for the list of releases; nothing else is sent.");
+        ui.horizontal(|ui| {
+            ui.label("Channel");
+            ui.selectable_value(&mut s.preview, false, "Stable");
+            ui.selectable_value(&mut s.preview, true, "Preview")
+                .on_hover_text("Also offer test versions before they are released");
+        });
         ui.add_space(6.0);
         ui.heading("Default app");
         if default_app::supported() {

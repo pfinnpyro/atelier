@@ -5,6 +5,7 @@
 mod app;
 mod default_app;
 mod settings;
+mod update;
 mod worker;
 
 use ::image;

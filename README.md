@@ -56,6 +56,23 @@ cargo run --release -p atelier-cli -- info some.pdf
 
 The viewer needs Rust 1.95 or newer; the library crates build with 1.85.
 
+## Releases and updates
+
+Pushing a version tag publishes a release for Windows through
+`.github/workflows/release.yml`:
+
+1. Set `version` in the workspace `Cargo.toml`, for example `0.2.0`, and merge.
+2. Tag that commit and push the tag: `git tag v0.2.0 && git push origin v0.2.0`.
+   A tag with a dash, such as `v0.2.0-beta.1`, is published as a pre-release
+   on the **preview** channel.
+
+The release carries the installer (`atelier-setup-windows-x64.exe`), the
+program on its own (`atelier-windows-x64.exe`), the command-line tool, a zip,
+and `SHA256SUMS.txt`. Atelier checks GitHub for a newer release when it starts
+(Settings → Updates), and About → Check for updates downloads it, checks it
+against `SHA256SUMS.txt`, and installs it: through the installer for an
+installed copy, or by replacing the program file for a portable one.
+
 ## Viewer keys
 
 | Key | Does |

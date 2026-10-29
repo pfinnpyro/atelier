@@ -15,6 +15,7 @@ path = "src/main.rs"
 winresource = "0.1"
 
 [dependencies]
+atelier-crypto.workspace = true
 atelier-form.workspace = true
 atelier-raster.workspace = true
 atelier-render.workspace = true
