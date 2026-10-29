@@ -19,6 +19,7 @@ atelier-raster = { path = "crates/atelier-raster" }
 atelier-render = { path = "crates/atelier-render" }
 atelier-ocr = { path = "crates/atelier-ocr" }
 atelier-view = { path = "crates/atelier-view" }
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -33,3 +34,4 @@ debug = 1
 # builds and tests too.
 [profile.dev.package.atelier-filters]
 opt-level = 2
+
