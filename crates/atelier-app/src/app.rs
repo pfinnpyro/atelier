@@ -6,12 +6,13 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use atelier_form::Session;
 use atelier_raster::Point;
 use atelier_render::PageText;
 use atelier_syntax::{Document, Error};
 use atelier_view::{
     Caret, Layout, PREVIEW_SCALE, PageGeom, SearchMatch, Selection, TileCache, TileKey, ViewRect,
-    hit_test, scale_key, tiles_at_scale, tiles_for_view,
+    hit_test, scale_key, tiles_at_scale, tiles_for_view, word_at,
 };
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, CursorIcon, Event, FontId, Key, Modifiers, Pos2, Rect,
@@ -22,9 +23,12 @@ use crate::worker::{Done, Job, Pool};
 
 mod form;
 mod inspect;
+mod menu;
+mod pages;
 
 use form::FormView;
 use inspect::Inspector;
+use menu::MenuTarget;
 
 const MIN_ZOOM: f64 = 0.05;
 const MAX_ZOOM: f64 = 64.0;
@@ -54,6 +58,13 @@ struct Open {
     warnings: BTreeSet<String>,
     /// Where the file was read from, for Save.
     path: Option<PathBuf>,
+    /// Changes made since opening or saving: field values and page turns.
+    session: Session,
+    /// The generation the file was opened with, which outlives edits.
+    opened: u64,
+    /// Auto-orient is working out which way up the pages go: pages done
+    /// so far, and how many there are.
+    orienting: Option<(Arc<std::sync::atomic::AtomicUsize>, usize)>,
     /// The form, when the document has one.
     form: Option<FormView>,
     /// Tiles that still show a field's old value; they stay on screen
@@ -89,6 +100,8 @@ pub struct Viewer {
     open: Option<Open>,
     generation: u64,
     error: Option<String>,
+    /// A message about something done, shown until dismissed.
+    notice: Option<String>,
     zoom_mode: ZoomMode,
     /// The scroll offset as of the last frame.
     offset: Vec2,
@@ -110,6 +123,8 @@ pub struct Viewer {
     /// Closing was confirmed; let the window go.
     closing: bool,
     inspector: Inspector,
+    /// What the right-click menu is for.
+    menu: Option<MenuTarget>,
 }
 
 /// An encrypted file the password prompt is open for.
@@ -135,6 +150,7 @@ impl Viewer {
             open: None,
             generation: 0,
             error: None,
+            notice: None,
             zoom_mode: ZoomMode::FitWidth,
             offset: Vec2::ZERO,
             view_size: Vec2::new(800.0, 600.0),
@@ -150,6 +166,7 @@ impl Viewer {
             confirm: None,
             closing: false,
             inspector: Inspector::default(),
+            menu: None,
         };
         if let Some(p) = path {
             v.open_path(&p);
@@ -174,10 +191,7 @@ impl Viewer {
     }
 
     fn is_dirty(&self) -> bool {
-        self.open
-            .as_ref()
-            .and_then(|o| o.form.as_ref())
-            .is_some_and(FormView::is_dirty)
+        self.open.as_ref().is_some_and(|o| o.session.is_dirty())
     }
 
     fn open_with_password(
@@ -214,12 +228,17 @@ impl Viewer {
             }
         };
         self.locked = None;
+        self.notice = None;
         self.pool.stop_search();
         self.pool.set_jobs(Vec::new());
         self.generation += 1;
         let warnings = doc.warnings().into_iter().collect();
+        let doc = Arc::new(doc);
         let mut open = Open {
-            doc: Arc::new(doc),
+            session: Session::new(doc.clone()),
+            opened: self.generation,
+            orienting: None,
+            doc,
             name,
             generation: self.generation,
             layout: Layout::new(pages, 1.0),
@@ -274,11 +293,7 @@ impl Viewer {
         let Some(o) = &mut self.open else { return };
         o.name = display_name(&path);
         o.path = Some(path);
-        if let Some(fv) = &mut o.form
-            && let Err(e) = fv.session.saved(o.doc.clone())
-        {
-            self.error = Some(format!("Saved, but could not reread the form: {e}"));
-        }
+        o.session.saved(o.doc.clone());
         self.update_title();
     }
 
@@ -331,8 +346,8 @@ impl Viewer {
                 ctx.send_viewport_cmd(ViewportCommand::Close);
             }
             Pending::Open { data, name, path } => {
-                if let Some(fv) = self.open.as_mut().and_then(|o| o.form.as_mut()) {
-                    fv.session.revert();
+                if let Some(o) = &mut self.open {
+                    o.session.revert();
                 }
                 self.open_with_password(data, name, "", path);
             }
@@ -501,6 +516,7 @@ impl Viewer {
     fn receive(&mut self) {
         let ppp = f64::from(self.ctx.pixels_per_point());
         let mut reveal = None;
+        let mut oriented = None;
         while let Ok(done) = self.pool.done.try_recv() {
             let Some(o) = &mut self.open else { continue };
             match done {
@@ -580,8 +596,17 @@ impl Viewer {
                         reveal = Some(0);
                     }
                 }
+                Done::Oriented {
+                    generation,
+                    rotations,
+                } => oriented = Some((generation, rotations)),
                 _ => {}
             }
+        }
+        if let Some((opened, rotations)) = oriented {
+            self.oriented(opened, &rotations);
+        } else {
+            self.orient_progress();
         }
         if let Some(i) = reveal {
             self.reveal_hit(i);
@@ -609,6 +634,13 @@ impl Viewer {
         }
         if shortcut(Key::O) {
             self.pick_file();
+        }
+        let turn = |k| ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, k));
+        if turn(Key::Plus) || turn(Key::Equals) {
+            self.rotate_pages(1);
+        }
+        if turn(Key::Minus) {
+            self.rotate_pages(-1);
         }
         if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F12)) {
             self.inspector.open = !self.inspector.open;
@@ -784,6 +816,29 @@ impl Viewer {
                     self.apply_fit();
                 }
                 ui.separator();
+                if ui
+                    .button("↺")
+                    .on_hover_text("Rotate all pages counterclockwise (Ctrl+Shift+−)")
+                    .clicked()
+                {
+                    self.rotate_pages(-1);
+                }
+                if ui
+                    .button("↻")
+                    .on_hover_text("Rotate all pages clockwise (Ctrl+Shift+=)")
+                    .clicked()
+                {
+                    self.rotate_pages(1);
+                }
+                let orienting = self.open.as_ref().is_some_and(|o| o.orienting.is_some());
+                if ui
+                    .add_enabled(!orienting, egui::Button::new("Auto-orient"))
+                    .on_hover_text("Turn each page so its text reads upright")
+                    .clicked()
+                {
+                    self.auto_orient();
+                }
+                ui.separator();
                 let field = egui::TextEdit::singleline(&mut self.search_input)
                     .hint_text("Search")
                     .desired_width(180.0);
@@ -945,6 +1000,7 @@ impl Viewer {
             let (rect, response) = ui.allocate_exact_size(content, Sense::click_and_drag());
             self.draw_pages(ui, rect.min, viewport);
             self.draw_fields(ui, rect.min);
+            self.draw_pick(ui, rect.min);
             self.pointer(ui, &response, rect.min);
             self.draw_editor(ui, rect.min);
             let ctx = ui.ctx().clone();
@@ -1169,6 +1225,9 @@ impl Viewer {
             self.zoom_by(f64::from(zoom_delta).sqrt(), anchor);
         }
 
+        if self.pick_pointer(ui, response, response.hover_pos().map(to_layout)) {
+            return;
+        }
         if let Some(p) = response.hover_pos() {
             let (lx, ly) = to_layout(p);
             if let Some(icon) = self.form_cursor(lx, ly).filter(|_| !self.selecting) {
@@ -1222,12 +1281,30 @@ impl Viewer {
             if let Some(p) = response.interact_pointer_pos() {
                 let (lx, ly) = to_layout(p);
                 let ctrl = ui.input(|i| i.modifiers.command);
-                self.form_click(lx, ly, ctrl);
+                let on_field = self.form_click(lx, ly, ctrl);
+                // A double click selects the word under it.
+                if response.double_clicked()
+                    && !on_field
+                    && let Some(o) = &self.open
+                {
+                    let page = o.layout.page_at_y(ly);
+                    if let (Some(text), Some(user)) =
+                        (o.text.get(&page), o.layout.to_user(page, lx, ly))
+                        && self.over_text(lx, ly)
+                    {
+                        self.selection = word_at(text, page, user);
+                    }
+                }
             }
         }
-        if response.secondary_clicked() {
-            // A small context menu could go here; for now copy is Ctrl+C.
+        if response.secondary_clicked()
+            && let Some(p) = response.interact_pointer_pos()
+        {
+            let (lx, ly) = to_layout(p);
+            self.menu = None;
+            self.menu_target_at(lx, ly);
         }
+        response.context_menu(|ui| self.context_menu(ui));
     }
 }
 
@@ -1258,6 +1335,16 @@ impl eframe::App for Viewer {
             self.toolbar(ui);
             ui.add_space(2.0);
         });
+        if let Some(note) = self.notice.clone().filter(|_| self.open.is_some()) {
+            egui::Panel::bottom("notice").show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(note);
+                    if ui.small_button("Dismiss").clicked() {
+                        self.notice = None;
+                    }
+                });
+            });
+        }
         if let Some(err) = self.error.clone().filter(|_| self.open.is_some()) {
             egui::Panel::bottom("status").show(ui, |ui| {
                 ui.horizontal(|ui| {

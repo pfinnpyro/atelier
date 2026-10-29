@@ -368,6 +368,7 @@ dependencies = [
 name = "atelier-app"
 version = "0.1.0"
 dependencies = [
+ "arboard",
  "atelier-form",
  "atelier-raster",
  "atelier-render",
@@ -385,6 +386,7 @@ dependencies = [
  "atelier-form",
  "atelier-render",
  "atelier-syntax",
+ "atelier-view",
 ]
 
 [[package]]

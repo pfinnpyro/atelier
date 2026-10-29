@@ -4,7 +4,7 @@
 
 use std::collections::HashSet;
 
-use atelier_form::{Field, FieldKind, Form, Session, Value, flags};
+use atelier_form::{Field, FieldKind, Form, Value, flags};
 use atelier_raster::Point;
 use eframe::egui::{
     self, Align, Color32, CursorIcon, FocusDirection, FontId, Key, Modifiers, Pos2, Rect, Stroke,
@@ -21,10 +21,9 @@ const LIST_LINE: f64 = 1.15;
 
 /// The form of the open document and what is being filled in.
 pub(super) struct FormView {
-    pub session: Session,
     /// Field values as now shown, including unsaved changes.
     pub form: Form,
-    tab: Vec<(usize, usize)>,
+    pub tab: Vec<(usize, usize)>,
     /// The widget with keyboard focus: (field, widget).
     pub focus: Option<(usize, usize)>,
     editor: Option<Editor>,
@@ -39,13 +38,29 @@ struct Editor {
     text: String,
     multiline: bool,
     focus_pending: bool,
+    /// Its right-click menu is open; the menu takes focus from the box
+    /// without ending the typing.
+    menu_open: bool,
+    /// The selected characters as last seen while the box had focus; the
+    /// box forgets its selection when the menu takes focus.
+    sel: (usize, usize),
+    /// A selection to give the box once it has focus again.
+    cursor_after: Option<(usize, usize)>,
+}
+
+/// A pick from the typing box's right-click menu.
+#[derive(Clone, Copy)]
+enum EditMenu {
+    Cut,
+    Copy,
+    Paste,
+    SelectAll,
 }
 
 impl FormView {
-    pub fn new(session: Session, form: Form, doc: &atelier_syntax::Document) -> Self {
+    pub fn new(form: Form, doc: &atelier_syntax::Document) -> Self {
         let tab = form.tab_order(doc);
         Self {
-            session,
             form,
             tab,
             focus: None,
@@ -53,10 +68,6 @@ impl FormView {
             combo: None,
             highlight: true,
         }
-    }
-
-    pub fn is_dirty(&self) -> bool {
-        self.session.is_dirty()
     }
 
     fn field(&self, at: (usize, usize)) -> Option<&Field> {
@@ -93,20 +104,12 @@ impl Viewer {
     /// Reads the form of a newly opened document. Files that ask viewers
     /// to redraw their fields get redrawn here, before anything is shown.
     pub(super) fn load_form(o: &mut Open) {
-        let session = match Session::new(o.doc.clone()) {
-            Ok(Some(s)) => s,
-            Ok(None) => return,
-            Err(e) => {
-                o.warnings.insert(format!("Form: {e}"));
-                return;
-            }
-        };
-        match session.build() {
+        match o.session.build() {
             Ok(built) => {
                 o.warnings
                     .extend(built.warnings.iter().map(|w| format!("Form: {w}")));
                 o.doc = built.doc;
-                o.form = Some(FormView::new(session, built.form, &o.doc));
+                o.form = built.form.map(|f| FormView::new(f, &o.doc));
             }
             Err(e) => {
                 o.warnings.insert(format!("Form: {e}"));
@@ -114,44 +117,26 @@ impl Viewer {
         }
     }
 
-    /// Records a field's new value and swaps in the rebuilt document. Tiles
-    /// of the pages the field is on stay up until fresh ones arrive.
-    fn commit(&mut self, field: usize, value: Value) {
+    /// Records a field's new value and swaps in the rebuilt document.
+    pub(super) fn commit(&mut self, field: usize, value: Value) {
         let Some(o) = &mut self.open else { return };
-        let Some(fv) = &mut o.form else { return };
-        if fv.form.fields[field].value.same_as(&value) {
+        let Some(fv) = &o.form else { return };
+        if fv
+            .form
+            .fields
+            .get(field)
+            .is_none_or(|f| f.value.same_as(&value))
+        {
             return;
         }
-        fv.session.set(field, value);
-        let built = match fv.session.build() {
-            Ok(b) => b,
-            Err(e) => {
-                self.error = Some(format!("Could not fill in the field: {e}"));
-                return;
-            }
-        };
-        if let Some(w) = built.warnings.first() {
-            self.error = Some(w.to_string());
-        }
-        fv.form = built.form;
-        fv.tab = fv.form.tab_order(&built.doc);
-        o.doc = built.doc;
-        let pages: HashSet<usize> = fv.session.pages_of(field).into_iter().collect();
-        let stale: Vec<_> = pages
-            .iter()
-            .flat_map(|p| o.tiles.page_tiles(*p).map(|(k, _)| *k).collect::<Vec<_>>())
-            .collect();
-        o.stale.extend(stale);
-        o.failed.retain(|k| !pages.contains(&k.page));
-        // Work queued for the old document is dropped when it comes back.
-        self.generation += 1;
-        o.generation = self.generation;
-        self.update_title();
+        o.session.set(field, value);
+        let pages: HashSet<usize> = o.session.pages_of(field).into_iter().collect();
+        self.rebuild(&pages, false);
     }
 
     pub(super) fn update_title(&self) {
         let Some(o) = &self.open else { return };
-        let dirty = o.form.as_ref().is_some_and(FormView::is_dirty);
+        let dirty = o.session.is_dirty();
         let mark = if dirty { "• " } else { "" };
         self.ctx
             .send_viewport_cmd(egui::ViewportCommand::Title(format!(
@@ -175,14 +160,25 @@ impl Viewer {
     fn widget_rect(&self, at: (usize, usize), origin: Pos2) -> Option<Rect> {
         let o = self.open.as_ref()?;
         let w = o.form.as_ref()?.field(at)?.widgets.get(at.1)?;
-        let t = o.layout.user_to_layout(w.page?)?;
+        self.user_rect(w.page?, &w.rect, origin)
+    }
+
+    /// A box in a page's user space, on screen, given the content origin.
+    pub(super) fn user_rect(
+        &self,
+        page: usize,
+        rect: &atelier_syntax::Rect,
+        origin: Pos2,
+    ) -> Option<Rect> {
+        let o = self.open.as_ref()?;
+        let t = o.layout.user_to_layout(page)?;
         let shift = self.centre_shift() as f32;
         let mut r = Rect::NOTHING;
         for (x, y) in [
-            (w.rect.x0, w.rect.y0),
-            (w.rect.x1, w.rect.y0),
-            (w.rect.x1, w.rect.y1),
-            (w.rect.x0, w.rect.y1),
+            (rect.x0, rect.y0),
+            (rect.x1, rect.y0),
+            (rect.x1, rect.y1),
+            (rect.x0, rect.y1),
         ] {
             let p = t.apply(Point::new(x, y));
             r.extend_with(origin + Vec2::new(p.x as f32 + shift, p.y as f32));
@@ -252,6 +248,9 @@ impl Viewer {
                     text: f.value.display(),
                     multiline: f.has_flag(flags::MULTILINE),
                     focus_pending: true,
+                    menu_open: false,
+                    sel: (0, 0),
+                    cursor_after: None,
                 });
             }
             Act::OpenCombo(at) => {
@@ -266,7 +265,7 @@ impl Viewer {
     }
 
     /// Ends typing: commits the text, or throws it away.
-    fn finish_editing(&mut self, keep: bool) {
+    pub(super) fn finish_editing(&mut self, keep: bool) {
         let Some(fv) = self.open.as_mut().and_then(|o| o.form.as_mut()) else {
             return;
         };
@@ -448,6 +447,7 @@ impl Viewer {
         let max_len = f.max_len.filter(|&m| m > 0);
         let password = f.has_flag(flags::PASSWORD);
         let Some(ed) = &mut fv.editor else { return };
+        let id = egui::Id::unique(("field-editor", at));
         // Escape cancels; the text box would otherwise just lose focus.
         let escape = ui.input(|i| i.key_pressed(Key::Escape));
         // Small fields at low zoom get a box big enough to read and type
@@ -467,7 +467,7 @@ impl Viewer {
         } else {
             egui::TextEdit::singleline(&mut ed.text)
         }
-        .id_salt(("field-editor", at))
+        .id(id)
         .font(FontId::proportional(font_px))
         .text_color(Color32::BLACK)
         .frame(egui::Frame::NONE)
@@ -486,7 +486,32 @@ impl Viewer {
         if let Some(m) = max_len {
             edit = edit.char_limit(m);
         }
+        if ui.memory(|m| m.has_focus(id))
+            && let Some((a, b)) = ed.cursor_after.take()
+        {
+            let mut state = egui::TextEdit::load_state(ui.ctx(), id).unwrap_or_default();
+            state
+                .cursor
+                .set_char_range(Some(egui::text::CCursorRange::two(
+                    egui::text::CCursor::new(a),
+                    egui::text::CCursor::new(b),
+                )));
+            state.store(ui.ctx(), id);
+        }
         let resp = ui.place(rect, edit);
+        // A right click moves the box's cursor; the menu acts on the
+        // selection from before it.
+        let right_click =
+            ui.input(|i| i.pointer.secondary_down() || i.pointer.secondary_released());
+        if resp.has_focus()
+            && !right_click
+            && !ed.menu_open
+            && let Some(r) =
+                egui::TextEdit::load_state(ui.ctx(), id).and_then(|s| s.cursor.char_range())
+        {
+            let [a, b] = r.sorted_cursors();
+            ed.sel = (a.index.0, b.index.0);
+        }
         ui.painter()
             .rect_stroke(rect, 0.0, Stroke::new(1.0, FOCUS_RING), StrokeKind::Outside);
         if ed.focus_pending {
@@ -494,7 +519,36 @@ impl Viewer {
             ed.focus_pending = false;
             return;
         }
-        if resp.lost_focus() {
+        let menu_was_open = ed.menu_open;
+        let mut pick = None;
+        ed.menu_open = resp
+            .context_menu(|ui| {
+                for (item, label) in [
+                    (EditMenu::Cut, "Cut"),
+                    (EditMenu::Copy, "Copy"),
+                    (EditMenu::Paste, "Paste"),
+                    (EditMenu::SelectAll, "Select all"),
+                ] {
+                    if ui.button(label).clicked() {
+                        pick = Some(item);
+                        ui.close();
+                    }
+                }
+            })
+            .is_some();
+        if let Some(item) = pick
+            && let Some(c) = edit_menu(ui.ctx(), &mut ed.text, ed.sel, item, max_len, ed.multiline)
+        {
+            ed.sel = c;
+            ed.cursor_after = Some(c);
+        }
+        if menu_was_open && !ed.menu_open {
+            // Back to typing once the menu closes, with the selection back.
+            ed.focus_pending = true;
+            ed.cursor_after.get_or_insert(ed.sel);
+            return;
+        }
+        if resp.lost_focus() && !ed.menu_open {
             let keep = !escape;
             self.finish_editing(keep);
         }
@@ -561,6 +615,48 @@ impl Viewer {
         if let Some(fv) = self.open.as_mut().and_then(|o| o.form.as_mut()) {
             fv.highlight = !fv.highlight;
         }
+    }
+}
+
+/// Applies a pick from the typing box's menu to its text, given the
+/// selected characters. Returns the selection to show after.
+fn edit_menu(
+    ctx: &egui::Context,
+    text: &mut String,
+    sel: (usize, usize),
+    item: EditMenu,
+    max_len: Option<usize>,
+    multiline: bool,
+) -> Option<(usize, usize)> {
+    let chars = text.chars().count();
+    let range = sel.0.min(chars)..sel.1.min(chars);
+    let byte = |c: usize| text.char_indices().nth(c).map_or(text.len(), |(b, _)| b);
+    let (b0, b1) = (byte(range.start), byte(range.end));
+    match item {
+        EditMenu::Copy | EditMenu::Cut if range.is_empty() => None,
+        EditMenu::Copy => {
+            ctx.copy_text(text[b0..b1].to_string());
+            Some(sel)
+        }
+        EditMenu::Cut => {
+            ctx.copy_text(text[b0..b1].to_string());
+            text.replace_range(b0..b1, "");
+            Some((range.start, range.start))
+        }
+        EditMenu::Paste => {
+            let mut add = super::menu::clipboard_text()?;
+            if !multiline {
+                add = add.lines().collect::<Vec<_>>().join(" ");
+            }
+            if let Some(m) = max_len {
+                let room = m.saturating_sub(chars - range.len());
+                add = add.chars().take(room).collect();
+            }
+            text.replace_range(b0..b1, &add);
+            let end = range.start + add.chars().count();
+            Some((end, end))
+        }
+        EditMenu::SelectAll => Some((0, chars)),
     }
 }
 

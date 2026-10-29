@@ -31,6 +31,8 @@ Usage:
                                            name; multi-select lists take a|b|c.
                                            --refresh redraws every field's appearance
   atelier actions <file.pdf>               list scripts and other actions (never run)
+  atelier orient <file.pdf>                which way up each page reads, judged from
+                                           its text, or for scans from the image
 
 Every command takes --password <pw> for encrypted files.";
 
@@ -78,6 +80,7 @@ fn run(args: &[String]) -> Result<(), String> {
         "fields" => fields(&doc, &mut out),
         "fill" => fill(&doc, &args[2..], &mut out),
         "actions" => actions(&doc, &mut out),
+        "orient" => orient(&doc, &mut out),
         other => return Err(format!("unknown command `{other}`\n\n{USAGE}")),
     };
     for warning in doc.warnings() {
@@ -152,6 +155,19 @@ fn pages(doc: &Document, out: &mut Out) -> Result<(), String> {
             m.y1
         )
         .map_err(io)?;
+    }
+    Ok(())
+}
+
+fn orient(doc: &Document, out: &mut Out) -> Result<(), String> {
+    let pages = doc.pages().map_err(|e| e.to_string())?;
+    for (i, page) in pages.iter().enumerate() {
+        let verdict = match atelier_view::upright_page(doc, page) {
+            Some((r, basis)) if r == page.rotate => format!("upright ({basis:?})"),
+            Some((r, basis)) => format!("turn to rotate {r} ({basis:?})"),
+            None => "cannot tell".to_string(),
+        };
+        writeln!(out, "{:>5}  rotate {:<3}  {verdict}", i + 1, page.rotate).map_err(io)?;
     }
     Ok(())
 }

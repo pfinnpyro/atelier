@@ -2,7 +2,7 @@
 //! of objects, the children of an object for the tree, and previews of
 //! stream data.
 
-use atelier_syntax::{Document, Object, XrefEntry};
+use atelier_syntax::{Document, ObjRef, Object, Page, Rect, XrefEntry};
 
 /// A line of the file overview: a label and its value.
 pub type Fact = (&'static str, String);
@@ -150,6 +150,84 @@ pub fn pdf_date(s: &str) -> Option<String> {
 /// How many times the file was saved: one plus each incremental update.
 pub fn revisions(data: &[u8]) -> usize {
     data.windows(5).filter(|w| *w == b"%%EOF").count().max(1)
+}
+
+/// An object picked by pointing at a page.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Picked {
+    pub obj: ObjRef,
+    /// What it is, in a few words.
+    pub label: String,
+    /// Its box in user space; None for the page itself.
+    pub rect: Option<Rect>,
+}
+
+/// The annotation under a point (user space) of a page, the smallest when
+/// they overlap, or else the page. Hidden annotations are passed over.
+pub fn object_at(doc: &Document, page: &Page, x: f64, y: f64) -> Option<Picked> {
+    let mut best: Option<(f64, Picked)> = None;
+    if let Ok(Object::Array(annots)) = doc.get_key(&page.dict, b"Annots") {
+        for a in &annots {
+            let Object::Reference(r) = a else { continue };
+            let Ok(Object::Dict(d)) = doc.get(*r) else {
+                continue;
+            };
+            let flags = doc
+                .get_key(&d, b"F")
+                .ok()
+                .and_then(|f| f.as_i64())
+                .unwrap_or(0);
+            if flags & 2 != 0 {
+                continue;
+            }
+            let Some(rect) = doc
+                .get_key(&d, b"Rect")
+                .ok()
+                .and_then(|o| o.as_array().and_then(Rect::from_array))
+            else {
+                continue;
+            };
+            if !(rect.x0..=rect.x1).contains(&x) || !(rect.y0..=rect.y1).contains(&y) {
+                continue;
+            }
+            let area = rect.width() * rect.height();
+            if best.as_ref().is_some_and(|(a, _)| *a <= area) {
+                continue;
+            }
+            let subtype = d
+                .get(b"Subtype")
+                .and_then(Object::as_name)
+                .map_or_else(|| "?".to_string(), |n| n.as_str_lossy().into_owned());
+            let mut label = format!("{subtype} annotation");
+            // A widget's field name is on it or, for a field with several
+            // widgets, on its parent.
+            let name = doc
+                .get_key(&d, b"T")
+                .ok()
+                .or_else(|| match doc.get_key(&d, b"Parent") {
+                    Ok(Object::Dict(p)) => doc.get_key(&p, b"T").ok(),
+                    _ => None,
+                });
+            if let Some(Object::String(t)) = name {
+                label.push_str(&format!(" \u{201c}{}\u{201d}", t.to_text()));
+            }
+            best = Some((
+                area,
+                Picked {
+                    obj: *r,
+                    label,
+                    rect: Some(rect),
+                },
+            ));
+        }
+    }
+    best.map(|(_, p)| p).or_else(|| {
+        page.obj_ref.map(|obj| Picked {
+            obj,
+            label: "Page".into(),
+            rect: None,
+        })
+    })
 }
 
 /// One line describing an object, without following references.
@@ -313,6 +391,31 @@ mod tests {
             Some("2019-01-02 00:00:00 UTC")
         );
         assert_eq!(pdf_date("yesterday"), None);
+    }
+
+    #[test]
+    fn picks_the_smallest_annotation_under_a_point() {
+        let pdf = b"%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Annots [4 0 R 5 0 R 6 0 R] >> endobj
+4 0 obj << /Type /Annot /Subtype /Square /Rect [0 0 100 100] >> endobj
+5 0 obj << /Type /Annot /Subtype /Widget /Rect [10 10 50 30] /T (Name) >> endobj
+6 0 obj << /Type /Annot /Subtype /Text /Rect [10 10 20 20] /F 2 >> endobj
+trailer << /Root 1 0 R >>
+%%EOF
+";
+        let doc = Document::open(&pdf[..]).unwrap();
+        let page = &doc.pages().unwrap()[0];
+        let p = object_at(&doc, page, 15.0, 15.0).unwrap();
+        assert_eq!(p.obj, ObjRef::new(5, 0));
+        assert_eq!(p.label, "Widget annotation \u{201c}Name\u{201d}");
+        assert_eq!(
+            object_at(&doc, page, 80.0, 80.0).unwrap().obj,
+            ObjRef::new(4, 0)
+        );
+        let p = object_at(&doc, page, 150.0, 150.0).unwrap();
+        assert_eq!((p.obj, p.rect), (ObjRef::new(3, 0), None));
     }
 
     #[test]

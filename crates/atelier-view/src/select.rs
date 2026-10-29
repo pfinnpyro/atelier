@@ -54,6 +54,55 @@ pub fn hit_test(text: &PageText, page: usize, p: Point) -> Option<Caret> {
     })
 }
 
+/// The word at a point, for double-click: the nearest glyph and its
+/// neighbours along the same run, up to a space, punctuation or a gap.
+/// A glyph that is not part of a word is selected on its own.
+pub fn word_at(text: &PageText, page: usize, p: Point) -> Option<Selection> {
+    let i = text
+        .glyphs
+        .iter()
+        .enumerate()
+        .filter(|(_, g)| !g.text.trim().is_empty())
+        .map(|(i, g)| (weighted_distance(g, p), i))
+        .min_by(|a, b| a.0.total_cmp(&b.0))?
+        .1;
+    let glyphs = &text.glyphs;
+    let (mut start, mut end) = (i, i + 1);
+    if is_word(&glyphs[i]) {
+        while start > 0
+            && is_word(&glyphs[start - 1])
+            && touching(&glyphs[start - 1], &glyphs[start])
+        {
+            start -= 1;
+        }
+        while end < glyphs.len()
+            && is_word(&glyphs[end])
+            && touching(&glyphs[end - 1], &glyphs[end])
+        {
+            end += 1;
+        }
+    }
+    Some(Selection {
+        anchor: Caret { page, index: start },
+        focus: Caret { page, index: end },
+    })
+}
+
+/// Letters and digits, and the marks that join a word (apostrophes,
+/// hyphens inside words are kept by the neighbours test).
+fn is_word(g: &TextGlyph) -> bool {
+    !g.text.is_empty()
+        && g.text
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '\'' | '\u{2019}' | '_' | '-'))
+}
+
+/// Whether `b` follows `a` on the same line with no word gap between.
+fn touching(a: &TextGlyph, b: &TextGlyph) -> bool {
+    let gap = (b.baseline.0 - a.baseline.1).length();
+    gap < 0.25 * a.size.max(b.size).max(1.0)
+}
+
 fn weighted_distance(g: &TextGlyph, p: Point) -> f64 {
     let q = &g.quad;
     let ex = q[1] - q[0];
@@ -194,5 +243,30 @@ mod tests {
             focus: Caret { page: 0, index: 2 },
         };
         assert!(empty.is_empty() && empty.text(|_| Some(&t)).is_empty());
+    }
+
+    #[test]
+    fn double_click_selects_a_word() {
+        // "ab cd": glyphs 5 units wide, the space a 4-unit gap.
+        let mut t = PageText::default();
+        for (j, (c, x)) in [
+            ("a", 0.0),
+            ("b", 5.0),
+            ("c", 14.0),
+            ("d", 19.0),
+            (".", 24.0),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let _ = j;
+            t.glyphs.push(glyph(c, x, 0.0));
+        }
+        let w = word_at(&t, 0, Point::new(6.0, 2.0)).unwrap();
+        assert_eq!((w.start().index, w.end().index), (0, 2));
+        let w = word_at(&t, 0, Point::new(20.0, 2.0)).unwrap();
+        assert_eq!((w.start().index, w.end().index), (2, 4));
+        let w = word_at(&t, 0, Point::new(25.0, 2.0)).unwrap();
+        assert_eq!((w.start().index, w.end().index), (4, 5));
     }
 }
