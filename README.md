@@ -81,6 +81,27 @@ brings its tab forward. The ⏷ beside Open lists the last 12 files, which also
 show on the start screen; a file that has gone is taken off the list when
 picked. Closing the window asks about each tab with unsaved changes in turn.
 
+## Marking up
+
+The **Mark** menu:
+
+- **Highlight**: select text, then pick a colour and *Highlight the selected
+  text* (or right-click the selection). Each line gets its own box, and the
+  text shows through.
+- **Add a comment**: click where it goes and type. Pointing at a comment, or
+  at any annotation with text (including ones already in the file), shows
+  its text.
+- **Draw**: drag on a page; pick an ink colour and width in the bar along
+  the bottom. Enter adds the lines drawn so far, Esc puts the pen down.
+- **Sign…**: draw your signature once on the pad, then click where it goes.
+  It is kept in `signature.txt` beside the settings, on this computer only,
+  for next time; *Draw a new signature…* replaces it. This is a drawn
+  signature, not a cryptographic digital signature.
+
+Ctrl+Z takes back the newest mark, and right-clicking a mark added since the
+last save removes it. Marks are saved as standard Highlight, Text and Ink
+annotations, each with its own appearance, so other PDF apps show them too.
+
 ## Organizing pages
 
 In the sidebar's page list:
@@ -104,6 +125,7 @@ everything the other pages used, including the form and bookmarks.
 | Ctrl+O | Open a file, in a new tab |
 | Ctrl+Tab, Ctrl+Shift+Tab | Next and previous tab |
 | Ctrl+W | Close the tab (asks first when it has unsaved changes) |
+| Ctrl+Z | Take back the newest mark |
 | Ctrl+wheel, Ctrl+= and Ctrl+−, Ctrl+0 | Zoom around the pointer, zoom in and out, 100% |
 | Page Up, Page Down, Space, Home, End, arrows | Move through the document |
 | Drag | Select text; Ctrl+C copies it, Esc clears it |

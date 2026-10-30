@@ -11,7 +11,7 @@ use atelier_render::PageText;
 use atelier_syntax::{Dict, Document, ObjRef, Object, Page, Result, Update};
 
 use crate::pages::{self, Copier, PageSlot};
-use crate::{FieldKind, FillWarning, Form, Value};
+use crate::{FieldKind, FillWarning, Form, NewAnnot, Value};
 
 /// The document with the changes applied.
 pub struct Built {
@@ -39,6 +39,8 @@ pub struct Session {
     /// Invisible text to add over scanned pages (what OCR read).
     /// Saved with the file but not counted as an unsaved change.
     layers: BTreeMap<PageSlot, Arc<PageText>>,
+    /// Annotations added, oldest first, with their page.
+    annots: Vec<(PageSlot, NewAnnot)>,
 }
 
 /// The pages of a document as opened, in their own order.
@@ -61,7 +63,38 @@ impl Session {
             rotations: BTreeMap::new(),
             quiet: BTreeMap::new(),
             layers: BTreeMap::new(),
+            annots: Vec::new(),
         }
+    }
+
+    /// Adds an annotation (a highlight, comment or ink) to a page.
+    pub fn add_annot(&mut self, page: usize, annot: NewAnnot) {
+        if let Some(&slot) = self.order.get(page) {
+            self.annots.push((slot, annot));
+        }
+    }
+
+    /// Takes back the newest annotation added; returns its page.
+    pub fn undo_annot(&mut self) -> Option<usize> {
+        let (slot, _) = self.annots.pop()?;
+        self.order.iter().position(|s| *s == slot)
+    }
+
+    /// Removes an added annotation, by its place in [`Session::added_annots`].
+    pub fn remove_annot(&mut self, index: usize) -> Option<usize> {
+        if index >= self.annots.len() {
+            return None;
+        }
+        let (slot, _) = self.annots.remove(index);
+        self.order.iter().position(|s| *s == slot)
+    }
+
+    /// The annotations added so far, with the page each is on now.
+    pub fn added_annots(&self) -> Vec<(usize, &NewAnnot)> {
+        self.annots
+            .iter()
+            .filter_map(|(slot, a)| Some((self.order.iter().position(|s| s == slot)?, a)))
+            .collect()
     }
 
     /// The number of pages with the changes.
@@ -191,6 +224,7 @@ impl Session {
         self.rotations.retain(|s, _| kept.contains(s));
         self.quiet.retain(|s, _| kept.contains(s));
         self.layers.retain(|s, _| kept.contains(s));
+        self.annots.retain(|(s, _)| kept.contains(s));
         Some(old)
     }
 
@@ -215,7 +249,10 @@ impl Session {
 
     /// Whether there are changes to save.
     pub fn is_dirty(&self) -> bool {
-        !self.edits.is_empty() || self.rotations != self.quiet || self.pages_changed()
+        !self.edits.is_empty()
+            || self.rotations != self.quiet
+            || self.pages_changed()
+            || !self.annots.is_empty()
     }
 
     /// Drops every change.
@@ -226,6 +263,7 @@ impl Session {
         self.rotations.clear();
         self.quiet.clear();
         self.layers.clear();
+        self.annots.clear();
     }
 
     /// The document with the changes, and with every field redrawn when
@@ -237,6 +275,7 @@ impl Session {
         if self.edits.is_empty()
             && self.rotations.is_empty()
             && self.layers.is_empty()
+            && self.annots.is_empty()
             && !redraw
             && !reorder
         {
@@ -277,6 +316,11 @@ impl Session {
             if let Object::Dict(mut d) = update.get(page_ref)? {
                 d.insert("Rotate", Object::Integer(i64::from(r)));
                 update.set(page_ref, Object::Dict(d));
+            }
+        }
+        for (n, (slot, a)) in self.annots.iter().enumerate() {
+            if let Some(&page_ref) = refs.get(slot) {
+                crate::annots::add(&mut update, page_ref, a, n)?;
             }
         }
         if !self.layers.is_empty() {
@@ -462,6 +506,7 @@ impl Session {
         self.rotations.clear();
         self.quiet.clear();
         self.layers.clear();
+        self.annots.clear();
     }
 
     /// Pages whose widgets show `field`, as the pages are now ordered.
