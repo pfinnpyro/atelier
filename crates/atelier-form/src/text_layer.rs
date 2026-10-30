@@ -4,7 +4,7 @@
 
 use atelier_raster::Point;
 use atelier_render::{PageText, TextFont};
-use atelier_syntax::{Dict, Document, Name, ObjRef, Object, Page, Result, Stream, Update};
+use atelier_syntax::{Dict, Document, Name, ObjRef, Object, Result, Stream, Update};
 
 /// The font name the layer uses in the page's resources.
 const FONT: &str = "AtelierOCR";
@@ -128,25 +128,16 @@ fn stream(update: &mut Update, data: &[u8]) -> ObjRef {
     }))
 }
 
-/// Adds the layers: each page's words drawn invisibly over it. Pages
-/// without an object of their own are skipped.
-pub(crate) fn add_layers(
-    update: &mut Update,
-    pages: &[Page],
-    layers: &[(usize, &PageText)],
-) -> Result<()> {
+/// Adds the layers: each page's words drawn invisibly over it. Each
+/// layer names the page object, and the resources the page inherits for
+/// when it has none of its own.
+pub(crate) fn add_layers(update: &mut Update, layers: &[(ObjRef, &Dict, &PageText)]) -> Result<()> {
     if layers.is_empty() {
         return Ok(());
     }
     let (font_dict, metrics) = font(update.document());
     let font_ref = update.add(Object::Dict(font_dict));
-    for &(index, text) in layers {
-        let Some(page) = pages.get(index) else {
-            continue;
-        };
-        let Some(page_ref) = page.obj_ref else {
-            continue;
-        };
+    for &(page_ref, inherited, text) in layers {
         let Object::Dict(mut dict) = update.get(page_ref)? else {
             continue;
         };
@@ -165,7 +156,13 @@ pub(crate) fn add_layers(
         parts.push(Object::Reference(after));
         dict.insert("Contents", Object::Array(parts));
         // The page's resources (inherited ones included) with the font.
-        let mut resources = page.resources.clone();
+        let mut resources = match dict.get(b"Resources") {
+            Some(r) => match update.resolve(r)? {
+                Object::Dict(d) => d,
+                _ => inherited.clone(),
+            },
+            None => inherited.clone(),
+        };
         let mut fonts = match resources.get(b"Font") {
             Some(f) => match update.resolve(f)? {
                 Object::Dict(d) => d,

@@ -2,7 +2,7 @@
 //! way their text runs, and swapping in the document rebuilt after any
 //! change.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -69,14 +69,19 @@ impl Viewer {
     /// Turns every page a quarter clockwise (`quarters` = 1) or
     /// counterclockwise (-1).
     pub(super) fn rotate_pages(&mut self, quarters: i32) {
+        let count = self.open.as_ref().map_or(0, |o| o.layout.page_count());
+        self.rotate_some(&(0..count).collect::<Vec<_>>(), quarters);
+    }
+
+    /// Turns some pages a quarter clockwise (1) or counterclockwise (-1).
+    pub(super) fn rotate_some(&mut self, pages: &[usize], quarters: i32) {
         self.finish_editing(true);
         let Some(o) = &mut self.open else { return };
-        let count = o.layout.page_count();
-        for p in 0..count {
+        for &p in pages {
             let r = i32::from(o.session.rotation(p)) + 90 * quarters;
             o.session.rotate(p, r);
         }
-        self.rebuild(&(0..count).collect(), true);
+        self.rebuild(&pages.iter().copied().collect(), true);
     }
 
     /// Turns one page a quarter clockwise (1) or counterclockwise (-1).
@@ -274,5 +279,251 @@ pub(super) struct Orienting {
 impl Orienting {
     fn read_count(&self) -> usize {
         self.read.as_ref().map_or(0, |r| r.load(Ordering::SeqCst))
+    }
+}
+
+/// Page numbers for a file name or message: "3", "3-5" or "1, 4, 7-9".
+pub(super) fn page_list_name(pages: &[usize]) -> String {
+    let mut sorted: Vec<usize> = pages.to_vec();
+    sorted.sort_unstable();
+    sorted.dedup();
+    let mut parts = Vec::new();
+    let mut i = 0;
+    while i < sorted.len() {
+        let mut j = i;
+        while j + 1 < sorted.len() && sorted[j + 1] == sorted[j] + 1 {
+            j += 1;
+        }
+        parts.push(if i == j {
+            format!("{}", sorted[i] + 1)
+        } else {
+            format!("{}-{}", sorted[i] + 1, sorted[j] + 1)
+        });
+        i = j + 1;
+    }
+    parts.join(", ")
+}
+
+impl Viewer {
+    /// Whether pages can be moved, removed or added now.
+    fn can_arrange(&mut self) -> bool {
+        self.finish_editing(true);
+        self.open.is_some()
+    }
+
+    /// Moves `pages` before the page now at `to` (the page count for the
+    /// end). Returns where they ended up.
+    pub(super) fn move_pages(&mut self, pages: &[usize], to: usize) -> Vec<usize> {
+        if !self.can_arrange() {
+            return pages.to_vec();
+        }
+        let Some(o) = &mut self.open else {
+            return Vec::new();
+        };
+        let old = o.session.move_pages(pages, to);
+        let moved: Vec<usize> = old
+            .iter()
+            .enumerate()
+            .filter(|(_, o)| pages.contains(o))
+            .map(|(n, _)| n)
+            .collect();
+        if old.iter().enumerate().any(|(n, &o)| n != o) {
+            let old: Vec<Option<usize>> = old.into_iter().map(Some).collect();
+            self.rearranged(&old, moved.first().copied());
+        }
+        moved
+    }
+
+    /// Removes pages, keeping at least one.
+    pub(super) fn delete_pages(&mut self, pages: &[usize]) {
+        if pages.is_empty() || !self.can_arrange() {
+            return;
+        }
+        let Some(o) = &mut self.open else { return };
+        let Some(old) = o.session.delete_pages(pages) else {
+            self.error = Some("A document needs at least one page, so the last ones stay.".into());
+            return;
+        };
+        let keep = pages.iter().min().copied().unwrap_or(0);
+        let old: Vec<Option<usize>> = old.into_iter().map(Some).collect();
+        self.rearranged(&old, Some(keep.min(old.len() - 1)));
+        let n = pages.len();
+        self.notice = Some(format!(
+            "Removed {n} {}. Save to keep the change; the removed pages are then gone from the \
+             file too.",
+            if n == 1 { "page" } else { "pages" }
+        ));
+    }
+
+    /// Asks for a PDF and adds all its pages before page `at` (the page
+    /// count for the end).
+    pub(super) fn insert_file(&mut self, at: usize) {
+        if !self.can_arrange() {
+            return;
+        }
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("PDF documents", &["pdf"])
+            .pick_file()
+        else {
+            return;
+        };
+        let name = super::display_name(&path);
+        let doc = match std::fs::read(&path)
+            .map_err(|e| e.to_string())
+            .and_then(|data| {
+                atelier_syntax::Document::open(data).map_err(|e| match e {
+                    atelier_syntax::Error::Password => {
+                        "it needs a password. Open it, save an unlocked copy, and add that".into()
+                    }
+                    e => e.to_string(),
+                })
+            }) {
+            Ok(d) => Arc::new(d),
+            Err(e) => {
+                self.error = Some(format!("Could not add {name}: {e}."));
+                return;
+            }
+        };
+        let Some(o) = &mut self.open else { return };
+        match o.session.insert_file(doc, at) {
+            Ok(old) => {
+                let added = old.iter().filter(|o| o.is_none()).count();
+                let first = old.iter().position(Option::is_none);
+                self.rearranged(&old, first);
+                self.notice = Some(format!(
+                    "Added {added} {} from {name}.",
+                    if added == 1 { "page" } else { "pages" }
+                ));
+            }
+            Err(e) => self.error = Some(format!("Could not add {name}: {e}.")),
+        }
+    }
+
+    /// Saves `pages` as a new file, leaving the open document as it is.
+    pub(super) fn extract_pages(&mut self, pages: &[usize]) {
+        if pages.is_empty() {
+            return;
+        }
+        self.finish_editing(true);
+        let Some(o) = &self.open else { return };
+        let mut pages = pages.to_vec();
+        pages.sort_unstable();
+        let bytes = match o.session.extract(&pages) {
+            Ok(b) => b,
+            Err(e) => {
+                self.error = Some(format!("Could not take out the pages: {e}"));
+                return;
+            }
+        };
+        let stem = o.name.strip_suffix(".pdf").unwrap_or(&o.name);
+        let label = if pages.len() == 1 { "page" } else { "pages" };
+        let name = format!("{stem} ({label} {}).pdf", page_list_name(&pages));
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("PDF documents", &["pdf"])
+            .set_file_name(name)
+            .save_file()
+        else {
+            return;
+        };
+        match super::write_replacing(&path, &bytes) {
+            Ok(()) => {
+                self.notice = Some(format!(
+                    "Saved {} {label} as {}.",
+                    pages.len(),
+                    super::display_name(&path)
+                ));
+            }
+            Err(e) => self.error = Some(format!("Could not save {}: {e}", path.display())),
+        }
+    }
+
+    /// Swaps in the document after pages moved, went or came. `old` gives
+    /// each page's index before (`None` for a new one); what the viewer
+    /// keeps per page follows its page. Shows `show` afterwards.
+    fn rearranged(&mut self, old: &[Option<usize>], show: Option<usize>) {
+        let Some(o) = &mut self.open else { return };
+        let built = match o.session.build() {
+            Ok(b) => b,
+            Err(e) => {
+                self.error = Some(format!("Could not change the pages: {e}"));
+                return;
+            }
+        };
+        if let Some(w) = built.warnings.first() {
+            self.error = Some(w.to_string());
+        }
+        match (&mut o.form, built.form) {
+            (Some(fv), Some(form)) => {
+                fv.tab = form.tab_order(&built.doc);
+                fv.form = form;
+            }
+            (form, _) => *form = None,
+        }
+        o.doc = built.doc;
+        if let Ok(p) = o.doc.pages() {
+            let zoom = o.layout.zoom();
+            o.layout = Layout::new(p.iter().map(PageGeom::of).collect(), zoom);
+        }
+        fn remap<T>(map: &mut HashMap<usize, T>, old: &[Option<usize>]) {
+            let mut was: HashMap<usize, T> = std::mem::take(map);
+            for (n, o) in old.iter().enumerate() {
+                if let Some(v) = o.and_then(|o| was.remove(&o)) {
+                    map.insert(n, v);
+                }
+            }
+        }
+        remap(&mut o.thumbs, old);
+        remap(&mut o.text, old);
+        // Work still running for the old order (auto-orient, OCR, the
+        // outline) reports pages by their old place: its results are
+        // dropped, and auto-orient starts again on the new order.
+        let mut texts = o
+            .ocr_texts
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        remap(&mut texts, old);
+        o.ocr_texts = Arc::new(std::sync::Mutex::new(texts));
+        let rerun = o.orienting.take().map(|run| (run.quiet, run.turn));
+        let stale = std::mem::take(&mut o.thumb_stale);
+        o.thumb_stale = old
+            .iter()
+            .enumerate()
+            .filter(|(_, o)| o.is_some_and(|o| stale.contains(&o)))
+            .map(|(n, _)| n)
+            .collect();
+        o.tiles.clear();
+        o.failed.clear();
+        o.stale.clear();
+        o.outline = None;
+        o.outline_asked = false;
+        self.generation += 1;
+        o.generation = self.generation;
+        o.opened = self.generation;
+        self.selection = None;
+        self.colors.reset();
+        self.sidebar.selected.clear();
+        if !self.search.query.is_empty() {
+            self.start_search(self.search.query.clone());
+        }
+        self.apply_fit();
+        if let Some(p) = show {
+            self.go_to_page(p);
+        }
+        self.update_title();
+        if let Some((quiet, turn)) = rerun {
+            self.start_run(quiet, turn);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::page_list_name;
+
+    #[test]
+    fn page_lists_join_runs() {
+        assert_eq!(page_list_name(&[0]), "1");
+        assert_eq!(page_list_name(&[2, 0, 1, 5, 7, 8]), "1-3, 6, 8-9");
     }
 }
