@@ -9,6 +9,7 @@ mod da;
 mod fill;
 mod scripts;
 mod session;
+mod text_layer;
 
 use std::collections::{HashMap, HashSet};
 

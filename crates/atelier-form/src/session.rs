@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use atelier_render::PageText;
 use atelier_syntax::{Document, Object, Result};
 
 use crate::{FieldKind, FillWarning, Form, Value};
@@ -30,6 +31,9 @@ pub struct Session {
     /// Turns that do not count as unsaved changes (made by auto-orient
     /// when the file opened); they are still saved with the file.
     quiet: BTreeMap<usize, u16>,
+    /// Invisible text to add over scanned pages (what OCR read), by page.
+    /// Saved with the file but not counted as an unsaved change.
+    layers: BTreeMap<usize, Arc<PageText>>,
 }
 
 impl Session {
@@ -43,7 +47,19 @@ impl Session {
             edits: Vec::new(),
             rotations: BTreeMap::new(),
             quiet: BTreeMap::new(),
+            layers: BTreeMap::new(),
         }
+    }
+
+    /// Adds invisible text over a page, such as the words OCR read from a
+    /// scan, so it is saved with the file and other apps can search it.
+    pub fn set_text_layer(&mut self, page: usize, text: Arc<PageText>) {
+        self.layers.insert(page, text);
+    }
+
+    /// Whether a page has a text layer waiting to be saved.
+    pub fn has_text_layer(&self, page: usize) -> bool {
+        self.layers.contains_key(&page)
     }
 
     /// The form as the file has it.
@@ -108,6 +124,7 @@ impl Session {
         self.edits.clear();
         self.rotations.clear();
         self.quiet.clear();
+        self.layers.clear();
     }
 
     /// The document with the changes, and with every field redrawn when
@@ -115,7 +132,7 @@ impl Session {
     pub fn build(&self) -> Result<Built> {
         let mut form = self.base_form.clone();
         let redraw = form.as_ref().is_some_and(|f| f.need_appearances);
-        if self.edits.is_empty() && self.rotations.is_empty() && !redraw {
+        if self.edits.is_empty() && self.rotations.is_empty() && self.layers.is_empty() && !redraw {
             return Ok(Built {
                 doc: self.base.clone(),
                 form,
@@ -157,6 +174,12 @@ impl Session {
                 }
             }
         }
+        if !self.layers.is_empty() {
+            let pages = self.base.pages()?;
+            let layers: Vec<(usize, &PageText)> =
+                self.layers.iter().map(|(&i, t)| (i, &**t)).collect();
+            crate::text_layer::add_layers(&mut update, pages, &layers)?;
+        }
         let bytes = update.to_bytes()?;
         let doc = self.base.reopen(bytes)?;
         Ok(Built {
@@ -173,6 +196,7 @@ impl Session {
         self.edits.clear();
         self.rotations.clear();
         self.quiet.clear();
+        self.layers.clear();
     }
 
     /// Pages whose widgets show `field`.

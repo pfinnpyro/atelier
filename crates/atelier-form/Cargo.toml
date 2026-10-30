@@ -7,6 +7,8 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+atelier-filters.workspace = true
+atelier-raster.workspace = true
 atelier-render.workspace = true
 atelier-syntax.workspace = true
 
@@ -14,4 +16,3 @@ atelier-syntax.workspace = true
 workspace = true
 
 [dev-dependencies]
-atelier-raster.workspace = true

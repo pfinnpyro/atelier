@@ -140,6 +140,15 @@ impl Viewer {
                  and uses them to turn the pages upright. Runs on this computer.",
             );
         self.ocr_models_ui(ui);
+        let s = &mut self.settings;
+        ui.add_enabled(
+            s.ocr,
+            egui::Checkbox::new(&mut s.ocr_save, "Save the text it reads into the file"),
+        )
+        .on_hover_text(
+            "When you save, the words are added as invisible text, the way scanners \
+                 make searchable PDFs, so other apps can search and copy them too.",
+        );
         ui.add_space(6.0);
         ui.heading("Updates");
         let s = &mut self.settings;

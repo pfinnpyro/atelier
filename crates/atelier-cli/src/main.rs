@@ -33,6 +33,11 @@ Usage:
   atelier actions <file.pdf>               list scripts and other actions (never run)
   atelier orient <file.pdf>                which way up each page reads, judged from
                                            its text, or for scans from the image
+  atelier ocr <file.pdf> -o <out.pdf> [--upright] [--models <dir>]
+                                           read scanned pages and save a searchable
+                                           copy (invisible text over each scan);
+                                           --upright also turns pages the right way up.
+                                           Models: Atelier's OCR models folder
 
 Every command takes --password <pw> for encrypted files.";
 
@@ -81,6 +86,7 @@ fn run(args: &[String]) -> Result<(), String> {
         "fill" => fill(&doc, &args[2..], &mut out),
         "actions" => actions(&doc, &mut out),
         "orient" => orient(&doc, &mut out),
+        "ocr" => ocr(&doc, &args[2..], &mut out),
         other => return Err(format!("unknown command `{other}`\n\n{USAGE}")),
     };
     for warning in doc.warnings() {
@@ -169,6 +175,90 @@ fn orient(doc: &Document, out: &mut Out) -> Result<(), String> {
         };
         writeln!(out, "{:>5}  rotate {:<3}  {verdict}", i + 1, page.rotate).map_err(io)?;
     }
+    Ok(())
+}
+
+/// Where the viewer keeps the OCR models.
+fn models_dir() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    if cfg!(windows) {
+        std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("Atelier"))
+    } else {
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+            .map(|d| d.join("atelier"))
+    }
+    .map(|d| d.join("ocr-models"))
+}
+
+fn ocr(doc: &Document, args: &[String], out: &mut Out) -> Result<(), String> {
+    use std::sync::Arc;
+    let mut output = None;
+    let mut models = models_dir();
+    let mut upright = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-o" => {
+                output = Some(args.get(i + 1).ok_or("-o needs a file name")?.clone());
+                i += 1;
+            }
+            "--models" => {
+                models = Some(args.get(i + 1).ok_or("--models needs a folder")?.into());
+                i += 1;
+            }
+            "--upright" => upright = true,
+            a => return Err(format!("unexpected `{a}`")),
+        }
+        i += 1;
+    }
+    let output = output.ok_or("ocr needs -o <out.pdf>")?;
+    let models = models.ok_or("say where the OCR models are with --models")?;
+    if !atelier_ocr::models::installed(&models) {
+        return Err(format!(
+            "the OCR models are not in {}; get them in the viewer (Settings) first",
+            models.display()
+        ));
+    }
+    let engine = atelier_ocr::Engine::load(&models)?;
+    let base = Arc::new(doc.reopen(doc.data().to_vec()).map_err(|e| e.to_string())?);
+    let mut session = atelier_form::Session::new(base.clone());
+    let pages = doc.pages().map_err(|e| e.to_string())?;
+    let mut read = 0;
+    for (n, page) in pages.iter().enumerate() {
+        let own = atelier_render::extract_text(doc, page).unwrap_or_default();
+        let letters = own
+            .glyphs
+            .iter()
+            .filter(|g| !g.text.trim().is_empty())
+            .count();
+        if letters >= 12 {
+            writeln!(out, "{:>5}  has text", n + 1).map_err(io)?;
+            continue;
+        }
+        match atelier_ocr::read_page(&engine, doc, page)? {
+            Some(r) => {
+                let words = r.text.plain_text().split_whitespace().count();
+                if upright {
+                    session.rotate(n, i32::from(r.rotate));
+                }
+                session.set_text_layer(n, Arc::new(r.text));
+                read += 1;
+                writeln!(
+                    out,
+                    "{:>5}  read {words} words, upright at rotate {}",
+                    n + 1,
+                    r.rotate
+                )
+                .map_err(io)?;
+            }
+            None => writeln!(out, "{:>5}  nothing readable", n + 1).map_err(io)?,
+        }
+    }
+    let built = session.build().map_err(|e| e.to_string())?;
+    std::fs::write(&output, built.doc.data()).map_err(io)?;
+    writeln!(out, "Read {read} pages; wrote {output}").map_err(io)?;
     Ok(())
 }
 

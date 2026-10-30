@@ -97,6 +97,9 @@ struct Open {
     outline_asked: bool,
     /// Text OCR read from scanned pages.
     ocr_texts: crate::worker::OcrTexts,
+    /// OCR text was handed to the session but the document has not been
+    /// rebuilt with it yet.
+    layers_pending: bool,
     /// Tiles that still show a field's old value; they stay on screen
     /// until their replacements arrive.
     stale: HashSet<TileKey>,
@@ -293,6 +296,7 @@ impl Viewer {
             outline: None,
             outline_asked: false,
             ocr_texts: Default::default(),
+            layers_pending: false,
             doc,
             name,
             generation: self.generation,
@@ -344,6 +348,13 @@ impl Viewer {
     /// to one the person picks. The file is written beside the target and
     /// then moved over it, so a failed write never leaves half a file.
     fn save(&mut self, to: SaveTo) {
+        // Text OCR read goes into the file too.
+        if self.open.as_ref().is_some_and(|o| o.layers_pending) {
+            self.rebuild(&HashSet::new(), false);
+            if let Some(o) = &mut self.open {
+                o.layers_pending = false;
+            }
+        }
         let Some(o) = &self.open else { return };
         let path = match (&o.path, to) {
             (Some(p), SaveTo::Overwrite) => Some(p.clone()),
@@ -712,6 +723,18 @@ impl Viewer {
                 Done::OcrPage { opened, page } if opened == o.opened => {
                     // Its text is now what OCR read.
                     o.text.remove(&page);
+                    if self.settings.ocr_save {
+                        let read = o
+                            .ocr_texts
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .get(&page)
+                            .cloned();
+                        if let Some(text) = read {
+                            o.session.set_text_layer(page, text);
+                            o.layers_pending = true;
+                        }
+                    }
                 }
                 Done::OcrFailed { error } => {
                     self.error = Some(format!("OCR is off for now: {error}"));

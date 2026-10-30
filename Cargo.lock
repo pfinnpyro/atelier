@@ -440,6 +440,7 @@ version = "0.2.0"
 dependencies = [
  "atelier-filters",
  "atelier-form",
+ "atelier-ocr",
  "atelier-render",
  "atelier-syntax",
  "atelier-view",
@@ -471,6 +472,7 @@ dependencies = [
 name = "atelier-form"
 version = "0.2.0"
 dependencies = [
+ "atelier-filters",
  "atelier-raster",
  "atelier-render",
  "atelier-syntax",
