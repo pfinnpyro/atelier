@@ -308,6 +308,7 @@ impl Viewer {
     /// Whether pages can be moved, removed or added now.
     fn can_arrange(&mut self) -> bool {
         self.finish_editing(true);
+        self.commit_ink();
         self.open.is_some()
     }
 

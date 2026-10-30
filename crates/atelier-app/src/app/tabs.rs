@@ -34,6 +34,7 @@ impl Viewer {
     /// Takes the file in front out of the viewer.
     fn park(&mut self) -> Option<Parked> {
         self.finish_editing(true);
+        self.commit_ink();
         let mut open = self.open.take()?;
         self.pool.stop_search();
         self.pool.set_jobs(Vec::new());
@@ -85,6 +86,7 @@ impl Viewer {
     fn after_switch(&mut self) {
         self.selecting = false;
         self.menu = None;
+        self.annotate.reset();
         self.inspector.reset();
         self.colors.reset();
         self.print = Default::default();
@@ -167,6 +169,7 @@ impl Viewer {
         }
         // The tab in front: drop its file and bring a neighbour forward.
         self.finish_editing(false);
+        self.annotate.reset();
         self.open = None;
         self.pool.stop_search();
         self.pool.set_jobs(Vec::new());

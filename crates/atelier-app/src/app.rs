@@ -21,6 +21,7 @@ use eframe::egui::{
 
 use crate::worker::{Done, Job, Pool};
 
+mod annotate;
 mod colors;
 mod form;
 mod inspect;
@@ -170,6 +171,7 @@ pub struct Viewer {
     /// being the viewer's own. Empty when no file is open.
     tabs: Vec<Option<tabs::Parked>>,
     recent: crate::recent::Recent,
+    annotate: annotate::Annotate,
 }
 
 /// An encrypted file the password prompt is open for.
@@ -221,6 +223,7 @@ impl Viewer {
             sidebar: Sidebar::default(),
             tabs: Vec::new(),
             recent: crate::recent::Recent::load(),
+            annotate: annotate::Annotate::default(),
         };
         crate::update::clean_up();
         if v.settings.check_updates {
@@ -997,6 +1000,11 @@ impl Viewer {
             {
                 self.open_print();
             }
+            ui.add_enabled_ui(self.open.is_some(), |ui| {
+                ui.menu_button("Mark", |ui| self.mark_menu(ui))
+                    .response
+                    .on_hover_text("Highlight, comment, draw and sign");
+            });
             if let Some(fv) = self.open.as_ref().and_then(|o| o.form.as_ref()) {
                 let on = fv.highlight;
                 if ui
@@ -1273,6 +1281,7 @@ impl Viewer {
             self.draw_pages(ui, rect.min, viewport);
             self.draw_fields(ui, rect.min);
             self.draw_pick(ui, rect.min);
+            self.draw_marks(ui, rect.min);
             self.pointer(ui, &response, rect.min);
             self.draw_editor(ui, rect.min);
             let ctx = ui.ctx().clone();
@@ -1592,6 +1601,13 @@ impl Viewer {
             self.zoom_by(f64::from(zoom_delta).sqrt(), anchor);
         }
 
+        let at = response
+            .interact_pointer_pos()
+            .or(response.hover_pos())
+            .map(to_layout);
+        if self.annot_pointer(ui, response, at) {
+            return;
+        }
         if self.color_pointer(ui, response, response.hover_pos().map(to_layout))
             || self.pick_pointer(ui, response, response.hover_pos().map(to_layout))
         {
@@ -1697,6 +1713,7 @@ impl eframe::App for Viewer {
         }
         self.receive();
         if self.confirm.is_none() {
+            self.annot_keys(&ctx);
             self.tab_keys(&ctx);
             self.keyboard();
         }
@@ -1708,6 +1725,7 @@ impl eframe::App for Viewer {
         });
         self.tab_bar(ui);
         self.update_banner(ui);
+        self.tool_bar(ui);
         if let Some(note) = self.notice.clone().filter(|_| self.open.is_some()) {
             egui::Panel::bottom("notice").show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -1743,6 +1761,8 @@ impl eframe::App for Viewer {
         self.colors_window(&ctx);
         self.print_window(&ctx);
         self.download_progress(&ctx);
+        self.note_window(&ctx);
+        self.pad_window(&ctx);
         self.confirm_window(&ctx);
     }
 }

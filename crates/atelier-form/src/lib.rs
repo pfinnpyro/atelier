@@ -4,6 +4,7 @@
 //! Actions attached to fields and the document, scripts above all, are
 //! collected so they can be inspected. Nothing here runs them.
 
+mod annots;
 mod appearance;
 mod da;
 mod fill;
@@ -16,6 +17,7 @@ use std::collections::{HashMap, HashSet};
 
 use atelier_syntax::{Dict, Document, ObjRef, Object, Rect, Result};
 
+pub use annots::{Markup, NOTE_SIZE, NewAnnot, line_quads};
 pub use da::DefaultAppearance;
 pub use fill::FillWarning;
 pub use pages::PageSlot;
