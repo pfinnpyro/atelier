@@ -29,6 +29,7 @@ mod pages;
 mod print;
 mod settings_window;
 mod sidebar;
+mod updates;
 
 use form::FormView;
 use inspect::Inspector;
@@ -161,6 +162,7 @@ pub struct Viewer {
     ocr_download: Option<settings_window::Download>,
     colors: colors::Colors,
     print: print::PrintDialog,
+    updater: updates::Updater,
     sidebar: Sidebar,
 }
 
@@ -209,8 +211,13 @@ impl Viewer {
             ocr_download: None,
             colors: colors::Colors::default(),
             print: print::PrintDialog::default(),
+            updater: updates::Updater::default(),
             sidebar: Sidebar::default(),
         };
+        crate::update::clean_up();
+        if v.settings.check_updates {
+            v.updater.check(v.settings.preview, true, v.ctx.clone());
+        }
         if let Some(p) = path {
             v.open_path(&p);
         }
@@ -1555,6 +1562,7 @@ impl eframe::App for Viewer {
             self.toolbar(ui);
             ui.add_space(2.0);
         });
+        self.update_banner(ui);
         if let Some(note) = self.notice.clone().filter(|_| self.open.is_some()) {
             egui::Panel::bottom("notice").show(ui, |ui| {
                 ui.horizontal(|ui| {

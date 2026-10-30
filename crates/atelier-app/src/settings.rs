@@ -13,6 +13,10 @@ pub struct Settings {
     pub ocr: bool,
     /// The sidebar of page previews and the outline is shown.
     pub sidebar: bool,
+    /// Look for a new version when Atelier starts.
+    pub check_updates: bool,
+    /// Offer preview releases as well as stable ones.
+    pub preview: bool,
 }
 
 impl Default for Settings {
@@ -22,6 +26,8 @@ impl Default for Settings {
             orient_on_open: true,
             ocr: true,
             sidebar: true,
+            check_updates: true,
+            preview: false,
         }
     }
 }
@@ -76,6 +82,8 @@ impl Settings {
                 "orient-on-open" => s.orient_on_open = on,
                 "ocr" => s.ocr = on,
                 "sidebar" => s.sidebar = on,
+                "check-updates" => s.check_updates = on,
+                "channel" => s.preview = value.trim() == "preview",
                 _ => {}
             }
         }
@@ -84,7 +92,8 @@ impl Settings {
 
     pub fn to_text(&self) -> String {
         format!(
-            "zoom = {}\norient-on-open = {}\nocr = {}\nsidebar = {}\n",
+            "zoom = {}\norient-on-open = {}\nocr = {}\nsidebar = {}\ncheck-updates = {}\n\
+             channel = {}\n",
             if self.fit_page {
                 "fit-page"
             } else {
@@ -92,7 +101,9 @@ impl Settings {
             },
             self.orient_on_open,
             self.ocr,
-            self.sidebar
+            self.sidebar,
+            self.check_updates,
+            if self.preview { "preview" } else { "stable" }
         )
     }
 
@@ -118,6 +129,8 @@ mod tests {
             orient_on_open: false,
             ocr: true,
             sidebar: false,
+            check_updates: false,
+            preview: true,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(
