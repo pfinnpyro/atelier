@@ -115,7 +115,7 @@ impl Viewer {
         self.settings.ocr && Settings::ocr_models_dir().is_some_and(|d| models::installed(&d))
     }
 
-    fn start_run(&mut self, quiet: bool, turn: bool) {
+    pub(super) fn start_run(&mut self, quiet: bool, turn: bool) {
         let ocr = if self.ocr_ready() {
             Settings::ocr_models_dir()
         } else {
