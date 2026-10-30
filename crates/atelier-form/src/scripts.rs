@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 
-use atelier_syntax::{Dict, Document, ObjRef, Object};
+use atelier_syntax::{Dict, Document, ObjRef, Object, Rect};
 
 /// An action found in the document.
 #[derive(Debug, Clone, PartialEq)]
@@ -19,6 +19,9 @@ pub struct Action {
     pub javascript: Option<String>,
     /// What else the action names: a URI, a file, a submit address.
     pub target: Option<String>,
+    /// A click on the annotation that owns it would set it off: mouse
+    /// down or up, focus, or the annotation's own action.
+    pub on_click: bool,
 }
 
 impl Action {
@@ -38,6 +41,7 @@ pub fn document_actions(doc: &Document) -> Vec<Action> {
         doc,
         out: Vec::new(),
         seen: HashSet::new(),
+        click: false,
     };
     let Ok(catalog) = doc.catalog() else {
         return found.out;
@@ -91,7 +95,9 @@ pub fn document_actions(doc: &Document) -> Vec<Action> {
                 };
                 let name = annot_label(doc, &annot, &label);
                 if let Some(action) = annot.get(b"A") {
+                    found.click = true;
                     found.action(&format!("{name}, activate"), owner, action, 0);
+                    found.click = false;
                 }
                 found.triggers(
                     &annot,
@@ -125,11 +131,119 @@ pub fn document_actions(doc: &Document) -> Vec<Action> {
     found.out
 }
 
+/// An annotation on a page with actions tied to it, its own or its
+/// field's, so the viewer can point at what a click would set off.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Hotspot {
+    /// Page index.
+    pub page: usize,
+    pub rect: Rect,
+    /// The annotation.
+    pub annot: ObjRef,
+    /// The indices into the action list of everything tied to it: the
+    /// annotation's actions, then its fields'.
+    pub actions: Vec<usize>,
+}
+
+impl Hotspot {
+    /// Whether a point in the page's user space is inside it.
+    pub fn contains(&self, x: f64, y: f64) -> bool {
+        let r = &self.rect;
+        x >= r.x0.min(r.x1) && x <= r.x0.max(r.x1) && y >= r.y0.min(r.y1) && y <= r.y0.max(r.y1)
+    }
+
+    /// The JavaScript among its actions.
+    pub fn has_javascript(&self, actions: &[Action]) -> bool {
+        self.actions
+            .iter()
+            .any(|&i| actions.get(i).is_some_and(Action::is_javascript))
+    }
+}
+
+/// Every visible annotation that has actions in `actions` (as found by
+/// [`document_actions`]), page by page, in /Annots order.
+pub fn hotspots(doc: &Document, actions: &[Action]) -> Vec<Hotspot> {
+    let mut out = Vec::new();
+    if actions.is_empty() {
+        return out;
+    }
+    let Ok(pages) = doc.pages() else { return out };
+    let mut by_owner: std::collections::HashMap<ObjRef, Vec<usize>> = Default::default();
+    for (i, a) in actions.iter().enumerate() {
+        if let Some(o) = a.owner {
+            by_owner.entry(o).or_default().push(i);
+        }
+    }
+    for (page, p) in pages.iter().enumerate() {
+        let Ok(annots) = doc.get_key(&p.dict, b"Annots") else {
+            continue;
+        };
+        for a in annots.as_array().unwrap_or_default() {
+            let Some(annot) = a.as_reference() else {
+                continue;
+            };
+            let Ok(Object::Dict(dict)) = doc.get(annot) else {
+                continue;
+            };
+            // Hidden or NoView annotations cannot be pointed at.
+            let flags = doc
+                .get_key(&dict, b"F")
+                .ok()
+                .and_then(|o| o.as_i64())
+                .unwrap_or(0);
+            if flags & (2 | 32) != 0 {
+                continue;
+            }
+            let Some(rect) = doc
+                .get_key(&dict, b"Rect")
+                .ok()
+                .and_then(|o| o.as_array().and_then(Rect::from_array))
+            else {
+                continue;
+            };
+            // The annotation, then its field and the field's ancestors.
+            let mut owners = vec![annot];
+            let mut node = dict;
+            while owners.len() < MAX_DEPTH {
+                let Some(parent) = node.get(b"Parent").and_then(Object::as_reference) else {
+                    break;
+                };
+                if owners.contains(&parent) {
+                    break;
+                }
+                owners.push(parent);
+                match doc.get(parent) {
+                    Ok(Object::Dict(d)) => node = d,
+                    _ => break,
+                }
+            }
+            let mut tied = Vec::new();
+            for owner in &owners {
+                tied.extend(by_owner.get(owner).into_iter().flatten());
+            }
+            if !tied.is_empty() {
+                out.push(Hotspot {
+                    page,
+                    rect,
+                    annot,
+                    actions: tied,
+                });
+            }
+        }
+    }
+    out
+}
+
 struct Finder<'a> {
     doc: &'a Document,
     out: Vec<Action>,
     seen: HashSet<ObjRef>,
+    /// The actions being read would run on a click.
+    click: bool,
 }
+
+/// Annotation triggers a click sets off.
+const CLICK_TRIGGERS: &[&str] = &["D", "U", "Fo"];
 
 impl Finder<'_> {
     fn triggers(&mut self, dict: &Dict, owner: Option<ObjRef>, label: &str, keys: &[(&str, &str)]) {
@@ -138,7 +252,9 @@ impl Finder<'_> {
         };
         for (key, what) in keys {
             if let Some(action) = aa.get(key.as_bytes()) {
+                self.click = CLICK_TRIGGERS.contains(key);
                 self.action(&format!("{label}, {what}"), owner, action, 0);
+                self.click = false;
             }
         }
     }
@@ -213,6 +329,7 @@ impl Finder<'_> {
             kind,
             javascript,
             target,
+            on_click: self.click,
         });
         match self.doc.get_key(&action, b"Next") {
             Ok(Object::Array(next)) => {

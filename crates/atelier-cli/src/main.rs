@@ -31,6 +31,11 @@ Usage:
                                            name; multi-select lists take a|b|c.
                                            --refresh redraws every field's appearance
   atelier actions <file.pdf>               list scripts and other actions (never run)
+  atelier compat <file.pdf>                XFA (static or dynamic), scripts that depend
+                                           on the viewer, and embedded files
+  atelier attachments <file.pdf> [--save N -o out]
+                                           list embedded files with their type and
+                                           SHA-256; --save writes file N (from 1) out
   atelier orient <file.pdf>                which way up each page reads, judged from
                                            its text, or for scans from the image
 
@@ -80,6 +85,8 @@ fn run(args: &[String]) -> Result<(), String> {
         "fields" => fields(&doc, &mut out),
         "fill" => fill(&doc, &args[2..], &mut out),
         "actions" => actions(&doc, &mut out),
+        "compat" => compat(&doc, &mut out),
+        "attachments" => attachments(&doc, &args[2..], &mut out),
         "orient" => orient(&doc, &mut out),
         other => return Err(format!("unknown command `{other}`\n\n{USAGE}")),
     };
@@ -515,10 +522,97 @@ fn actions(doc: &Document, out: &mut Out) -> Result<(), String> {
         if let Some(t) = &a.target {
             writeln!(out, "    target: {t}").map_err(io)?;
         }
+        if a.on_click {
+            writeln!(out, "    runs on a click").map_err(io)?;
+        }
         if let Some(js) = &a.javascript {
+            for (t, name) in atelier_form::script_traits(js) {
+                writeln!(out, "    note: {} ({name})", t.label()).map_err(io)?;
+            }
             for line in js.lines() {
                 writeln!(out, "    | {line}").map_err(io)?;
             }
+        }
+    }
+    Ok(())
+}
+
+fn compat(doc: &Document, out: &mut Out) -> Result<(), String> {
+    match atelier_form::xfa(doc) {
+        None => writeln!(out, "XFA: none").map_err(io)?,
+        Some(x) => {
+            let names: Vec<&str> = x.packets.iter().map(|(n, _)| n.as_str()).collect();
+            let kind = if x.dynamic { "dynamic" } else { "static" };
+            writeln!(out, "XFA: {kind} (packets: {})", names.join(", ")).map_err(io)?;
+            for r in &x.reasons {
+                writeln!(out, "    {r}").map_err(io)?;
+            }
+            writeln!(out, "XFA scripts: {}", x.scripts.len()).map_err(io)?;
+            for s in &x.scripts {
+                writeln!(out, "    {} ({})", s.location, s.language).map_err(io)?;
+                for (t, name) in atelier_form::script_traits(&s.source) {
+                    writeln!(out, "        note: {} ({name})", t.label()).map_err(io)?;
+                }
+            }
+        }
+    }
+    let actions = atelier_form::document_actions(doc);
+    let scripts: Vec<_> = actions.iter().filter(|a| a.is_javascript()).collect();
+    writeln!(out, "JavaScript actions: {}", scripts.len()).map_err(io)?;
+    for a in scripts {
+        let traits = atelier_form::script_traits(a.javascript.as_deref().unwrap_or(""));
+        if traits.iter().any(|(t, _)| t.is_viewer_dependent()) {
+            let labels: Vec<&str> = traits.iter().map(|(t, _)| t.label()).collect();
+            writeln!(out, "    {}: {}", a.location, labels.join("; ")).map_err(io)?;
+        }
+    }
+    let files = atelier_view::attachments(doc);
+    writeln!(out, "Embedded files: {}", files.len()).map_err(io)?;
+    Ok(())
+}
+
+fn attachments(doc: &Document, args: &[String], out: &mut Out) -> Result<(), String> {
+    let files = atelier_view::attachments(doc);
+    if let Some(i) = args.iter().position(|a| a == "--save") {
+        let n: usize = args
+            .get(i + 1)
+            .and_then(|n| n.parse().ok())
+            .ok_or("--save needs a file number")?;
+        let o = args
+            .iter()
+            .position(|a| a == "-o")
+            .ok_or("--save needs -o <out>")?;
+        let output = args.get(o + 1).ok_or("-o needs a value")?;
+        let a = n
+            .checked_sub(1)
+            .and_then(|n| files.get(n))
+            .ok_or(format!("there is no file {n}"))?;
+        let data = atelier_view::attachment_data(doc, a).map_err(|e| e.to_string())?;
+        std::fs::write(output, &data).map_err(|e| format!("cannot write {output}: {e}"))?;
+        writeln!(out, "wrote {output} ({} bytes)", data.len()).map_err(io)?;
+        return Ok(());
+    }
+    if files.is_empty() {
+        writeln!(out, "no embedded files").map_err(io)?;
+    }
+    for (i, a) in files.iter().enumerate() {
+        writeln!(out, "{}. {} ({})", i + 1, a.name, a.source.label()).map_err(io)?;
+        if let Some(d) = &a.description {
+            writeln!(out, "    description: {d}").map_err(io)?;
+        }
+        if let Some(m) = &a.mime {
+            writeln!(out, "    declared type: {m}").map_err(io)?;
+        }
+        match atelier_view::attachment_data(doc, a) {
+            Ok(data) => {
+                let c = atelier_view::check_attachment(a, &data);
+                writeln!(out, "    {} bytes, {}", c.size, c.kind).map_err(io)?;
+                writeln!(out, "    sha256: {}", c.sha256).map_err(io)?;
+                for w in &c.cautions {
+                    writeln!(out, "    caution: {w}").map_err(io)?;
+                }
+            }
+            Err(e) => writeln!(out, "    cannot read: {e}").map_err(io)?,
         }
     }
     Ok(())

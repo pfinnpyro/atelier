@@ -9,6 +9,9 @@ mod da;
 mod fill;
 mod scripts;
 mod session;
+mod traits;
+mod xfa;
+mod xml;
 
 use std::collections::{HashMap, HashSet};
 
@@ -16,8 +19,10 @@ use atelier_syntax::{Dict, Document, ObjRef, Object, Rect, Result};
 
 pub use da::DefaultAppearance;
 pub use fill::FillWarning;
-pub use scripts::{Action, document_actions};
+pub use scripts::{Action, Hotspot, document_actions, hotspots};
 pub use session::{Built, Session};
+pub use traits::{ScriptTrait, script_traits};
+pub use xfa::{Xfa, XfaScript, xfa};
 
 /// Field flags (ISO 32000-2, tables 226, 229, 231 and 233).
 pub mod flags {

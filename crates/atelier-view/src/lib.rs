@@ -7,6 +7,7 @@
 //! same units with the origin at the top left of one page. User space is
 //! the PDF's own coordinates (points, y up).
 
+mod attachments;
 mod inspect;
 mod layout;
 mod orient;
@@ -15,6 +16,10 @@ mod search;
 mod select;
 mod tiles;
 
+pub use attachments::{
+    Attachment, Checked, Source as AttachmentSource, attachment_data, attachments,
+    check as check_attachment, pdf_date, sniff,
+};
 pub use inspect::{
     Fact, Picked, children, has_children, object_at, overview, preview, revisions, summary,
 };
