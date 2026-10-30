@@ -21,7 +21,7 @@ pub use annots::{Markup, NOTE_SIZE, NewAnnot, line_quads};
 pub use da::DefaultAppearance;
 pub use fill::FillWarning;
 pub use pages::PageSlot;
-pub use scripts::{Action, document_actions};
+pub use scripts::{Action, FieldScripts, FormScripts, document_actions, form_scripts};
 pub use session::{Built, Session};
 
 /// Field flags (ISO 32000-2, tables 226, 229, 231 and 233).

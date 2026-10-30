@@ -315,6 +315,26 @@ fn a_session_rebuilds_from_the_original_each_time() {
     assert_eq!(s.pages_of(1), [0]);
 }
 
+#[test]
+fn scripts_can_hide_and_show_fields() {
+    use atelier_form::Session;
+    use std::sync::Arc;
+    let doc = Arc::new(Document::open(sample()).unwrap());
+    let mut s = Session::new(doc);
+    assert!(!s.is_hidden(0));
+    s.set_hidden(0, true);
+    assert!(s.is_dirty() && s.is_hidden(0));
+    let built = s.build().unwrap();
+    let form = built.form.unwrap();
+    assert!(form.fields[0].widgets.iter().all(|w| w.is_hidden()));
+    // The flag is in the saved file, so other viewers hide it too.
+    let again = Form::load(&built.doc).unwrap().unwrap();
+    assert!(again.fields[0].widgets.iter().all(|w| w.is_hidden()));
+    // Showing it again is no change at all.
+    s.set_hidden(0, false);
+    assert!(!s.is_dirty() && !s.is_hidden(0));
+}
+
 fn count(hay: &[u8], needle: &[u8]) -> usize {
     hay.windows(needle.len()).filter(|w| *w == needle).count()
 }

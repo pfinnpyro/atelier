@@ -19,6 +19,7 @@ atelier-crypto.workspace = true
 atelier-form.workspace = true
 atelier-raster.workspace = true
 atelier-render.workspace = true
+atelier-script.workspace = true
 atelier-syntax.workspace = true
 atelier-ocr.workspace = true
 atelier-print.workspace = true

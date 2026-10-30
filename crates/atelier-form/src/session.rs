@@ -11,7 +11,7 @@ use atelier_render::PageText;
 use atelier_syntax::{Dict, Document, ObjRef, Object, Page, Result, Update};
 
 use crate::pages::{self, Copier, PageSlot};
-use crate::{FieldKind, FillWarning, Form, NewAnnot, Value};
+use crate::{FieldKind, FillWarning, Form, NewAnnot, Value, Widget};
 
 /// The document with the changes applied.
 pub struct Built {
@@ -41,6 +41,8 @@ pub struct Session {
     layers: BTreeMap<PageSlot, Arc<PageText>>,
     /// Annotations added, oldest first, with their page.
     annots: Vec<(PageSlot, NewAnnot)>,
+    /// Fields shown (false) or hidden (true) by form scripts, by index.
+    hidden: BTreeMap<usize, bool>,
 }
 
 /// The pages of a document as opened, in their own order.
@@ -64,6 +66,31 @@ impl Session {
             quiet: BTreeMap::new(),
             layers: BTreeMap::new(),
             annots: Vec::new(),
+            hidden: BTreeMap::new(),
+        }
+    }
+
+    /// Whether a field's widgets are hidden, with the changes.
+    pub fn is_hidden(&self, field: usize) -> bool {
+        self.hidden
+            .get(&field)
+            .copied()
+            .unwrap_or_else(|| self.hidden_at_first(field))
+    }
+
+    fn hidden_at_first(&self, field: usize) -> bool {
+        self.base_form
+            .as_ref()
+            .and_then(|f| f.fields.get(field))
+            .is_some_and(|f| !f.widgets.is_empty() && f.widgets.iter().all(Widget::is_hidden))
+    }
+
+    /// Shows or hides a field's widgets (as form scripts do).
+    pub fn set_hidden(&mut self, field: usize, hidden: bool) {
+        if hidden == self.hidden_at_first(field) {
+            self.hidden.remove(&field);
+        } else {
+            self.hidden.insert(field, hidden);
         }
     }
 
@@ -253,6 +280,7 @@ impl Session {
             || self.rotations != self.quiet
             || self.pages_changed()
             || !self.annots.is_empty()
+            || !self.hidden.is_empty()
     }
 
     /// Drops every change.
@@ -264,6 +292,7 @@ impl Session {
         self.quiet.clear();
         self.layers.clear();
         self.annots.clear();
+        self.hidden.clear();
     }
 
     /// The document with the changes, and with every field redrawn when
@@ -276,6 +305,7 @@ impl Session {
             && self.rotations.is_empty()
             && self.layers.is_empty()
             && self.annots.is_empty()
+            && self.hidden.is_empty()
             && !redraw
             && !reorder
         {
@@ -306,6 +336,23 @@ impl Session {
             }
             for (field, value) in &self.edits {
                 warnings.extend(form.set_value(&mut update, *field, value.clone())?);
+            }
+            for (&field, &hidden) in &self.hidden {
+                let Some(f) = form.fields.get_mut(field) else {
+                    continue;
+                };
+                for w in &mut f.widgets {
+                    // Shown means neither Hidden (2) nor NoView (32).
+                    w.annot_flags = if hidden {
+                        w.annot_flags | 2
+                    } else {
+                        w.annot_flags & !(2 | 32)
+                    };
+                    if let Object::Dict(mut d) = update.get(w.obj)? {
+                        d.insert("F", Object::Integer(i64::from(w.annot_flags)));
+                        update.set(w.obj, Object::Dict(d));
+                    }
+                }
             }
         }
         let refs = self.place_pages(&mut update, reorder)?;
