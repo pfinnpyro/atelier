@@ -4,6 +4,7 @@
 
 mod app;
 mod default_app;
+mod recent;
 mod settings;
 mod update;
 mod worker;

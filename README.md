@@ -73,6 +73,14 @@ and `SHA256SUMS.txt`. Atelier checks GitHub for a newer release when it starts
 against `SHA256SUMS.txt`, and installs it: through the installer for an
 installed copy, or by replacing the program file for a portable one.
 
+## Tabs and recent files
+
+Each file opens in its own tab, and keeps its place, zoom, search and picked
+pages while another tab is in front. Opening a file that is already open
+brings its tab forward. The ⏷ beside Open lists the last 12 files, which also
+show on the start screen; a file that has gone is taken off the list when
+picked. Closing the window asks about each tab with unsaved changes in turn.
+
 ## Organizing pages
 
 In the sidebar's page list:
@@ -93,7 +101,9 @@ everything the other pages used, including the form and bookmarks.
 
 | Key | Does |
 | --- | --- |
-| Ctrl+O | Open a file |
+| Ctrl+O | Open a file, in a new tab |
+| Ctrl+Tab, Ctrl+Shift+Tab | Next and previous tab |
+| Ctrl+W | Close the tab (asks first when it has unsaved changes) |
 | Ctrl+wheel, Ctrl+= and Ctrl+−, Ctrl+0 | Zoom around the pointer, zoom in and out, 100% |
 | Page Up, Page Down, Space, Home, End, arrows | Move through the document |
 | Drag | Select text; Ctrl+C copies it, Esc clears it |

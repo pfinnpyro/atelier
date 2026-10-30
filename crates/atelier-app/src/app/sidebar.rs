@@ -42,7 +42,31 @@ pub(super) struct Sidebar {
     anchor: Option<usize>,
 }
 
+/// What the sidebar keeps for a file while another tab is in front.
+pub(super) struct SidebarState {
+    collapsed: HashSet<usize>,
+    selected: BTreeSet<usize>,
+    anchor: Option<usize>,
+}
+
 impl Sidebar {
+    pub fn take_state(&mut self) -> SidebarState {
+        let state = SidebarState {
+            collapsed: std::mem::take(&mut self.collapsed),
+            selected: std::mem::take(&mut self.selected),
+            anchor: self.anchor.take(),
+        };
+        self.reset();
+        state
+    }
+
+    pub fn restore_state(&mut self, state: SidebarState) {
+        self.reset();
+        self.collapsed = state.collapsed;
+        self.selected = state.selected;
+        self.anchor = state.anchor;
+    }
+
     pub fn reset(&mut self) {
         self.collapsed.clear();
         self.followed = None;

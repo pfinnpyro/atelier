@@ -29,6 +29,7 @@ mod pages;
 mod print;
 mod settings_window;
 mod sidebar;
+mod tabs;
 mod updates;
 
 use form::FormView;
@@ -107,12 +108,10 @@ struct Open {
 
 /// Something waiting on the unsaved-changes prompt.
 enum Pending {
+    /// Closing the window.
     Close,
-    Open {
-        data: Vec<u8>,
-        name: String,
-        path: Option<PathBuf>,
-    },
+    /// Closing the tab in front.
+    CloseTab,
 }
 
 #[derive(Default)]
@@ -167,6 +166,10 @@ pub struct Viewer {
     print: print::PrintDialog,
     updater: updates::Updater,
     sidebar: Sidebar,
+    /// The open files in tab order; the one in front is `None`, its state
+    /// being the viewer's own. Empty when no file is open.
+    tabs: Vec<Option<tabs::Parked>>,
+    recent: crate::recent::Recent,
 }
 
 /// An encrypted file the password prompt is open for.
@@ -216,6 +219,8 @@ impl Viewer {
             print: print::PrintDialog::default(),
             updater: updates::Updater::default(),
             sidebar: Sidebar::default(),
+            tabs: Vec::new(),
+            recent: crate::recent::Recent::load(),
         };
         crate::update::clean_up();
         if v.settings.check_updates {
@@ -234,13 +239,28 @@ impl Viewer {
         }
     }
 
-    /// Opens a file, first asking about unsaved changes to the open one.
+    /// Opens a file in a new tab, or brings forward the tab that already
+    /// has it.
     fn open_bytes(&mut self, data: Vec<u8>, name: String, path: Option<PathBuf>) {
-        if self.is_dirty() {
-            self.confirm = Some(Pending::Open { data, name, path });
+        if let Some(i) = path.as_deref().and_then(|p| self.tab_with(p)) {
+            self.switch_to(i);
             return;
         }
         self.open_with_password(data, name, "", path);
+    }
+
+    /// Opens a file from the recent list, dropping it from the list when
+    /// it is gone.
+    fn open_recent(&mut self, path: &Path) {
+        if !path.is_file() {
+            self.recent.remove(path);
+            self.error = Some(format!(
+                "{} is no longer there, so it was taken off the list.",
+                path.display()
+            ));
+            return;
+        }
+        self.open_path(path);
     }
 
     fn is_dirty(&self) -> bool {
@@ -281,6 +301,10 @@ impl Viewer {
             }
         };
         self.locked = None;
+        self.new_tab();
+        if let Some(p) = &path {
+            self.recent.add(p);
+        }
         self.notice = None;
         self.pool.stop_search();
         self.pool.set_jobs(Vec::new());
@@ -380,6 +404,7 @@ impl Viewer {
         if to == SaveTo::Copy {
             self.notice = Some(format!("Saved a copy as {}.", display_name(&path)));
         } else {
+            self.recent.add(&path);
             o.name = display_name(&path);
             o.path = Some(path);
         }
@@ -398,7 +423,7 @@ impl Viewer {
             .to_string();
         let what = match pending {
             Pending::Close => "closing",
-            Pending::Open { .. } => "opening another file",
+            Pending::CloseTab => "closing it",
         };
         let mut choice = None;
         egui::Modal::new(egui::Id::unique("unsaved")).show(ctx, |ui| {
@@ -433,14 +458,22 @@ impl Viewer {
         }
         match pending {
             Pending::Close => {
-                self.closing = true;
-                ctx.send_viewport_cmd(ViewportCommand::Close);
-            }
-            Pending::Open { data, name, path } => {
+                // Not saving drops the changes; other tabs may have some
+                // too.
                 if let Some(o) = &mut self.open {
                     o.session.revert();
                 }
-                self.open_with_password(data, name, "", path);
+                if self.show_unsaved_tab() {
+                    self.confirm = Some(Pending::Close);
+                } else {
+                    self.closing = true;
+                    ctx.send_viewport_cmd(ViewportCommand::Close);
+                }
+            }
+            Pending::CloseTab => {
+                if let Some(i) = self.active_tab() {
+                    self.close_tab(i);
+                }
             }
         }
     }
@@ -904,13 +937,23 @@ impl Viewer {
             {
                 self.toggle_sidebar();
             }
-            if ui
-                .button("Open…")
-                .on_hover_text("Open a PDF (Ctrl+O)")
-                .clicked()
-            {
-                self.pick_file();
-            }
+            ui.scope(|ui| {
+                ui.spacing_mut().item_spacing.x = 1.0;
+                if ui
+                    .button("Open…")
+                    .on_hover_text("Open a PDF (Ctrl+O)")
+                    .clicked()
+                {
+                    self.pick_file();
+                }
+                ui.menu_button("⏷", |ui| {
+                    if let Some(path) = self.recent_menu(ui) {
+                        self.open_recent(&path);
+                    }
+                })
+                .response
+                .on_hover_text("Recent files");
+            });
             let dirty = self.is_dirty();
             ui.add_enabled_ui(self.open.is_some(), |ui| {
                 // A split button: Save a copy, with Save and Save as beside it.
@@ -1210,8 +1253,10 @@ impl Viewer {
         };
         let (lw, lh) = o.layout.size();
         let content = Vec2::new((lw as f32).max(avail.x), lh as f32);
+        // Each file has its own scroll state, so a scroll still easing in
+        // one tab does not carry over to another.
         let mut area = egui::ScrollArea::both()
-            .id_salt("pages")
+            .id_salt(("pages", o.opened))
             .auto_shrink(false)
             .content_margin(0.0)
             .scroll_source(egui::scroll_area::ScrollSource {
@@ -1242,13 +1287,87 @@ impl Viewer {
             .error
             .clone()
             .unwrap_or_else(|| "Open a PDF with Ctrl+O, or drop one here.".into());
-        ui.painter().text(
-            rect.center(),
-            Align2::CENTER_CENTER,
-            msg,
-            FontId::proportional(16.0),
-            Color32::from_gray(230),
+        if self.recent.files.is_empty() {
+            ui.painter().text(
+                rect.center(),
+                Align2::CENTER_CENTER,
+                msg,
+                FontId::proportional(16.0),
+                Color32::from_gray(230),
+            );
+            return;
+        }
+        let mut pick = None;
+        let width = 460.0_f32.min(rect.width() - 32.0);
+        let area = Rect::from_center_size(
+            Pos2::new(rect.center().x, rect.min.y + rect.height() * 0.42),
+            Vec2::new(width, rect.height() * 0.7),
         );
+        ui.scope_builder(egui::UiBuilder::new().max_rect(area), |ui| {
+            ui.label(
+                egui::RichText::new(msg)
+                    .size(16.0)
+                    .color(Color32::from_gray(230)),
+            );
+            ui.add_space(14.0);
+            ui.label(
+                egui::RichText::new("Recent files")
+                    .strong()
+                    .color(Color32::from_gray(200)),
+            );
+            ui.add_space(4.0);
+            for path in &self.recent.files {
+                let name = display_name(path);
+                let folder = path
+                    .parent()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default();
+                let resp = ui
+                    .add(
+                        egui::Button::new(egui::RichText::new(name).color(Color32::from_gray(235)))
+                            .frame(false)
+                            .truncate(),
+                    )
+                    .on_hover_text(path.display().to_string());
+                ui.label(
+                    egui::RichText::new(folder)
+                        .small()
+                        .color(Color32::from_gray(150)),
+                );
+                ui.add_space(4.0);
+                if resp.clicked() {
+                    pick = Some(path.clone());
+                }
+            }
+        });
+        if let Some(p) = pick {
+            self.open_recent(&p);
+        }
+    }
+
+    /// The recent files as menu entries; returns the one picked.
+    fn recent_menu(&mut self, ui: &mut egui::Ui) -> Option<PathBuf> {
+        if self.recent.files.is_empty() {
+            ui.label(egui::RichText::new("No recent files").weak());
+            return None;
+        }
+        let mut pick = None;
+        for path in &self.recent.files {
+            if ui
+                .button(display_name(path))
+                .on_hover_text(path.display().to_string())
+                .clicked()
+            {
+                pick = Some(path.clone());
+                ui.close();
+            }
+        }
+        ui.separator();
+        if ui.button("Clear the list").clicked() {
+            self.recent.clear();
+            ui.close();
+        }
+        pick
     }
 
     fn draw_pages(&mut self, ui: &egui::Ui, origin: Pos2, viewport: Rect) {
@@ -1571,12 +1690,14 @@ impl eframe::App for Viewer {
                 Err(e) => self.error = Some(format!("Could not read the dropped file: {e}")),
             }
         }
-        if ctx.input(|i| i.viewport().close_requested()) && self.is_dirty() && !self.closing {
+        if ctx.input(|i| i.viewport().close_requested()) && !self.closing && self.show_unsaved_tab()
+        {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             self.confirm = Some(Pending::Close);
         }
         self.receive();
         if self.confirm.is_none() {
+            self.tab_keys(&ctx);
             self.keyboard();
         }
 
@@ -1585,6 +1706,7 @@ impl eframe::App for Viewer {
             self.toolbar(ui);
             ui.add_space(2.0);
         });
+        self.tab_bar(ui);
         self.update_banner(ui);
         if let Some(note) = self.notice.clone().filter(|_| self.open.is_some()) {
             egui::Panel::bottom("notice").show(ui, |ui| {
