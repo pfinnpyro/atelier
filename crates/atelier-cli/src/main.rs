@@ -38,6 +38,18 @@ Usage:
                                            SHA-256; --save writes file N (from 1) out
   atelier orient <file.pdf>                which way up each page reads, judged from
                                            its text, or for scans from the image
+  atelier ocr <file.pdf> -o <out.pdf> [--upright] [--models <dir>]
+                                           read scanned pages and save a searchable
+                                           copy (invisible text over each scan);
+                                           --upright also turns pages the right way up.
+                                           Models: Atelier's OCR models folder
+  atelier arrange <file.pdf> <pages> -o <out.pdf>
+                                           save the pages listed, in that order
+                                           (e.g. 3,1-2); pages left out are removed
+  atelier extract <file.pdf> <pages> -o <out.pdf>
+                                           save the pages listed as a new file
+  atelier merge <file.pdf> <more.pdf...> -o <out.pdf>
+                                           add the other files' pages at the end
 
 Every command takes --password <pw> for encrypted files.";
 
@@ -88,6 +100,8 @@ fn run(args: &[String]) -> Result<(), String> {
         "compat" => compat(&doc, &mut out),
         "attachments" => attachments(&doc, &args[2..], &mut out),
         "orient" => orient(&doc, &mut out),
+        "ocr" => ocr(&doc, &args[2..], &mut out),
+        "arrange" | "extract" | "merge" => organize(command, &doc, &args[2..], &mut out),
         other => return Err(format!("unknown command `{other}`\n\n{USAGE}")),
     };
     for warning in doc.warnings() {
@@ -176,6 +190,199 @@ fn orient(doc: &Document, out: &mut Out) -> Result<(), String> {
         };
         writeln!(out, "{:>5}  rotate {:<3}  {verdict}", i + 1, page.rotate).map_err(io)?;
     }
+    Ok(())
+}
+
+/// Where the viewer keeps the OCR models.
+fn models_dir() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    if cfg!(windows) {
+        std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("Atelier"))
+    } else {
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+            .map(|d| d.join("atelier"))
+    }
+    .map(|d| d.join("ocr-models"))
+}
+
+fn ocr(doc: &Document, args: &[String], out: &mut Out) -> Result<(), String> {
+    use std::sync::Arc;
+    let mut output = None;
+    let mut models = models_dir();
+    let mut upright = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-o" => {
+                output = Some(args.get(i + 1).ok_or("-o needs a file name")?.clone());
+                i += 1;
+            }
+            "--models" => {
+                models = Some(args.get(i + 1).ok_or("--models needs a folder")?.into());
+                i += 1;
+            }
+            "--upright" => upright = true,
+            a => return Err(format!("unexpected `{a}`")),
+        }
+        i += 1;
+    }
+    let output = output.ok_or("ocr needs -o <out.pdf>")?;
+    let models = models.ok_or("say where the OCR models are with --models")?;
+    if !atelier_ocr::models::installed(&models) {
+        return Err(format!(
+            "the OCR models are not in {}; get them in the viewer (Settings) first",
+            models.display()
+        ));
+    }
+    let engine = atelier_ocr::Engine::load(&models)?;
+    let base = Arc::new(doc.reopen(doc.data().to_vec()).map_err(|e| e.to_string())?);
+    let mut session = atelier_form::Session::new(base.clone());
+    let pages = doc.pages().map_err(|e| e.to_string())?;
+    let mut read = 0;
+    for (n, page) in pages.iter().enumerate() {
+        let own = atelier_render::extract_text(doc, page).unwrap_or_default();
+        let letters = own
+            .glyphs
+            .iter()
+            .filter(|g| !g.text.trim().is_empty())
+            .count();
+        if letters >= 12 {
+            writeln!(out, "{:>5}  has text", n + 1).map_err(io)?;
+            continue;
+        }
+        match atelier_ocr::read_page(&engine, doc, page)? {
+            Some(r) => {
+                let words = r.text.plain_text().split_whitespace().count();
+                if upright {
+                    session.rotate(n, i32::from(r.rotate));
+                }
+                session.set_text_layer(n, Arc::new(r.text));
+                read += 1;
+                writeln!(
+                    out,
+                    "{:>5}  read {words} words, upright at rotate {}",
+                    n + 1,
+                    r.rotate
+                )
+                .map_err(io)?;
+            }
+            None => writeln!(out, "{:>5}  nothing readable", n + 1).map_err(io)?,
+        }
+    }
+    let built = session.build().map_err(|e| e.to_string())?;
+    std::fs::write(&output, built.doc.data()).map_err(io)?;
+    writeln!(out, "Read {read} pages; wrote {output}").map_err(io)?;
+    Ok(())
+}
+
+/// Page numbers as typed ("3,1-2"), from 1, as indices.
+fn page_numbers(list: &str, count: usize) -> Result<Vec<usize>, String> {
+    let mut out = Vec::new();
+    for part in list.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let number = |s: &str| -> Result<usize, String> {
+            match s.trim().parse::<usize>() {
+                Ok(n) if (1..=count).contains(&n) => Ok(n - 1),
+                _ => Err(format!("`{s}` is not a page from 1 to {count}")),
+            }
+        };
+        match part.split_once('-') {
+            Some((a, b)) => {
+                let (a, b) = (number(a)?, number(b)?);
+                if a <= b {
+                    out.extend(a..=b);
+                } else {
+                    out.extend((b..=a).rev());
+                }
+            }
+            None => out.push(number(part)?),
+        }
+    }
+    if out.is_empty() {
+        return Err("no pages listed".into());
+    }
+    Ok(out)
+}
+
+/// `arrange`, `extract` and `merge`.
+fn organize(command: &str, doc: &Document, args: &[String], out: &mut Out) -> Result<(), String> {
+    use std::sync::Arc;
+    let mut output = None;
+    let mut rest = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "-o" {
+            output = Some(args.get(i + 1).ok_or("-o needs a file name")?.clone());
+            i += 1;
+        } else {
+            rest.push(args[i].clone());
+        }
+        i += 1;
+    }
+    let output = output.ok_or(format!("{command} needs -o <out.pdf>"))?;
+    let base = Arc::new(doc.reopen(doc.data().to_vec()).map_err(|e| e.to_string())?);
+    let mut session = atelier_form::Session::new(base);
+    let count = session.page_count();
+    let bytes = match command {
+        "extract" => {
+            let [list] = rest.as_slice() else {
+                return Err("extract takes one list of pages, such as 1,3-4".into());
+            };
+            session
+                .extract(&page_numbers(list, count)?)
+                .map_err(|e| e.to_string())?
+        }
+        "arrange" => {
+            let [list] = rest.as_slice() else {
+                return Err("arrange takes one list of pages, such as 3,1-2".into());
+            };
+            let wanted = page_numbers(list, count)?;
+            let mut seen = std::collections::HashSet::new();
+            if let Some(twice) = wanted.iter().find(|p| !seen.insert(**p)) {
+                return Err(format!("page {} is listed twice", twice + 1));
+            }
+            let gone: Vec<usize> = (0..count).filter(|p| !seen.contains(p)).collect();
+            session.delete_pages(&gone);
+            // What is left keeps its old order; put each where it goes.
+            let mut now: Vec<usize> = (0..count).filter(|p| seen.contains(p)).collect();
+            for (k, page) in wanted.iter().enumerate() {
+                let at = now.iter().position(|p| p == page).unwrap_or(k);
+                let old = session.move_pages(&[at], k);
+                now = old.iter().map(|&o| now[o]).collect();
+            }
+            session
+                .build()
+                .map_err(|e| e.to_string())?
+                .doc
+                .data()
+                .to_vec()
+        }
+        _ => {
+            if rest.is_empty() {
+                return Err("merge needs at least one more file".into());
+            }
+            for path in &rest {
+                let data = std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?;
+                let other = Document::open(data).map_err(|e| format!("{path}: {e}"))?;
+                let end = session.page_count();
+                session
+                    .insert_file(Arc::new(other), end)
+                    .map_err(|e| format!("{path}: {e}"))?;
+            }
+            session
+                .build()
+                .map_err(|e| e.to_string())?
+                .doc
+                .data()
+                .to_vec()
+        }
+    };
+    std::fs::write(&output, &bytes).map_err(io)?;
+    let pages = Document::open(bytes)
+        .and_then(|d| d.pages().map(<[_]>::len))
+        .map_err(|e| format!("wrote {output}, but it does not read back: {e}"))?;
+    writeln!(out, "Wrote {output} ({pages} pages)").map_err(io)?;
     Ok(())
 }
 

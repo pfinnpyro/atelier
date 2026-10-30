@@ -4,11 +4,14 @@
 //! Actions attached to fields and the document, scripts above all, are
 //! collected so they can be inspected. Nothing here runs them.
 
+mod annots;
 mod appearance;
 mod da;
 mod fill;
+mod pages;
 mod scripts;
 mod session;
+mod text_layer;
 mod traits;
 mod xfa;
 mod xml;
@@ -17,9 +20,13 @@ use std::collections::{HashMap, HashSet};
 
 use atelier_syntax::{Dict, Document, ObjRef, Object, Rect, Result};
 
+pub use annots::{Markup, NOTE_SIZE, NewAnnot, line_quads};
 pub use da::DefaultAppearance;
 pub use fill::FillWarning;
-pub use scripts::{Action, Hotspot, document_actions, hotspots};
+pub use pages::PageSlot;
+pub use scripts::{
+    Action, FieldScripts, FormScripts, Hotspot, document_actions, form_scripts, hotspots,
+};
 pub use session::{Built, Session};
 pub use traits::{ScriptTrait, script_traits};
 pub use xfa::{Xfa, XfaScript, xfa};

@@ -10,8 +10,12 @@ use super::Viewer;
 /// What the open menu is for.
 #[derive(Clone, Copy)]
 pub(super) enum MenuTarget {
-    Text { page: usize },
+    Text {
+        page: usize,
+    },
     Field((usize, usize)),
+    /// A mark added since the file was opened or saved.
+    Mark(usize),
 }
 
 /// The clipboard's text, read when Paste is picked from a menu (egui only
@@ -38,6 +42,10 @@ impl Viewer {
     /// A right click on the page: picks what the menu is for. Text under
     /// the pointer is selected first unless it is already in the selection.
     pub(super) fn menu_target_at(&mut self, lx: f64, ly: f64) {
+        if let Some(i) = self.mark_at(lx, ly) {
+            self.menu = Some(MenuTarget::Mark(i));
+            return;
+        }
         if let Some(at) = self.widget_at(lx, ly) {
             self.finish_editing(true);
             if let Some(fv) = self.open.as_mut().and_then(|o| o.form.as_mut()) {
@@ -68,6 +76,12 @@ impl Viewer {
         match self.menu {
             Some(MenuTarget::Text { page }) => self.text_menu(ui, page),
             Some(MenuTarget::Field(at)) => self.field_menu(ui, at),
+            Some(MenuTarget::Mark(i)) => {
+                if ui.button("Remove this mark").clicked() {
+                    self.remove_mark(i);
+                    ui.close();
+                }
+            }
             None => {
                 ui.close();
             }
@@ -84,6 +98,13 @@ impl Viewer {
             .clicked()
         {
             self.copy_selection();
+            ui.close();
+        }
+        if ui
+            .add_enabled(has_selection, egui::Button::new("Highlight"))
+            .clicked()
+        {
+            self.highlight_selection();
             ui.close();
         }
         let glyphs = self

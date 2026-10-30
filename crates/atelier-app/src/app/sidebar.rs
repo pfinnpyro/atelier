@@ -1,8 +1,9 @@
 //! The sidebar: small pictures of the pages (one by one, or as two-page
 //! spreads) and the outline, from the file's bookmarks or from headings
-//! found in its text.
+//! found in its text. Pages are picked here to move (by dragging), turn,
+//! remove or save on their own, and other files' pages are added here.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use atelier_raster::Point;
 use atelier_view::{Layout, OutlineItem};
@@ -35,14 +36,102 @@ pub(super) struct Sidebar {
     collapsed: HashSet<usize>,
     /// The page in view as of the last frame, to follow it.
     followed: Option<usize>,
+    /// Pages picked in the list.
+    pub selected: BTreeSet<usize>,
+    /// Where a Shift+click range starts.
+    anchor: Option<usize>,
+}
+
+/// What the sidebar keeps for a file while another tab is in front.
+pub(super) struct SidebarState {
+    collapsed: HashSet<usize>,
+    selected: BTreeSet<usize>,
+    anchor: Option<usize>,
 }
 
 impl Sidebar {
+    pub fn take_state(&mut self) -> SidebarState {
+        let state = SidebarState {
+            collapsed: std::mem::take(&mut self.collapsed),
+            selected: std::mem::take(&mut self.selected),
+            anchor: self.anchor.take(),
+        };
+        self.reset();
+        state
+    }
+
+    pub fn restore_state(&mut self, state: SidebarState) {
+        self.reset();
+        self.collapsed = state.collapsed;
+        self.selected = state.selected;
+        self.anchor = state.anchor;
+    }
+
     pub fn reset(&mut self) {
         self.collapsed.clear();
         self.followed = None;
         self.wanted.clear();
+        self.selected.clear();
+        self.anchor = None;
     }
+}
+
+/// What the page list asks for, done once the list is drawn.
+enum PageAction {
+    Go(usize),
+    Move(Vec<usize>, usize),
+    Rotate(Vec<usize>, i32),
+    Delete(Vec<usize>),
+    Extract(Vec<usize>),
+    Insert(usize),
+}
+
+/// The menu for a right click on a page picture. `pages` are the pages it
+/// acts on; `at` is the page clicked.
+fn page_menu(ui: &mut egui::Ui, pages: &[usize], at: usize, count: usize) -> Option<PageAction> {
+    let n = pages.len();
+    let these = if n == 1 {
+        "this page".to_string()
+    } else {
+        format!("these {n} pages")
+    };
+    let mut action = None;
+    if ui.button(format!("Rotate {these} clockwise")).clicked() {
+        action = Some(PageAction::Rotate(pages.to_vec(), 1));
+    }
+    if ui
+        .button(format!("Rotate {these} counterclockwise"))
+        .clicked()
+    {
+        action = Some(PageAction::Rotate(pages.to_vec(), -1));
+    }
+    ui.separator();
+    if ui.button(format!("Save {these} as a new file…")).clicked() {
+        action = Some(PageAction::Extract(pages.to_vec()));
+    }
+    if ui
+        .add_enabled(
+            n < count,
+            egui::Button::new(format!("Remove {these}")).shortcut_text("Delete"),
+        )
+        .clicked()
+    {
+        action = Some(PageAction::Delete(pages.to_vec()));
+    }
+    ui.separator();
+    if ui
+        .button("Add pages from a file before this one…")
+        .clicked()
+    {
+        action = Some(PageAction::Insert(at));
+    }
+    if ui.button("Add pages from a file at the end…").clicked() {
+        action = Some(PageAction::Insert(count));
+    }
+    if action.is_some() {
+        ui.close();
+    }
+    action
 }
 
 /// The rows of the page list: one page each, or spreads (the first page
@@ -91,6 +180,19 @@ impl Viewer {
                         });
                     }
                 });
+                if self.sidebar.tab == Tab::Pages {
+                    let add = ui
+                        .small_button("+ Add pages")
+                        .on_hover_text(
+                            "Add the pages of another PDF at the end.\n\
+                             Drag pages to move them; right-click for more.",
+                        )
+                        .clicked();
+                    if add {
+                        let count = self.open.as_ref().map_or(0, |o| o.layout.page_count());
+                        self.insert_file(count);
+                    }
+                }
                 ui.separator();
                 match self.sidebar.tab {
                     Tab::Pages => self.page_list(ui),
@@ -134,13 +236,38 @@ impl Viewer {
         let follow = self.sidebar.followed != Some(current);
         self.sidebar.followed = Some(current);
         let mut wanted = Vec::new();
-        let mut go = None;
+        let mut action: Option<PageAction> = None;
+        let selected = &mut self.sidebar.selected;
+        selected.retain(|&p| p < count);
+        let anchor = &mut self.sidebar.anchor;
+        // Pages are dragged to a new place one row at a time, so not in
+        // spreads.
+        let can_drag = !self.sidebar.spreads;
+        let mut drop_line: Option<(f32, usize)> = None;
         let painter_bg = ui.visuals().extreme_bg_color;
         egui::ScrollArea::vertical()
             .id_salt("page-list")
             .auto_shrink(false)
             .show_viewport(ui, |ui, viewport| {
                 let (area, _) = ui.allocate_exact_size(Vec2::new(width, total), Sense::hover());
+                // Where a dragged page would land: before the first row
+                // whose middle is below the pointer.
+                let pointer = ui.ctx().pointer_interact_pos();
+                let mut tops = Vec::with_capacity(rows.len());
+                let mut y = 4.0;
+                for h in &heights {
+                    tops.push(area.min.y + y);
+                    y += h;
+                }
+                let landing = |py: f32| -> (f32, usize) {
+                    for (r, row) in rows.iter().enumerate() {
+                        let mid = tops[r] + (heights[r] - ROW_GAP) / 2.0;
+                        if py < mid {
+                            return (tops[r] - 2.0, row[0]);
+                        }
+                    }
+                    (area.min.y + y - ROW_GAP + 2.0, count)
+                };
                 let mut y = 4.0;
                 for (r, row) in rows.iter().enumerate() {
                     let h = heights[r];
@@ -196,14 +323,72 @@ impl Viewer {
                                 wanted.push(page);
                             }
                         }
+                        let sense = if can_drag {
+                            Sense::click_and_drag()
+                        } else {
+                            Sense::click()
+                        };
                         let resp = ui
-                            .interact(rect, ui.scope_id().with(("thumb", page)), Sense::click())
+                            .interact(rect, ui.scope_id().with(("thumb", page)), sense)
                             .on_hover_text(format!("Page {}", page + 1));
+                        let picked = selected.contains(&page);
                         if resp.clicked() {
-                            go = Some(page);
+                            let m = ui.input(|i| i.modifiers);
+                            if m.shift {
+                                let from = anchor.unwrap_or(current);
+                                *selected = (from.min(page)..=from.max(page)).collect();
+                            } else if m.command {
+                                if !selected.remove(&page) {
+                                    selected.insert(page);
+                                }
+                                *anchor = Some(page);
+                            } else {
+                                *selected = BTreeSet::from([page]);
+                                *anchor = Some(page);
+                                action = Some(PageAction::Go(page));
+                            }
                         }
-                        if page == current || resp.hovered() {
-                            let stroke = if page == current {
+                        if resp.secondary_clicked() && !picked {
+                            *selected = BTreeSet::from([page]);
+                            *anchor = Some(page);
+                        }
+                        // The pages a drag or the menu acts on: the picked
+                        // ones when this page is one of them.
+                        let targets: Vec<usize> = if picked && selected.len() > 1 {
+                            selected.iter().copied().collect()
+                        } else {
+                            vec![page]
+                        };
+                        resp.context_menu(|ui| {
+                            if let Some(a) = page_menu(ui, &targets, page, count) {
+                                action = Some(a);
+                            }
+                        });
+                        if resp.dragged() {
+                            if let Some(p) = pointer {
+                                drop_line = Some(landing(p.y));
+                                // Scroll when held near the top or bottom.
+                                let clip = ui.clip_rect();
+                                if p.y < clip.min.y + 30.0 {
+                                    ui.scroll_with_delta(Vec2::new(0.0, 8.0));
+                                } else if p.y > clip.max.y - 30.0 {
+                                    ui.scroll_with_delta(Vec2::new(0.0, -8.0));
+                                }
+                            }
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                        }
+                        if resp.drag_stopped()
+                            && let Some(p) = pointer
+                        {
+                            let (_, to) = landing(p.y);
+                            action = Some(PageAction::Move(targets.clone(), to));
+                        }
+                        if picked {
+                            ui.painter()
+                                .rect_filled(rect, 0.0, ACCENT.gamma_multiply(0.25));
+                        }
+                        if page == current || resp.hovered() || picked {
+                            let stroke = if page == current || picked {
                                 Stroke::new(2.5, ACCENT)
                             } else {
                                 Stroke::new(1.0, ui.visuals().widgets.hovered.fg_stroke.color)
@@ -229,11 +414,40 @@ impl Viewer {
                         },
                     );
                 }
+                if let Some((y, _)) = drop_line {
+                    ui.painter()
+                        .hline(area.x_range().shrink(6.0), y, Stroke::new(3.0, ACCENT));
+                }
             });
+        // Delete removes the picked pages while the pointer is over the
+        // list and nothing is being typed.
+        if action.is_none()
+            && !selected.is_empty()
+            && selected.len() < count
+            && ui
+                .input(|i| i.pointer.hover_pos())
+                .is_some_and(|p| ui.max_rect().contains(p))
+            && ui.memory(|m| m.focused().is_none())
+            && ui.input(|i| i.key_pressed(egui::Key::Delete))
+        {
+            action = Some(PageAction::Delete(selected.iter().copied().collect()));
+        }
         self.sidebar.wanted = wanted;
-        if let Some(p) = go {
-            self.go_to_page(p);
-            self.sidebar.followed = Some(p);
+        match action {
+            Some(PageAction::Go(p)) => {
+                self.go_to_page(p);
+                self.sidebar.followed = Some(p);
+            }
+            Some(PageAction::Move(pages, to)) => {
+                let moved = self.move_pages(&pages, to);
+                self.sidebar.selected = moved.iter().copied().collect();
+                self.sidebar.anchor = moved.first().copied();
+            }
+            Some(PageAction::Rotate(pages, quarters)) => self.rotate_some(&pages, quarters),
+            Some(PageAction::Delete(pages)) => self.delete_pages(&pages),
+            Some(PageAction::Extract(pages)) => self.extract_pages(&pages),
+            Some(PageAction::Insert(at)) => self.insert_file(at),
+            None => {}
         }
     }
 

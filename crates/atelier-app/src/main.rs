@@ -4,14 +4,26 @@
 
 mod app;
 mod default_app;
+mod recent;
 mod settings;
+mod update;
 mod worker;
 
 use ::image;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+/// The argument that starts Atelier as the helper that runs form scripts.
+pub const SCRIPT_HELPER: &str = "--form-script";
+
 fn main() -> eframe::Result {
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|a| a == SCRIPT_HELPER)
+    {
+        script_helper();
+        return Ok(());
+    }
     let icon = load_icon();
     let path = std::env::args_os().nth(1).map(PathBuf::from);
     let options = eframe::NativeOptions {
@@ -28,6 +40,28 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| Ok(Box::new(app::Viewer::new(cc, path)))),
     )
+}
+
+/// Reads a commit from standard input, runs its scripts in the sandbox and
+/// writes what they did to standard output. Runs in its own process so a
+/// script that crashes or exhausts memory cannot take the viewer down.
+fn script_helper() {
+    use std::io::{Read, Write};
+    let mut input = Vec::new();
+    if std::io::stdin()
+        .take(64 * 1024 * 1024)
+        .read_to_end(&mut input)
+        .is_err()
+    {
+        return;
+    }
+    let Some(commit) = atelier_script::decode_commit(&input) else {
+        return;
+    };
+    let outcome = atelier_script::run_commit(&commit);
+    let mut out = std::io::stdout();
+    let _ = out.write_all(&atelier_script::encode_outcome(&outcome));
+    let _ = out.flush();
 }
 
 fn load_icon() -> eframe::egui::IconData {

@@ -39,7 +39,12 @@ impl Viewer {
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .show(ctx, |ui| match which {
                 Window::Settings => self.settings_ui(ui),
-                Window::About => about_ui(ui),
+                Window::About => {
+                    about_ui(ui);
+                    ui.separator();
+                    ui.heading("Updates");
+                    self.updates_ui(ui);
+                }
             });
         if !open {
             self.window = None;
@@ -135,6 +140,29 @@ impl Viewer {
                  and uses them to turn the pages upright. Runs on this computer.",
             );
         self.ocr_models_ui(ui);
+        let s = &mut self.settings;
+        ui.add_enabled(
+            s.ocr,
+            egui::Checkbox::new(&mut s.ocr_save, "Save the text it reads into the file"),
+        )
+        .on_hover_text(
+            "When you save, the words are added as invisible text, the way scanners \
+                 make searchable PDFs, so other apps can search and copy them too.",
+        );
+        ui.add_space(6.0);
+        ui.heading("Updates");
+        let s = &mut self.settings;
+        ui.checkbox(
+            &mut s.check_updates,
+            "Check for updates when Atelier starts",
+        )
+        .on_hover_text("Asks GitHub for the list of releases; nothing else is sent.");
+        ui.horizontal(|ui| {
+            ui.label("Channel");
+            ui.selectable_value(&mut s.preview, false, "Stable");
+            ui.selectable_value(&mut s.preview, true, "Preview")
+                .on_hover_text("Also offer test versions before they are released");
+        });
         ui.add_space(6.0);
         ui.heading("Default app");
         if default_app::supported() {
@@ -192,7 +220,8 @@ fn about_ui(ui: &mut egui::Ui) {
     );
     ui.add_space(6.0);
     ui.label(
-        "Scripts in PDF files are never run. The inspector (F12) shows every script and \
+        "Scripts in PDF files run only when you allow them, in a sandbox that reaches \
+         nothing but the form's fields. The inspector (F12) shows every script and \
          action a file carries.",
     );
 }

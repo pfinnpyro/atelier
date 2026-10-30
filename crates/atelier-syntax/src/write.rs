@@ -129,8 +129,44 @@ impl<'a> Update<'a> {
         Ok(out)
     }
 
+    /// The file with the edits, written out whole with only the objects
+    /// the document still uses, so removed pages, and anything only they
+    /// used, are gone from the bytes, which an incremental update cannot
+    /// do. References to `leave_out` (such as a link's target page that
+    /// was removed) are not followed, so they do not keep it in.
+    pub fn to_compact_bytes(
+        &self,
+        leave_out: &std::collections::HashSet<ObjRef>,
+    ) -> Result<Vec<u8>> {
+        let mut seen = std::collections::HashSet::new();
+        let mut todo: Vec<ObjRef> = Vec::new();
+        for key in [b"Root".as_slice(), b"Info", b"Encrypt"] {
+            if let Some(Object::Reference(r)) = self.doc.trailer().get(key) {
+                todo.push(*r);
+            }
+        }
+        while let Some(r) = todo.pop() {
+            if leave_out.contains(&r) || !seen.insert(r.num) {
+                continue;
+            }
+            let obj = match self.get(r) {
+                Ok(o) => o,
+                Err(Error::MissingObject(_)) => continue,
+                Err(e) => return Err(e),
+            };
+            refs_in(&obj, &mut todo, 0);
+        }
+        self.write_whole(Some(&seen))
+    }
+
     /// Writes every object again, with a fresh cross-reference table.
     fn full(&self) -> Result<Vec<u8>> {
+        self.write_whole(None)
+    }
+
+    /// Writes the objects (all, or those in `keep`) with a fresh
+    /// cross-reference table.
+    fn write_whole(&self, keep: Option<&std::collections::HashSet<u32>>) -> Result<Vec<u8>> {
         let doc = self.doc;
         let mut out = format!("%PDF-{}\n%\u{e2}\u{e3}\u{cf}\u{d3}\n", doc.version()).into_bytes();
         let mut offsets = BTreeMap::new();
@@ -138,6 +174,7 @@ impl<'a> Update<'a> {
         nums.extend(self.objects.keys());
         nums.sort_unstable();
         nums.dedup();
+        nums.retain(|n| keep.is_none_or(|k| k.contains(n)));
         for num in nums {
             let (r, obj) = match self.objects.get(&num) {
                 Some((generation, obj)) => (ObjRef::new(num, *generation), obj.clone()),
@@ -175,6 +212,20 @@ impl<'a> Update<'a> {
             format!("trailer\n{trailer}\nstartxref\n{xref_at}\n%%EOF\n").as_bytes(),
         );
         Ok(out)
+    }
+}
+
+/// Collects the references inside an object.
+fn refs_in(obj: &Object, out: &mut Vec<ObjRef>, depth: usize) {
+    if depth > 64 {
+        return;
+    }
+    match obj {
+        Object::Reference(r) => out.push(*r),
+        Object::Array(items) => items.iter().for_each(|o| refs_in(o, out, depth + 1)),
+        Object::Dict(d) => d.iter().for_each(|(_, o)| refs_in(o, out, depth + 1)),
+        Object::Stream(s) => s.dict.iter().for_each(|(_, o)| refs_in(o, out, depth + 1)),
+        _ => {}
     }
 }
 

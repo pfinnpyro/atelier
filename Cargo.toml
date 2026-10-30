@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.85"
 publish = false
@@ -17,6 +17,7 @@ atelier-form = { path = "crates/atelier-form" }
 atelier-syntax = { path = "crates/atelier-syntax" }
 atelier-raster = { path = "crates/atelier-raster" }
 atelier-render = { path = "crates/atelier-render" }
+atelier-script = { path = "crates/atelier-script" }
 atelier-ocr = { path = "crates/atelier-ocr" }
 atelier-print = { path = "crates/atelier-print" }
 atelier-view = { path = "crates/atelier-view" }

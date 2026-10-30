@@ -1,7 +1,8 @@
 //! What a file might do or hide, shown before it is trusted: its XFA form
 //! (and whether Atelier can show it), the scripts tied to elements on the
-//! page, and the files embedded in it. Scripts are never run here; one a
-//! person approves is only marked approved, for the script engine to come.
+//! page, and the files embedded in it. A script tied to a click runs only
+//! once the person approves it (Execute), in the form-script sandbox, and
+//! shares its approval with the form scripts: by its exact text.
 //! The file as opened is kept so it can be saved out untouched.
 
 use std::collections::{HashMap, HashSet};
@@ -38,8 +39,6 @@ pub(super) struct Safety {
     /// A dynamic XFA form: the pages are held back until the person
     /// chooses to see the stand-in pages.
     pub held: bool,
-    /// Actions the person approved, by index. Nothing runs them yet.
-    pub approved: HashSet<usize>,
     /// The element last clicked whose scripts are being reviewed.
     pub review: Option<usize>,
     /// The hotspot under the pointer.
@@ -71,7 +70,6 @@ impl Safety {
             files,
             checked: HashMap::new(),
             dismissed: false,
-            approved: HashSet::new(),
             review: None,
             hovered: None,
         }
@@ -109,6 +107,14 @@ impl Safety {
             .rev()
             .find(|(_, h)| h.page == page && h.contains(x, y))
             .map(|(i, _)| i)
+    }
+
+    /// The JavaScript a click on a hotspot would run, in order.
+    fn click_scripts(&self, hotspot: usize) -> Vec<String> {
+        self.on_click(hotspot)
+            .into_iter()
+            .filter_map(|i| self.actions[i].javascript.clone())
+            .collect()
     }
 
     /// The actions a click on a hotspot would set off.
@@ -314,7 +320,8 @@ impl Viewer {
     }
 
     /// A click on the page: when it lands on an element whose click would
-    /// run scripts not yet approved, the inspector opens on them.
+    /// run scripts not yet approved, the inspector opens on them; once they
+    /// are all approved, they run.
     pub(super) fn safety_click(&mut self, lx: f64, ly: f64) {
         let Some(o) = &mut self.open else { return };
         let Some((page, _, _)) = o.layout.page_at(lx, ly) else {
@@ -326,15 +333,36 @@ impl Viewer {
         let Some(h) = o.safety.hotspot_at(page, user.x, user.y) else {
             return;
         };
-        let s = &o.safety;
-        let unapproved = s
-            .on_click(h)
-            .into_iter()
-            .any(|i| s.actions[i].is_javascript() && !s.approved.contains(&i));
-        if unapproved {
+        let scripts = o.safety.click_scripts(h);
+        if scripts.is_empty() {
+            return;
+        }
+        let approved = |js: &String| o.scripts.as_ref().is_some_and(|st| st.is_allowed(js));
+        if scripts.iter().all(approved) {
+            self.run_click(h);
+        } else {
             o.safety.review = Some(h);
             self.inspector.open = true;
             self.inspector.show_actions();
+        }
+    }
+
+    /// Runs the approved scripts a click on a hotspot sets off, in order,
+    /// and puts what they change into the form.
+    fn run_click(&mut self, h: usize) {
+        let Some(o) = &self.open else { return };
+        let Some(spot) = o.safety.hotspots.get(h) else {
+            return;
+        };
+        let field = o
+            .form
+            .as_ref()
+            .and_then(|fv| fv.form.field_of_widget(spot.annot))
+            .map(|(f, _)| f);
+        for script in o.safety.click_scripts(h) {
+            if let Some(done) = self.run_click_script(field, &script) {
+                self.apply_scripted(field, done);
+            }
         }
     }
 
@@ -365,17 +393,30 @@ impl Viewer {
     pub(super) fn actions_tab(&mut self, ui: &mut egui::Ui) {
         let Some(o) = &mut self.open else { return };
         let s = &mut o.safety;
+        let scripts = &mut o.scripts;
+        let is_allowed = |scripts: &Option<super::scripts::ScriptState>, js: &str| {
+            scripts.as_ref().is_some_and(|st| st.is_allowed(js))
+        };
+        let approved: HashSet<usize> = (0..s.actions.len())
+            .filter(|&i| {
+                s.actions[i]
+                    .javascript
+                    .as_deref()
+                    .is_some_and(|js| is_allowed(scripts, js))
+            })
+            .collect();
+        let mut run = None;
         ui.colored_label(
             NOTE,
-            "Atelier never runs scripts on its own. They are listed here so you can see \
-             what this file would try to do.",
+            "Everything in the file is listed here, so you can see what it would try to do. \
+             Atelier runs none of it except the scripts you allow, in a sandbox that only \
+             reaches this form's fields.",
         );
         ui.separator();
         if s.actions.is_empty() && s.xfa.as_ref().is_none_or(|x| x.scripts.is_empty()) {
             ui.label("This file has no scripts or actions.");
             return;
         }
-        let mut notice = None;
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
@@ -411,31 +452,42 @@ impl Viewer {
                             if !click.is_empty() {
                                 ui.label("A click on it would run:");
                                 for &i in &click {
-                                    action_row(ui, s, i, true);
+                                    action_row(ui, s, i, true, approved.contains(&i));
                                 }
                                 let pending: Vec<usize> = click
                                     .iter()
                                     .copied()
                                     .filter(|i| {
-                                        s.actions[*i].is_javascript() && !s.approved.contains(i)
+                                        s.actions[*i].is_javascript() && !approved.contains(i)
                                     })
                                     .collect();
                                 ui.horizontal(|ui| {
                                     if !pending.is_empty()
                                         && ui
                                             .button("Execute")
-                                            .on_hover_text("Approve these scripts for this file")
+                                            .on_hover_text(
+                                                "Allow these scripts for this file and run them \
+                                                 in the sandbox now",
+                                            )
                                             .clicked()
                                     {
-                                        s.approved.extend(pending.iter().copied());
-                                        notice = Some(
-                                        "Approved. Nothing ran: Atelier has no script engine yet."
-                                            .to_string(),
-                                    );
+                                        let state = scripts.get_or_insert_with(Default::default);
+                                        for &i in &pending {
+                                            if let Some(js) = &s.actions[i].javascript {
+                                                state.allowed.insert(super::scripts::script_id(js));
+                                            }
+                                        }
+                                        run = s.review;
                                     }
                                     if ui.button("Deny").clicked() {
-                                        for i in &click {
-                                            s.approved.remove(i);
+                                        if let Some(state) = scripts.as_mut() {
+                                            for &i in &click {
+                                                if let Some(js) = &s.actions[i].javascript {
+                                                    state
+                                                        .allowed
+                                                        .remove(&super::scripts::script_id(js));
+                                                }
+                                            }
                                         }
                                         s.review = None;
                                     }
@@ -445,7 +497,7 @@ impl Viewer {
                                 ui.add_space(4.0);
                                 ui.label(RichText::new("Also tied to it:").weak());
                                 for &i in &others {
-                                    action_row(ui, s, i, false);
+                                    action_row(ui, s, i, false, approved.contains(&i));
                                 }
                             }
                         });
@@ -469,12 +521,12 @@ impl Viewer {
                     }
                 }
                 for i in 0..s.actions.len() {
-                    action_row(ui, s, i, false);
+                    action_row(ui, s, i, false, approved.contains(&i));
                     ui.separator();
                 }
             });
-        if let Some(n) = notice {
-            self.notice = Some(n);
+        if let Some(h) = run {
+            self.run_click(h);
         }
     }
 
@@ -648,7 +700,7 @@ impl Viewer {
 }
 
 /// One action: its kind, where it is, what it uses and its script.
-fn action_row(ui: &mut egui::Ui, s: &Safety, i: usize, highlight: bool) {
+fn action_row(ui: &mut egui::Ui, s: &Safety, i: usize, highlight: bool, approved: bool) {
     let a = &s.actions[i];
     ui.horizontal_wrapped(|ui| {
         let risky = matches!(
@@ -665,8 +717,8 @@ fn action_row(ui: &mut egui::Ui, s: &Safety, i: usize, highlight: bool) {
         if let Some(r) = a.owner {
             ui.label(RichText::new(r.to_string()).weak());
         }
-        if s.approved.contains(&i) {
-            ui.colored_label(APPROVED, "approved");
+        if approved {
+            ui.colored_label(APPROVED, "allowed");
         }
     });
     if let Some(t) = &a.target {
