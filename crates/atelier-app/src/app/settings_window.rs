@@ -220,7 +220,8 @@ fn about_ui(ui: &mut egui::Ui) {
     );
     ui.add_space(6.0);
     ui.label(
-        "Scripts in PDF files are never run. The inspector (F12) shows every script and \
+        "Scripts in PDF files run only when you allow them, in a sandbox that reaches \
+         nothing but the form's fields. The inspector (F12) shows every script and \
          action a file carries.",
     );
 }

@@ -12,6 +12,9 @@ mod pages;
 mod scripts;
 mod session;
 mod text_layer;
+mod traits;
+mod xfa;
+mod xml;
 
 use std::collections::{HashMap, HashSet};
 
@@ -21,8 +24,12 @@ pub use annots::{Markup, NOTE_SIZE, NewAnnot, line_quads};
 pub use da::DefaultAppearance;
 pub use fill::FillWarning;
 pub use pages::PageSlot;
-pub use scripts::{Action, FieldScripts, FormScripts, document_actions, form_scripts};
+pub use scripts::{
+    Action, FieldScripts, FormScripts, Hotspot, document_actions, form_scripts, hotspots,
+};
 pub use session::{Built, Session};
+pub use traits::{ScriptTrait, script_traits};
+pub use xfa::{Xfa, XfaScript, xfa};
 
 /// Field flags (ISO 32000-2, tables 226, 229, 231 and 233).
 pub mod flags {

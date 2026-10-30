@@ -28,6 +28,7 @@ mod inspect;
 mod menu;
 mod pages;
 mod print;
+mod safety;
 mod scripts;
 mod settings_window;
 mod sidebar;
@@ -106,6 +107,8 @@ struct Open {
     /// Tiles that still show a field's old value; they stay on screen
     /// until their replacements arrive.
     stale: HashSet<TileKey>,
+    /// XFA, scripts and embedded files, and the file as opened.
+    safety: safety::Safety,
     /// The form's scripts, and which the person allowed to run.
     scripts: Option<scripts::ScriptState>,
 }
@@ -318,6 +321,7 @@ impl Viewer {
         let warnings = doc.warnings().into_iter().collect();
         let doc = Arc::new(doc);
         let mut open = Open {
+            safety: safety::Safety::new(doc.clone()),
             session: Session::new(doc.clone()),
             opened: self.generation,
             orienting: None,
@@ -416,12 +420,20 @@ impl Viewer {
             return;
         }
         let Some(o) = &mut self.open else { return };
+        let xfa = o.safety.xfa.is_some() && o.session.is_dirty();
         if to == SaveTo::Copy {
             self.notice = Some(format!("Saved a copy as {}.", display_name(&path)));
         } else {
             self.recent.add(&path);
             o.name = display_name(&path);
             o.path = Some(path);
+        }
+        if xfa {
+            self.notice = Some(
+                "Saved. The XFA form is kept as it was, so Acrobat may show its own XFA data \
+                 rather than these field values."
+                    .into(),
+            );
         }
         // The changes are saved somewhere, so closing need not ask again.
         o.session.saved(o.doc.clone());
@@ -1267,10 +1279,14 @@ impl Viewer {
             self.view_size = avail;
             self.apply_fit();
         }
-        let Some(o) = &self.open else {
+        if self.open.is_none() {
             self.empty_view(ui);
             return;
-        };
+        }
+        if self.held_view(ui) {
+            return;
+        }
+        let Some(o) = &self.open else { return };
         let (lw, lh) = o.layout.size();
         let content = Vec2::new((lw as f32).max(avail.x), lh as f32);
         // Each file has its own scroll state, so a scroll still easing in
@@ -1292,6 +1308,7 @@ impl Viewer {
             let (rect, response) = ui.allocate_exact_size(content, Sense::click_and_drag());
             self.draw_pages(ui, rect.min, viewport);
             self.draw_fields(ui, rect.min);
+            self.draw_hotspots(ui, rect.min);
             self.draw_pick(ui, rect.min);
             self.draw_marks(ui, rect.min);
             self.pointer(ui, &response, rect.min);
@@ -1625,6 +1642,9 @@ impl Viewer {
         {
             return;
         }
+        if !self.selecting && !response.dragged() {
+            self.safety_hover(response, response.hover_pos().map(to_layout));
+        }
         if let Some(p) = response.hover_pos() {
             let (lx, ly) = to_layout(p);
             if let Some(icon) = self.form_cursor(lx, ly).filter(|_| !self.selecting) {
@@ -1679,6 +1699,7 @@ impl Viewer {
                 let (lx, ly) = to_layout(p);
                 let ctrl = ui.input(|i| i.modifiers.command);
                 let on_field = self.form_click(lx, ly, ctrl);
+                self.safety_click(lx, ly);
                 // A double click selects the word under it.
                 if response.double_clicked()
                     && !on_field
@@ -1738,6 +1759,7 @@ impl eframe::App for Viewer {
         self.tab_bar(ui);
         self.update_banner(ui);
         self.tool_bar(ui);
+        self.safety_notice(ui);
         if let Some(note) = self.notice.clone().filter(|_| self.open.is_some()) {
             egui::Panel::bottom("notice").show(ui, |ui| {
                 ui.horizontal(|ui| {

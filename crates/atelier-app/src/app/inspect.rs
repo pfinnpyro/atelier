@@ -2,7 +2,7 @@
 //! form fields, and every script and action it carries. Scripts are shown
 //! as text and never run.
 
-use atelier_form::{Action, Field, FieldKind, Value, document_actions, flags};
+use atelier_form::{Field, FieldKind, Value, flags};
 use atelier_syntax::{Document, ObjRef, Object};
 use atelier_view::{Fact, Picked, children, has_children, object_at, overview, preview, summary};
 use eframe::egui::{self, Color32, CursorIcon, Pos2, RichText, Stroke, StrokeKind};
@@ -25,6 +25,8 @@ enum Tab {
     Objects,
     Fields,
     Actions,
+    /// XFA and embedded files.
+    Files,
 }
 
 #[derive(Default)]
@@ -34,7 +36,6 @@ pub(super) struct Inspector {
     /// The document generation the lists below were made for.
     made_for: Option<u64>,
     facts: Vec<Fact>,
-    actions: Vec<Action>,
     object_input: String,
     /// An object opened by number or picked on the page, shown above the
     /// trailer, and what it is.
@@ -61,6 +62,16 @@ impl Inspector {
         self.tab = tab;
     }
 
+    /// Opens on XFA and embedded files.
+    pub fn show_safety(&mut self) {
+        self.tab = Tab::Files;
+    }
+
+    /// Opens on the scripts and actions.
+    pub fn show_actions(&mut self) {
+        self.tab = Tab::Actions;
+    }
+
     fn pin(&mut self, obj: ObjRef, label: String) {
         self.pinned = Some((obj, label));
         self.open_pinned = true;
@@ -76,7 +87,6 @@ impl Viewer {
         let insp = &mut self.inspector;
         if insp.made_for != Some(generation) {
             insp.facts = overview(&doc);
-            insp.actions = document_actions(&doc);
             insp.made_for = Some(generation);
         }
         let mut jump_to_field = None;
@@ -86,19 +96,27 @@ impl Viewer {
             .min_size(260.0)
             .show(ui, |ui| {
                 ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    let insp = &mut self.inspector;
-                    let scripts = insp.actions.iter().filter(|a| a.is_javascript()).count();
+                ui.horizontal_wrapped(|ui| {
+                    let s = self.open.as_ref().map(|o| &o.safety);
+                    let actions = s.map_or(0, |s| s.actions.len());
+                    let scripts = s.map_or(0, |s| {
+                        s.actions.iter().filter(|a| a.is_javascript()).count()
+                            + s.xfa.as_ref().map_or(0, |x| x.scripts.len())
+                    });
+                    let files = s.map_or(0, |s| s.files.len());
                     let actions_label = if scripts > 0 {
                         format!("Actions ({scripts} scripts)")
                     } else {
-                        format!("Actions ({})", insp.actions.len())
+                        format!("Actions ({actions})")
                     };
+                    let files_label = format!("Files ({files})");
+                    let insp = &mut self.inspector;
                     for (tab, label) in [
                         (Tab::Overview, "Overview".to_string()),
                         (Tab::Objects, "Objects".to_string()),
                         (Tab::Fields, "Fields".to_string()),
                         (Tab::Actions, actions_label),
+                        (Tab::Files, files_label),
                     ] {
                         if ui.selectable_label(insp.tab == tab, label).clicked() {
                             insp.tab = tab;
@@ -112,8 +130,9 @@ impl Viewer {
                     Tab::Fields => jump_to_field = self.fields_tab(ui),
                     Tab::Actions => {
                         self.form_scripts_ui(ui);
-                        actions_tab(ui, &self.inspector.actions);
+                        self.actions_tab(ui);
                     }
+                    Tab::Files => self.files_tab(ui),
                 }
             });
         if let Some(at) = jump_to_field {
@@ -190,8 +209,11 @@ fn fill_box(
 ) -> Option<Value> {
     const WIDTH: f32 = 170.0;
     if f.kind == FieldKind::PushButton {
-        ui.label(RichText::new("script, never run").weak())
-            .on_hover_text("Pressing it would run a script. Atelier never runs scripts.");
+        ui.label(RichText::new("has a script").weak())
+            .on_hover_text(
+                "Pressing it would run a script. Click it to review the script in Actions; \
+             it runs only if you allow it.",
+            );
         return None;
     }
     if !f.is_fillable() || f.is_read_only() {
@@ -531,64 +553,6 @@ fn node(
                     depth + 1,
                     false,
                 );
-            }
-        });
-}
-
-fn actions_tab(ui: &mut egui::Ui, actions: &[Action]) {
-    ui.colored_label(
-        NOTE,
-        "Everything in the file is listed here, so you can see what it would try to do. \
-         Atelier never runs any of it, except the form scripts you allow above.",
-    );
-    ui.separator();
-    if actions.is_empty() {
-        ui.label("This file has no scripts or actions.");
-        return;
-    }
-    egui::ScrollArea::vertical()
-        .auto_shrink(false)
-        .show(ui, |ui| {
-            for (i, a) in actions.iter().enumerate() {
-                ui.horizontal_wrapped(|ui| {
-                    let risky = matches!(
-                        a.kind.as_str(),
-                        "JavaScript"
-                            | "Launch"
-                            | "URI"
-                            | "SubmitForm"
-                            | "ImportData"
-                            | "GoToR"
-                            | "GoToE"
-                    );
-                    let kind = RichText::new(&a.kind).strong();
-                    if risky {
-                        ui.colored_label(RISKY, kind);
-                    } else {
-                        ui.label(kind);
-                    }
-                    ui.label(&a.location);
-                    if let Some(r) = a.owner {
-                        ui.label(RichText::new(r.to_string()).weak());
-                    }
-                });
-                if let Some(t) = &a.target {
-                    ui.label(format!("→ {t}"));
-                }
-                if let Some(js) = &a.javascript {
-                    egui::ScrollArea::vertical()
-                        .id_salt(("script", i))
-                        .max_height(220.0)
-                        .show(ui, |ui| {
-                            ui.add(
-                                egui::TextEdit::multiline(&mut js.as_str())
-                                    .code_editor()
-                                    .desired_width(f32::INFINITY)
-                                    .desired_rows(1),
-                            );
-                        });
-                }
-                ui.separator();
             }
         });
 }

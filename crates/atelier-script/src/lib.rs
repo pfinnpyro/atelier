@@ -398,6 +398,10 @@ pub fn run_commit(c: &Commit) -> CommitOutcome {
             out.accepted = false;
             return out;
         }
+        // Fields it set besides its own count, as with calculations.
+        for (name, value) in o.changes.iter().filter(|(n, _)| *n != c.target) {
+            out.set(&mut fields, name, value);
+        }
         out.value = o.value;
     }
     if let Some(f) = fields.iter_mut().find(|f| f.name == c.target) {
@@ -590,6 +594,30 @@ mod tests {
             ..Commit::default()
         });
         assert_eq!(decode_outcome(&encode_outcome(&o)), Some(o));
+    }
+
+    #[test]
+    fn a_keystroke_script_can_set_other_fields() {
+        // Click scripts run this way too: set a field, then calculations
+        // see the new value.
+        let o = run_commit(&Commit {
+            fields: vec![field("go", ""), field("a", ""), field("b", "")],
+            target: "go".into(),
+            keystroke: Some("this.getField('a').value = 'clicked';".into()),
+            calculations: vec![(
+                "b".into(),
+                "event.value = getField('a').value + '!';".into(),
+            )],
+            ..Commit::default()
+        });
+        assert!(o.accepted, "{o:?}");
+        assert_eq!(
+            o.changes,
+            vec![
+                ("a".to_string(), "clicked".to_string()),
+                ("b".to_string(), "clicked!".to_string())
+            ]
+        );
     }
 
     #[test]

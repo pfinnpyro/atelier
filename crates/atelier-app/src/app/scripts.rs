@@ -3,9 +3,10 @@
 //! Only the scripts that check and work out field values (keystroke on
 //! commit, validate, calculate, and the document scripts they lean on) can
 //! run, and only once allowed. They run in a helper process, in a sandbox
-//! that sees nothing but the field values (see `atelier-script`). Every
-//! other action in the file, from opening links to submitting the form,
-//! is never run.
+//! that sees nothing but the field values (see `atelier-script`). A
+//! script a click sets off runs there too, once allowed from the Actions
+//! view. Nothing else in the file, from opening links to submitting the
+//! form, is ever run; inside the sandbox such calls simply fail.
 
 use std::collections::HashSet;
 
@@ -212,12 +213,107 @@ impl Viewer {
             });
         };
         let outcome = run(&commit);
-        let form = &fv.form;
-        let typed = |i: usize| {
-            form.fields
-                .get(i)
-                .is_some_and(|f| matches!(f.kind, FieldKind::Text | FieldKind::ComboBox))
+        self.take_outcome(&commit, outcome, Some(field), value, true)
+    }
+
+    /// Runs a script a click on an element sets off (mouse down or up,
+    /// focus, its own action), once the person allowed it. It runs in the
+    /// same sandbox as the form's scripts, against the field the element
+    /// belongs to, if any; then the form's allowed calculations follow.
+    pub(super) fn run_click_script(
+        &mut self,
+        field: Option<usize>,
+        script: &str,
+    ) -> Option<Scripted> {
+        let o = self.open.as_ref()?;
+        let state = o.scripts.as_ref()?;
+        if !state.is_allowed(script) {
+            return None;
+        }
+        let form = o.form.as_ref().map(|fv| &fv.form);
+        let allowed = |s: &Option<String>| s.clone().filter(|s| state.is_allowed(s));
+        let named =
+            |i: usize, s: &Option<String>| Some((form?.fields.get(i)?.name.clone(), allowed(s)?));
+        let value = field
+            .and_then(|f| form?.fields.get(f))
+            .map(|f| f.value.clone())
+            .unwrap_or_default();
+        let commit = Commit {
+            document_scripts: state
+                .all
+                .document
+                .iter()
+                .filter(|(_, s)| state.is_allowed(s))
+                .map(|(_, s)| s.clone())
+                .collect(),
+            fields: form
+                .map(|form| {
+                    form.fields
+                        .iter()
+                        .enumerate()
+                        .map(|(i, f)| FieldValue {
+                            name: f.name.clone(),
+                            value: value_text(&f.value),
+                            kind: kind_name(f.kind),
+                            hidden: o.session.is_hidden(i),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            target: field
+                .and_then(|f| form?.fields.get(f))
+                .map(|f| f.name.clone())
+                .unwrap_or_default(),
+            value: value_text(&value),
+            keystroke: Some(script.to_string()),
+            validate: None,
+            calculations: state
+                .all
+                .calculation_order
+                .iter()
+                .filter_map(|&i| named(i, &state.all.fields.get(i)?.calculate))
+                .collect(),
+            calculated_validate: state
+                .all
+                .calculation_order
+                .iter()
+                .filter_map(|&i| named(i, &state.all.fields.get(i)?.validate))
+                .collect(),
         };
+        let outcome = run(&commit);
+        // A click script has no value to refuse, so its "rejection" is
+        // ignored; what it set still counts.
+        self.take_outcome(&commit, outcome, field, value, false)
+    }
+
+    /// What a run's outcome changes: the value for `field` (when there is
+    /// one), other fields' values and which are hidden. Alerts and errors
+    /// are shown. `None` when the value was refused and `refusable`.
+    fn take_outcome(
+        &mut self,
+        commit: &Commit,
+        outcome: CommitOutcome,
+        field: Option<usize>,
+        value: Value,
+        refusable: bool,
+    ) -> Option<Scripted> {
+        // Each field's name, and whether it holds typed text.
+        let fields: Vec<(String, bool)> = self
+            .open
+            .as_ref()
+            .and_then(|o| o.form.as_ref())
+            .map(|fv| {
+                fv.form
+                    .fields
+                    .iter()
+                    .map(|f| {
+                        let typed = matches!(f.kind, FieldKind::Text | FieldKind::ComboBox);
+                        (f.name.clone(), typed)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let typed = |i: usize| fields.get(i).is_some_and(|f| f.1);
         let mut said: Vec<String> = outcome
             .alerts
             .iter()
@@ -229,7 +325,7 @@ impl Viewer {
                 .iter()
                 .map(|e| format!("A form script failed: {e}")),
         );
-        if !outcome.accepted {
+        if refusable && !outcome.accepted {
             self.error = Some(if said.is_empty() {
                 "The form's script did not accept that value.".into()
             } else {
@@ -237,7 +333,7 @@ impl Viewer {
             });
             return None;
         }
-        let value = if typed(field) && outcome.value != commit.value {
+        let value = if field.is_some_and(typed) && outcome.value != commit.value {
             Value::Text(outcome.value.clone())
         } else {
             value
@@ -246,16 +342,16 @@ impl Viewer {
             .changes
             .iter()
             .filter_map(|(name, v)| {
-                let i = form.fields.iter().position(|f| f.name == *name)?;
-                (typed(i) && i != field).then(|| (i, Value::Text(v.clone())))
+                let i = fields.iter().position(|f| f.0 == *name)?;
+                (typed(i) && Some(i) != field).then(|| (i, Value::Text(v.clone())))
             })
             .collect();
         // A name can be a parent: it shows or hides every field under it.
         let mut hidden = Vec::new();
         for (name, h) in &outcome.hidden {
             let prefix = format!("{name}.");
-            for (i, f) in form.fields.iter().enumerate() {
-                if f.name == *name || f.name.starts_with(&prefix) {
+            for (i, (f, _)) in fields.iter().enumerate() {
+                if f == name || f.starts_with(&prefix) {
                     hidden.retain(|(j, _)| *j != i);
                     hidden.push((i, *h));
                 }

@@ -489,3 +489,70 @@ fn ocr_text_layers_are_saved_as_invisible_text() {
     // And the page looks the same.
     assert_eq!(render(&built.doc).data(), render(&doc).data());
 }
+
+#[test]
+fn xfa_is_found_and_judged_static_or_dynamic() {
+    use atelier_form::xfa;
+    let template = "<template><subform name=\"f\"><field name=\"a\"><event activity=\"click\"><script contentType=\"application/x-javascript\">app.alert(1)</script></event></field></subform></template>";
+    let stream = format!(
+        "<< /Length {} >>\nstream\n{template}\nendstream",
+        template.len() + 1
+    );
+    // An AcroForm copy of the fields: static.
+    let doc = Document::open(build(
+        "<< /Fields [4 0 R] /XFA [(template) 5 0 R] >>",
+        "[4 0 R]",
+        &[
+            "<< /Type /Annot /Subtype /Widget /FT /Tx /T (a) /Rect [0 0 10 10] >>",
+            &stream,
+        ],
+    ))
+    .unwrap();
+    let x = xfa(&doc).unwrap();
+    assert!(!x.dynamic);
+    assert_eq!(x.packets[0].0, "template");
+    assert_eq!(x.scripts[0].location, "f.a, click");
+    // No fields: the pages cannot hold the form.
+    let doc = Document::open(build(
+        "<< /Fields [] /XFA [(template) 4 0 R] >>",
+        "[]",
+        &[&stream],
+    ))
+    .unwrap();
+    assert!(xfa(&doc).unwrap().dynamic);
+    // No XFA at all.
+    assert!(xfa(&Document::open(sample()).unwrap()).is_none());
+}
+
+#[test]
+fn hotspots_tie_actions_to_what_is_clicked() {
+    use atelier_form::hotspots;
+    let doc = Document::open(build(
+        "<< /Fields [4 0 R] >>",
+        "[5 0 R 6 0 R]",
+        &[
+            "<< /FT /Tx /T (total) /Kids [5 0 R] /AA << /C << /S /JavaScript /JS (event.value = 1;) >> >> >>",
+            "<< /Type /Annot /Subtype /Widget /Parent 4 0 R /Rect [0 0 50 20] /AA << /U << /S /JavaScript /JS (app.alert(2)) >> >> >>",
+            "<< /Type /Annot /Subtype /Link /Rect [100 100 150 120] /F 2 /A << /S /JavaScript /JS (hidden()) >> >>",
+        ],
+    ))
+    .unwrap();
+    let actions = document_actions(&doc);
+    let spots = hotspots(&doc, &actions);
+    // The hidden link is left out.
+    assert_eq!(spots.len(), 1);
+    let s = &spots[0];
+    assert!(s.contains(10.0, 10.0) && !s.contains(60.0, 10.0));
+    let tied: Vec<(&str, bool)> = s
+        .actions
+        .iter()
+        .map(|&i| (actions[i].location.as_str(), actions[i].on_click))
+        .collect();
+    assert_eq!(
+        tied,
+        [
+            ("Page 1, widget annotation, mouse up", true),
+            ("Field total, calculate", false)
+        ]
+    );
+}

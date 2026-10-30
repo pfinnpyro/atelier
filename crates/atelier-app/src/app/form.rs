@@ -1,6 +1,6 @@
 //! Filling in forms: field highlights, the editors that open over a field,
 //! keyboard focus and Tab order, and rebuilding the document after each
-//! change. Push buttons do nothing: their scripts are never run.
+//! change. A push button's scripts run only once allowed in the inspector.
 
 use std::collections::HashSet;
 
@@ -140,9 +140,18 @@ impl Viewer {
         let Some(done) = self.run_scripts(field, value) else {
             return;
         };
+        self.apply_scripted(Some(field), done);
+    }
+
+    /// Puts what scripts worked out into the document: the value of
+    /// `field`, other fields' values and which fields are hidden.
+    pub(super) fn apply_scripted(&mut self, field: Option<usize>, done: super::scripts::Scripted) {
         let Some(o) = &mut self.open else { return };
-        o.session.set(field, done.value);
-        let mut pages: HashSet<usize> = o.session.pages_of(field).into_iter().collect();
+        let mut pages: HashSet<usize> = HashSet::new();
+        if let Some(field) = field {
+            o.session.set(field, done.value);
+            pages.extend(o.session.pages_of(field));
+        }
         for (i, v) in done.changes {
             o.session.set(i, v);
             pages.extend(o.session.pages_of(i));
