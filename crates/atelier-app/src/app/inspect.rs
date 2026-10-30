@@ -110,7 +110,10 @@ impl Viewer {
                     Tab::Overview => overview_tab(ui, &self.inspector.facts),
                     Tab::Objects => objects_tab(ui, &doc, &mut self.inspector),
                     Tab::Fields => jump_to_field = self.fields_tab(ui),
-                    Tab::Actions => actions_tab(ui, &self.inspector.actions),
+                    Tab::Actions => {
+                        self.form_scripts_ui(ui);
+                        actions_tab(ui, &self.inspector.actions);
+                    }
                 }
             });
         if let Some(at) = jump_to_field {
@@ -535,8 +538,8 @@ fn node(
 fn actions_tab(ui: &mut egui::Ui, actions: &[Action]) {
     ui.colored_label(
         NOTE,
-        "Atelier never runs scripts. They are listed here so you can see what this file \
-         would try to do.",
+        "Everything in the file is listed here, so you can see what it would try to do. \
+         Atelier never runs any of it, except the form scripts you allow above.",
     );
     ui.separator();
     if actions.is_empty() {
@@ -591,6 +594,111 @@ fn actions_tab(ui: &mut egui::Ui, actions: &[Action]) {
 }
 
 impl Viewer {
+    /// The form's scripts that check and work out values, each blocked
+    /// until allowed here.
+    fn form_scripts_ui(&mut self, ui: &mut egui::Ui) {
+        let names: Vec<String> = self
+            .open
+            .as_ref()
+            .and_then(|o| o.form.as_ref())
+            .map(|fv| fv.form.fields.iter().map(|f| f.name.clone()).collect())
+            .unwrap_or_default();
+        let Some(state) = self.open.as_mut().and_then(|o| o.scripts.as_mut()) else {
+            return;
+        };
+        let total = state.runnable().len();
+        if total == 0 {
+            return;
+        }
+        let allowed = state.allowed_count();
+        egui::CollapsingHeader::new(
+            RichText::new(format!("Form scripts: {allowed} of {total} allowed")).strong(),
+        )
+        .id_salt("form-scripts")
+        .default_open(allowed == 0)
+        .show(ui, |ui| {
+            ui.label(
+                "These scripts check what is typed and work out totals. They are blocked \
+                 until you allow them. Allowed scripts run in a sandbox that can only read \
+                 and set this form's fields: no files, no network, nothing else on your \
+                 computer.",
+            );
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(allowed < total, egui::Button::new("Allow all"))
+                    .clicked()
+                {
+                    state.allow_all();
+                }
+                if ui
+                    .add_enabled(allowed > 0, egui::Button::new("Block all"))
+                    .clicked()
+                {
+                    state.allowed.clear();
+                }
+            });
+            let mut rows: Vec<(String, String)> = state
+                .all
+                .document
+                .iter()
+                .map(|(n, s)| {
+                    (
+                        format!("Document script \"{n}\" (defines helpers)"),
+                        s.clone(),
+                    )
+                })
+                .collect();
+            for (i, f) in state.all.fields.iter().enumerate() {
+                let name = names.get(i).map_or("?", String::as_str);
+                for (what, s) in [
+                    ("checks typing", &f.keystroke),
+                    ("checks the value", &f.validate),
+                    ("works out its value", &f.calculate),
+                ] {
+                    if let Some(s) = s {
+                        rows.push((format!("Field {name}: {what}"), s.clone()));
+                    }
+                }
+            }
+            let mut toggle = None;
+            egui::ScrollArea::vertical()
+                .id_salt("form-script-list")
+                .max_height(320.0)
+                .show(ui, |ui| {
+                    for (i, (label, source)) in rows.iter().enumerate() {
+                        let mut on = state.is_allowed(source);
+                        if ui.checkbox(&mut on, label.as_str()).changed() {
+                            toggle = Some(source.clone());
+                        }
+                        egui::CollapsingHeader::new(RichText::new("Show the script").small())
+                            .id_salt(("form-script", i))
+                            .show(ui, |ui| {
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut source.as_str())
+                                        .code_editor()
+                                        .desired_width(f32::INFINITY)
+                                        .desired_rows(1),
+                                );
+                            });
+                    }
+                });
+            if let Some(s) = toggle {
+                state.toggle(&s);
+            }
+            if state.all.fields.iter().any(|f| f.format.is_some()) {
+                ui.label(
+                    RichText::new(
+                        "Formatting scripts (how a value looks, such as 1,234.50) are not run \
+                         yet; values show as typed.",
+                    )
+                    .weak()
+                    .small(),
+                );
+            }
+        });
+        ui.separator();
+    }
+
     /// While picking: the object under the pointer, and a click pins it.
     /// Returns whether picking took the pointer.
     pub(super) fn pick_pointer(

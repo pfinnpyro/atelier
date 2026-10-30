@@ -1,0 +1,14 @@
+[package]
+name = "atelier-script"
+description = "Runs a form's JavaScript in a sandbox that can only read and set field values."
+version.workspace = true
+edition.workspace = true
+# The JavaScript engine (Boa) needs a newer compiler than the other crates.
+rust-version = "1.91"
+publish.workspace = true
+
+[dependencies]
+boa_engine = { version = "0.22", default-features = false }
+
+[lints]
+workspace = true

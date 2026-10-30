@@ -109,6 +109,13 @@ impl Viewer {
                 o.warnings
                     .extend(built.warnings.iter().map(|w| format!("Form: {w}")));
                 o.doc = built.doc;
+                o.scripts = built.form.as_ref().and_then(|f| {
+                    let all = atelier_form::form_scripts(&o.doc, f);
+                    (!all.is_empty()).then(|| super::scripts::ScriptState {
+                        all,
+                        allowed: Default::default(),
+                    })
+                });
                 o.form = built.form.map(|f| FormView::new(f, &o.doc));
             }
             Err(e) => {
@@ -129,8 +136,21 @@ impl Viewer {
         {
             return;
         }
-        o.session.set(field, value);
-        let pages: HashSet<usize> = o.session.pages_of(field).into_iter().collect();
+        // Allowed form scripts check the value and work out others.
+        let Some(done) = self.run_scripts(field, value) else {
+            return;
+        };
+        let Some(o) = &mut self.open else { return };
+        o.session.set(field, done.value);
+        let mut pages: HashSet<usize> = o.session.pages_of(field).into_iter().collect();
+        for (i, v) in done.changes {
+            o.session.set(i, v);
+            pages.extend(o.session.pages_of(i));
+        }
+        for (i, hidden) in done.hidden {
+            o.session.set_hidden(i, hidden);
+            pages.extend(o.session.pages_of(i));
+        }
         self.rebuild(&pages, false);
     }
 

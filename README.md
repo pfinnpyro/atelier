@@ -39,6 +39,7 @@ cmap-resources (BSD-3-Clause; see
 | `atelier-raster` | Our rasterizer: exact-area anti-aliased fills (non-zero and even-odd), strokes with joins, caps and dashes, clip masks, image drawing |
 | `atelier-render` | Content stream interpreter, graphics state, colour spaces, Form XObjects, images, PDF fonts (simple, CID, Type 3, CMaps including Adobe's predefined CJK ones, ToUnicode), text drawing and extraction |
 | `atelier-view` | Viewer logic without a window: page layout, the tile grid and cache, text selection and search |
+| `atelier-script` | The form-script sandbox: a JavaScript engine (Boa) with only the form's values and Acrobat's form helpers, run in a helper process |
 | `atelier-app` | The viewer window (`atelier-viewer`), built on eframe (winit, wgpu and egui) |
 | `atelier-cli` | The `atelier` command for inspecting and rendering files |
 
@@ -117,6 +118,30 @@ Changes are saved like any other. Once pages are removed, saving writes the
 file out whole without them, so their content is gone from the file's bytes
 and not only from its page list. Saving pages as a new file leaves out
 everything the other pages used, including the form and bookmarks.
+
+## Form scripts
+
+Many forms carry JavaScript that checks what is typed and works out totals.
+Atelier blocks all of it until you allow it. When a file has form scripts,
+a notice says so; open the inspector (F12), go to **Actions**, read the
+scripts and tick the ones to allow, or use *Allow all*. Allowing lasts
+while the file is open; the next time it opens, its scripts are blocked
+again.
+
+Allowed scripts run in a separate helper process with an empty environment,
+started for each change and stopped after two seconds per script. Inside it,
+a script sees only this form's field values and a small set of Acrobat
+objects (`getField`, `event`, `app.alert`, `util.printf` and the `AF`
+number, percent, range and special-format helpers). It cannot reach files,
+the network, the app or the computer. What comes back is a list of new field
+values and which fields to show or hide, which the viewer checks and
+applies like any other edit.
+
+Keystroke and validate scripts run when a value is committed, then every
+calculation runs in the form's calculation order, each calculated value
+passing its own validate script. Formatting scripts (how a value looks, such
+as 1,234.50) are not run yet, and nothing else in the file (open actions,
+links that launch programs, print scripts) ever runs.
 
 ## Viewer keys
 

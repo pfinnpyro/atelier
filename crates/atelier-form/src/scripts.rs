@@ -286,3 +286,134 @@ fn name_tree(doc: &Document, node: &Dict, out: &mut Vec<(String, Object)>, depth
         }
     }
 }
+
+/// A field's own scripts.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FieldScripts {
+    pub keystroke: Option<String>,
+    pub format: Option<String>,
+    pub validate: Option<String>,
+    pub calculate: Option<String>,
+}
+
+impl FieldScripts {
+    pub fn is_empty(&self) -> bool {
+        self.keystroke.is_none()
+            && self.format.is_none()
+            && self.validate.is_none()
+            && self.calculate.is_none()
+    }
+}
+
+/// The scripts a form would run while it is filled in. Reading them runs
+/// nothing.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FormScripts {
+    /// Document-level scripts, by name, in name order.
+    pub document: Vec<(String, String)>,
+    /// Each field's scripts, by field index.
+    pub fields: Vec<FieldScripts>,
+    /// Fields whose calculate scripts run, in order: the form's /CO, or
+    /// when it has none, every field with one.
+    pub calculation_order: Vec<usize>,
+}
+
+impl FormScripts {
+    pub fn is_empty(&self) -> bool {
+        self.document.is_empty() && self.fields.iter().all(FieldScripts::is_empty)
+    }
+
+    /// How many scripts there are.
+    pub fn count(&self) -> usize {
+        self.document.len()
+            + self
+                .fields
+                .iter()
+                .map(|f| {
+                    [&f.keystroke, &f.format, &f.validate, &f.calculate]
+                        .iter()
+                        .filter(|s| s.is_some())
+                        .count()
+                })
+                .sum::<usize>()
+    }
+}
+
+/// The JavaScript of an action, when it is a JavaScript action.
+fn javascript(doc: &Document, action: &Object) -> Option<String> {
+    let Ok(Object::Dict(action)) = doc.resolve(action) else {
+        return None;
+    };
+    let is_js = doc
+        .get_key(&action, b"S")
+        .ok()
+        .is_some_and(|s| s.as_name().is_some_and(|n| *n == b"JavaScript"));
+    if !is_js {
+        return None;
+    }
+    match doc.get_key(&action, b"JS").ok()? {
+        Object::String(s) => Some(s.to_text()),
+        Object::Stream(s) => doc
+            .decode_stream(&s)
+            .ok()
+            .map(|d| atelier_syntax::text_from_bytes(&d.data)),
+        _ => None,
+    }
+}
+
+/// The scripts of a form.
+pub fn form_scripts(doc: &Document, form: &crate::Form) -> FormScripts {
+    let mut out = FormScripts::default();
+    let tree = doc
+        .catalog()
+        .ok()
+        .and_then(|c| match doc.get_key(&c, b"Names") {
+            Ok(Object::Dict(names)) => Some(names),
+            _ => None,
+        })
+        .and_then(|names| match doc.get_key(&names, b"JavaScript") {
+            Ok(Object::Dict(tree)) => Some(tree),
+            _ => None,
+        });
+    if let Some(tree) = tree {
+        let mut entries = Vec::new();
+        name_tree(doc, &tree, &mut entries, 0);
+        for (name, action) in entries {
+            if let Some(js) = javascript(doc, &action) {
+                out.document.push((name, js));
+            }
+        }
+    }
+    for field in &form.fields {
+        let mut s = FieldScripts::default();
+        let aa = match doc.get(field.obj) {
+            Ok(Object::Dict(dict)) => match doc.get_key(&dict, b"AA") {
+                Ok(Object::Dict(aa)) => Some(aa),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(aa) = aa {
+            let get = |key: &[u8]| aa.get(key).and_then(|a| javascript(doc, a));
+            s.keystroke = get(b"K");
+            s.format = get(b"F");
+            s.validate = get(b"V");
+            s.calculate = get(b"C");
+        }
+        out.fields.push(s);
+    }
+    let mut order: Vec<usize> = form
+        .calculation_order
+        .iter()
+        .filter_map(|r| form.fields.iter().position(|f| f.obj == *r))
+        .filter(|&i| out.fields[i].calculate.is_some())
+        .collect();
+    if form.calculation_order.is_empty() {
+        order = (0..out.fields.len())
+            .filter(|&i| out.fields[i].calculate.is_some())
+            .collect();
+    }
+    order.dedup();
+    out.calculation_order = order;
+    out
+}

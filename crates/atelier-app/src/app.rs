@@ -28,6 +28,7 @@ mod inspect;
 mod menu;
 mod pages;
 mod print;
+mod scripts;
 mod settings_window;
 mod sidebar;
 mod tabs;
@@ -105,6 +106,8 @@ struct Open {
     /// Tiles that still show a field's old value; they stay on screen
     /// until their replacements arrive.
     stale: HashSet<TileKey>,
+    /// The form's scripts, and which the person allowed to run.
+    scripts: Option<scripts::ScriptState>,
 }
 
 /// Something waiting on the unsaved-changes prompt.
@@ -335,8 +338,10 @@ impl Viewer {
             path,
             form: None,
             stale: HashSet::new(),
+            scripts: None,
         };
         Self::load_form(&mut open);
+        let blocked = open.scripts.as_ref().map_or(0, |s| s.runnable().len());
         self.open = Some(open);
         self.inspector.reset();
         self.sidebar.reset();
@@ -349,6 +354,13 @@ impl Viewer {
             ZoomMode::FitWidth
         };
         self.scroll_to = Some(Vec2::ZERO);
+        if blocked > 0 {
+            self.notice = Some(format!(
+                "This form has {blocked} scripts that check values and work out totals. \
+                 They are blocked; to let them run, review and allow them in the inspector \
+                 (F12, Actions)."
+            ));
+        }
         self.search = Search::default();
         self.selection = None;
         self.selecting = false;
