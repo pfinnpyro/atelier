@@ -1,75 +1,104 @@
-name: Release
-
-# Pushing a version tag builds Atelier for Windows and publishes it as a
-# GitHub release. The tag must match the workspace version in Cargo.toml.
-#   v0.2.0          -> stable channel
-#   v0.2.0-beta.1   -> preview channel (marked as a pre-release)
-# The app's updater reads these releases (see crates/atelier-app/src/update.rs)
-# and relies on the asset names below, so keep them stable.
-
+name: Package and release
 on:
   push:
-    tags: ["v*"]
-
+    tags: ['v*']
+  workflow_dispatch:
 permissions:
-  contents: write
-
-env:
-  CARGO_TERM_COLOR: always
-
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
-  windows:
-    runs-on: windows-latest
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: macos-arm64
+            triple: aarch64-apple-darwin
+            options: ''
+          - os: windows-2022
+            target: windows-x64
+            triple: x86_64-pc-windows-msvc
+            options: '--installer'
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Check the tag matches the version
-        shell: pwsh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Rust target
+        run: rustup target add ${{ matrix.triple }}
+      - name: Validate version and tag
+        shell: bash
         run: |
-          $tag = "${{ github.ref_name }}".TrimStart("v")
-          $line = Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
-          $version = $line.Matches[0].Groups[1].Value
-          if ($tag -ne $version) {
-            Write-Error "Tag $tag does not match the version $version in Cargo.toml"
-            exit 1
-          }
-
+          python - <<'PY'
+          import os, tomllib
+          version = tomllib.load(open('Cargo.toml', 'rb'))['workspace']['package']['version']
+          if os.environ['GITHUB_REF_TYPE'] == 'tag':
+              assert os.environ['GITHUB_REF_NAME'] == 'v' + version, 'Tag must match Cargo.toml'
+          print('Building Atelier', version)
+          PY
       - name: Test
-        run: cargo test --workspace --release
-
-      - name: Build
-        run: cargo build --release -p atelier-app -p atelier-cli
-
-      - name: Build the installer
-        shell: pwsh
+        run: cargo test --workspace --locked --target ${{ matrix.triple }}
+      - name: Install Inno Setup
+        if: runner.os == 'Windows'
+        run: choco install innosetup --no-progress -y
+      - name: Build and package
+        run: python tools/package_release.py ${{ matrix.target }} ${{ matrix.options }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atelier-${{ matrix.target }}
+          path: |
+            dist/**/*.zip
+            dist/**/*.exe
+            dist/**/SHA256SUMS.txt
+          if-no-files-found: error
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect and verify packages
         run: |
-          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
-            choco install innosetup -y --no-progress
-          }
-          $version = "${{ github.ref_name }}".TrimStart("v")
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" installer\atelier.iss
-
-      - name: Gather the files
-        shell: pwsh
-        run: |
-          $version = "${{ github.ref_name }}".TrimStart("v")
-          New-Item -ItemType Directory dist | Out-Null
-          Copy-Item target\release\atelier-viewer.exe dist\atelier-windows-x64.exe
-          Copy-Item target\release\atelier.exe dist\atelier-cli-windows-x64.exe
-          Copy-Item installer\Output\atelier-setup.exe dist\atelier-setup-windows-x64.exe
-          Compress-Archive -Path target\release\atelier-viewer.exe, target\release\atelier.exe -DestinationPath "dist\Atelier-$version-windows-x64.zip"
-          Get-ChildItem dist -File | ForEach-Object {
-            "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
-          } | Set-Content -Encoding ascii dist\SHA256SUMS.txt
-          Get-Content dist\SHA256SUMS.txt
-
-      - name: Publish
-        shell: pwsh
+          mkdir release
+          python3 - <<'PY'
+          import hashlib, pathlib, shutil
+          root = pathlib.Path('artifacts')
+          for manifest in root.rglob('SHA256SUMS.txt'):
+              for line in manifest.read_text().splitlines():
+                  digest, name = line.split(maxsplit=1)
+                  source = manifest.parent / name
+                  assert hashlib.sha256(source.read_bytes()).hexdigest() == digest, name
+                  dest = pathlib.Path('release') / name
+                  assert not dest.exists(), 'Duplicate asset: ' + name
+                  shutil.copy2(source, dest)
+          expected = {'atelier-macos-arm64.zip', 'atelier-windows-x64.zip',
+              'atelier-windows-x64.exe', 'atelier-cli-windows-x64.exe', 'atelier-setup-windows-x64.exe'}
+          assert {p.name for p in pathlib.Path('release').iterdir()} == expected
+          with open('release/SHA256SUMS.txt', 'w') as f:
+              for p in sorted(pathlib.Path('release').iterdir()):
+                  if p.name != 'SHA256SUMS.txt':
+                      f.write(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n')
+          PY
+      - name: Create complete draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
         run: |
-          $tag = "${{ github.ref_name }}"
-          $pre = if ($tag.Contains("-")) { "--prerelease" } else { "--latest" }
-          gh release create $tag (Get-ChildItem dist -File).FullName --title "Atelier $($tag.TrimStart('v'))" --generate-notes $pre
+          flags=(--draft --verify-tag --title "Atelier $RELEASE_TAG")
+          if [[ "$RELEASE_TAG" == *-* ]]; then flags+=(--prerelease); fi
+          if [[ "$RELEASE_TAG" == v1.0.0 ]]; then
+            flags+=(--notes-file docs/release-notes-1.0.0.md)
+          else
+            flags+=(--generate-notes)
+          fi
+          gh release create "$RELEASE_TAG" release/* "${flags[@]}"

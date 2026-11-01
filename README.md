@@ -4,7 +4,8 @@ A native PDF viewer and editor, written from the ground up in Rust. No webview:
 the PDF engine (parsing, decompression, fonts, rendering, saving) is our own code,
 and the app draws pages straight to the GPU.
 
-Windows is the first target. Linux and macOS come later.
+Packaged releases target Windows x64 and macOS on Apple Silicon.
+Linux can be built from source.
 
 ## Status
 
@@ -60,20 +61,23 @@ The viewer needs Rust 1.95 or newer; the library crates build with 1.85.
 
 ## Releases and updates
 
-Pushing a version tag publishes a release for Windows through
-`.github/workflows/release.yml`:
+The first official release is **1.0.0**. Shared RustRover run/build/package
+configurations are in `.run/`. Build packages locally with:
 
-1. Set `version` in the workspace `Cargo.toml`, for example `0.2.0`, and merge.
-2. Tag that commit and push the tag: `git tag v0.2.0 && git push origin v0.2.0`.
-   A tag with a dash, such as `v0.2.0-beta.1`, is published as a pre-release
-   on the **preview** channel.
+```sh
+python3 tools/package_release.py macos-arm64
+# On Windows, with MSVC build tools and Inno Setup 6:
+python tools/package_release.py windows-x64 --installer
+```
 
-The release carries the installer (`atelier-setup-windows-x64.exe`), the
-program on its own (`atelier-windows-x64.exe`), the command-line tool, a zip,
-and `SHA256SUMS.txt`. Atelier checks GitHub for a newer release when it starts
-(Settings → Updates), and About → Check for updates downloads it, checks it
-against `SHA256SUMS.txt`, and installs it: through the installer for an
-installed copy, or by replacing the program file for a portable one.
+Packages and checksums are written to `dist/<version>/<platform>/`. A matching
+`v<version>` tag builds both platforms and creates a complete draft GitHub release;
+manual workflow runs produce downloadable build artifacts. Stable tags use
+`v1.0.0`; Preview tags use a suffix such as `v1.1.0-beta.1`.
+
+The existing updater supports Windows installation and macOS manual downloads.
+See [release operations and the update/channel plan](docs/releases.md) for
+prerequisites, publication steps, signing limitations and planned improvements.
 
 ## Tabs and recent files
 

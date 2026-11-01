@@ -1,11 +1,15 @@
 ; Inno Setup script for Atelier. The release workflow builds it with
-;   ISCC.exe /DAppVersion=0.2.0 installer\atelier.iss
+;   ISCC.exe /DAppVersion=1.0.0 installer\atelier.iss
 ; Installs for the current user by default (no admin prompt), so the
 ; in-app updater can replace the program without elevation. Offers a
 ; per-machine install too.
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
+#endif
+
+#ifndef BinaryDir
+  #define BinaryDir "..\target\x86_64-pc-windows-msvc\release"
 #endif
 
 [Setup]
@@ -40,8 +44,8 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 Name: "pdfassoc"; Description: "Offer Atelier in &Open with for PDF files"; GroupDescription: "PDF files:"
 
 [Files]
-Source: "..\target\release\atelier-viewer.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\release\atelier.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BinaryDir}\atelier-viewer.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BinaryDir}\atelier.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Atelier"; Filename: "{app}\atelier-viewer.exe"

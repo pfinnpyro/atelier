@@ -416,7 +416,7 @@ dependencies = [
 
 [[package]]
 name = "atelier-app"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "arboard",
  "atelier-crypto",
@@ -437,7 +437,7 @@ dependencies = [
 
 [[package]]
 name = "atelier-cli"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "atelier-filters",
  "atelier-form",
@@ -449,29 +449,29 @@ dependencies = [
 
 [[package]]
 name = "atelier-color"
-version = "0.2.0"
+version = "1.0.0"
 
 [[package]]
 name = "atelier-crypto"
-version = "0.2.0"
+version = "1.0.0"
 
 [[package]]
 name = "atelier-filters"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "miniz_oxide 0.8.9",
 ]
 
 [[package]]
 name = "atelier-font"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "atelier-raster",
 ]
 
 [[package]]
 name = "atelier-form"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "atelier-filters",
  "atelier-raster",
@@ -481,7 +481,7 @@ dependencies = [
 
 [[package]]
 name = "atelier-ocr"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "atelier-crypto",
  "atelier-raster",
@@ -494,18 +494,18 @@ dependencies = [
 
 [[package]]
 name = "atelier-print"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "atelier-raster"
-version = "0.2.0"
+version = "1.0.0"
 
 [[package]]
 name = "atelier-render"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "atelier-color",
  "atelier-filters",
@@ -517,14 +517,14 @@ dependencies = [
 
 [[package]]
 name = "atelier-script"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "boa_engine",
 ]
 
 [[package]]
 name = "atelier-syntax"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "atelier-crypto",
  "atelier-filters",
@@ -533,7 +533,7 @@ dependencies = [
 
 [[package]]
 name = "atelier-view"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "atelier-crypto",
  "atelier-raster",
