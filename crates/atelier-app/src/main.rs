@@ -25,7 +25,11 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     let icon = load_icon();
-    let path = std::env::args_os().nth(1).map(PathBuf::from);
+    // Old macOS versions pass a -psn_ process id when Finder starts an app.
+    let path = std::env::args_os()
+        .nth(1)
+        .filter(|a| !a.to_string_lossy().starts_with("-psn_"))
+        .map(PathBuf::from);
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Atelier")

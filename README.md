@@ -57,6 +57,21 @@ cargo run --release -p atelier-cli -- info some.pdf
 
 The viewer needs Rust 1.95 or newer; the library crates build with 1.85.
 
+### Mac app
+
+On a Mac, `tools/macos/bundle.sh` builds `target/macos/Atelier.app`, with its
+icon and Info.plist, ready to double-click or drag into Applications. It needs
+nothing beyond Rust and the tools that come with macOS.
+
+```
+tools/macos/bundle.sh                     # for this Mac's chip
+tools/macos/bundle.sh --universal --dmg   # Apple Silicon + Intel, plus a .dmg
+```
+
+The app is signed ad hoc, not with a Developer ID, so a copy downloaded from
+GitHub has to be opened with right-click → Open the first time. Updating from
+inside Atelier is Windows-only for now.
+
 ## Releases and updates
 
 Pushing a version tag publishes a release for Windows through
@@ -69,7 +84,8 @@ Pushing a version tag publishes a release for Windows through
 
 The release carries the installer (`atelier-setup-windows-x64.exe`), the
 program on its own (`atelier-windows-x64.exe`), the command-line tool, a zip,
-and `SHA256SUMS.txt`. Atelier checks GitHub for a newer release when it starts
+a universal Mac app (`Atelier-<version>-macos-universal.dmg`), and
+`SHA256SUMS.txt`. Atelier checks GitHub for a newer release when it starts
 (Settings → Updates), and About → Check for updates downloads it, checks it
 against `SHA256SUMS.txt`, and installs it: through the installer for an
 installed copy, or by replacing the program file for a portable one.
