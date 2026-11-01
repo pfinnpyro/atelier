@@ -4,3 +4,5 @@ __pycache__/
 /.idea/atelier.iml
 /.idea/modules.xml
 /.idea/vcs.xml
+
+/dist/
