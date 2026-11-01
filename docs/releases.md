@@ -114,3 +114,5 @@ Next development work, in order:
 GitHub runner reference:
 https://docs.github.com/en/actions/reference/runners/github-hosted-runners
 The workflow uses native `macos-15` ARM64 and `windows-2022` x64 runners.
+
+Updater framework reference: https://sparkle-project.org/documentation/
