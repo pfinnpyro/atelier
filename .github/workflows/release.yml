@@ -73,3 +73,30 @@ jobs:
           $tag = "${{ github.ref_name }}"
           $pre = if ($tag.Contains("-")) { "--prerelease" } else { "--latest" }
           gh release create $tag (Get-ChildItem dist -File).FullName --title "Atelier $($tag.TrimStart('v'))" --generate-notes $pre
+
+  # Adds a universal (Apple Silicon + Intel) Atelier.app, as a .dmg, to the
+  # release the Windows job published, and lists it in SHA256SUMS.txt.
+  macos:
+    needs: windows
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build Atelier.app
+        run: tools/macos/bundle.sh --universal --dmg
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.ref_name }}"
+          cd target/macos
+          dmg="$(ls *.dmg)"
+          gh release download "$tag" --pattern SHA256SUMS.txt --clobber
+          shasum -a 256 "$dmg" >> SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          gh release upload "$tag" "$dmg" SHA256SUMS.txt --clobber
