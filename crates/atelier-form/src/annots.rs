@@ -6,14 +6,34 @@ use atelier_raster::Point;
 use atelier_render::TextGlyph;
 use atelier_syntax::{Dict, Name, ObjRef, Object, PdfString, Result, Stream, Update};
 
+/// Standard PDF review metadata. Authorship is descriptive, not authenticated.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Review {
+    pub text: String,
+    pub author: String,
+    pub subject: String,
+    pub created: String,
+    pub modified: String,
+}
+
 /// What an annotation marks.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Markup {
     /// Boxes over text, each bottom left, bottom right, top right, top
     /// left in user space.
     Highlight { quads: Vec<[Point; 4]> },
+    /// Underline or strikeout over selected text.
+    TextLine {
+        quads: Vec<[Point; 4]>,
+        strike: bool,
+    },
     /// A comment pinned at a point (the icon's top left).
-    Note { at: Point, text: String },
+    Note { at: Point, review: Review },
+    /// An inline highlight with an attached review note.
+    Comment {
+        quads: Vec<[Point; 4]>,
+        review: Review,
+    },
     /// Freehand lines, `width` points wide.
     Ink {
         strokes: Vec<Vec<Point>>,
@@ -32,6 +52,22 @@ pub struct NewAnnot {
 pub const NOTE_SIZE: f64 = 20.0;
 
 impl NewAnnot {
+    pub fn review(&self) -> Option<&Review> {
+        match &self.markup {
+            Markup::Note { review, .. } | Markup::Comment { review, .. } => Some(review),
+            _ => None,
+        }
+    }
+    pub fn set_review(&mut self, value: Review) -> bool {
+        match &mut self.markup {
+            Markup::Note { review, .. } | Markup::Comment { review, .. } => {
+                *review = value;
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// The box the annotation covers, in user space.
     pub fn rect(&self) -> [f64; 4] {
         let grow = |pts: &mut dyn Iterator<Item = Point>, by: f64| {
@@ -50,7 +86,9 @@ impl NewAnnot {
             [r[0] - by, r[1] - by, r[2] + by, r[3] + by]
         };
         match &self.markup {
-            Markup::Highlight { quads } => grow(&mut quads.iter().flatten().copied(), 0.0),
+            Markup::Highlight { quads }
+            | Markup::Comment { quads, .. }
+            | Markup::TextLine { quads, .. } => grow(&mut quads.iter().flatten().copied(), 0.0),
             Markup::Note { at, .. } => [at.x, at.y - NOTE_SIZE, at.x + NOTE_SIZE, at.y],
             Markup::Ink { strokes, width } => {
                 grow(&mut strokes.iter().flatten().copied(), width / 2.0 + 1.0)
@@ -107,7 +145,7 @@ fn name(s: &str) -> Object {
 }
 
 /// The time now as a PDF date, in UTC.
-fn pdf_date() -> String {
+pub fn annotation_date() -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
@@ -130,13 +168,25 @@ fn pdf_date() -> String {
     )
 }
 
+pub(crate) fn write_review(dict: &mut Dict, review: &Review) {
+    for (key, text) in [
+        ("Contents", &review.text),
+        ("T", &review.author),
+        ("Subj", &review.subject),
+        ("CreationDate", &review.created),
+        ("M", &review.modified),
+    ] {
+        dict.insert(key, Object::String(PdfString::from_text(text)));
+    }
+}
+
 /// The drawing of an annotation, in user space.
 fn appearance(a: &NewAnnot) -> (Vec<u8>, Dict) {
     let [r, g, b] = a.color.map(num);
     let mut resources = Dict::new();
     let mut ops = String::new();
     match &a.markup {
-        Markup::Highlight { quads } => {
+        Markup::Highlight { quads } | Markup::Comment { quads, .. } => {
             // Multiply, so the text shows through like a marker pen.
             let mut gs = Dict::new();
             gs.insert("Type", name("ExtGState"));
@@ -156,6 +206,21 @@ fn appearance(a: &NewAnnot) -> (Vec<u8>, Dict) {
                     num(q[2].y),
                     num(q[3].x),
                     num(q[3].y)
+                ));
+            }
+        }
+        Markup::TextLine { quads, strike } => {
+            ops.push_str(&format!("{r} {g} {b} RG 1 w\n"));
+            for q in quads {
+                let t = if *strike { 0.45 } else { 0.08 };
+                let left = q[0] + (q[3] - q[0]) * t;
+                let right = q[1] + (q[2] - q[1]) * t;
+                ops.push_str(&format!(
+                    "{} {} m {} {} l S\n",
+                    num(left.x),
+                    num(left.y),
+                    num(right.x),
+                    num(right.y)
                 ));
             }
         }
@@ -218,12 +283,20 @@ pub(crate) fn add(update: &mut Update, page: ObjRef, a: &NewAnnot, n: usize) -> 
     }));
     let mut d = Dict::new();
     d.insert("Type", name("Annot"));
-    let date = pdf_date();
+    let date = a
+        .review()
+        .map_or_else(annotation_date, |review| review.created.clone());
     d.insert(
         "NM",
         Object::String(PdfString::from_text(&format!("atelier-{date}-{n}"))),
     );
-    d.insert("M", Object::String(PdfString::from_text(&date)));
+    d.insert(
+        "M",
+        Object::String(PdfString::from_text(
+            a.review()
+                .map_or(date.as_str(), |review| review.modified.as_str()),
+        )),
+    );
     d.insert("CreationDate", Object::String(PdfString::from_text(&date)));
     d.insert("Rect", rect_obj(rect));
     d.insert(
@@ -237,8 +310,15 @@ pub(crate) fn add(update: &mut Update, page: ObjRef, a: &NewAnnot, n: usize) -> 
     aps.insert("N", Object::Reference(ap));
     d.insert("AP", Object::Dict(aps));
     match &a.markup {
-        Markup::Highlight { quads } => {
-            d.insert("Subtype", name("Highlight"));
+        Markup::Highlight { quads }
+        | Markup::Comment { quads, .. }
+        | Markup::TextLine { quads, .. } => {
+            let subtype = match &a.markup {
+                Markup::TextLine { strike: true, .. } => "StrikeOut",
+                Markup::TextLine { strike: false, .. } => "Underline",
+                _ => "Highlight",
+            };
+            d.insert("Subtype", name(subtype));
             // QuadPoints go top left, top right, bottom left, bottom right.
             let mut pts = Vec::new();
             for q in quads {
@@ -249,10 +329,9 @@ pub(crate) fn add(update: &mut Update, page: ObjRef, a: &NewAnnot, n: usize) -> 
             }
             d.insert("QuadPoints", Object::Array(pts));
         }
-        Markup::Note { text, .. } => {
+        Markup::Note { .. } => {
             d.insert("Subtype", name("Text"));
             d.insert("Name", name("Comment"));
-            d.insert("Contents", Object::String(PdfString::from_text(text)));
             d.insert("Open", Object::Bool(false));
             // NoZoom and NoRotate, as sticky notes are.
             d.insert("F", Object::Integer(4 | 8 | 16));
@@ -274,6 +353,9 @@ pub(crate) fn add(update: &mut Update, page: ObjRef, a: &NewAnnot, n: usize) -> 
             bs.insert("W", Object::Real(*width));
             d.insert("BS", Object::Dict(bs));
         }
+    }
+    if let Some(review) = a.review() {
+        write_review(&mut d, review);
     }
     let annot = update.add(Object::Dict(d));
     let Object::Dict(mut page_dict) = update.get(page)? else {
@@ -298,7 +380,7 @@ mod tests {
 
     #[test]
     fn dates_are_pdf_dates() {
-        let d = pdf_date();
+        let d = annotation_date();
         assert!(
             d.starts_with("D:20") && d.ends_with('Z') && d.len() == 17,
             "{d}"

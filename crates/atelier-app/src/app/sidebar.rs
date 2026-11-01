@@ -16,18 +16,19 @@ use super::Viewer;
 const THUMB_W: f32 = 150.0;
 const THUMB_H: f32 = 200.0;
 const ROW_GAP: f32 = 22.0;
-const ACCENT: Color32 = Color32::from_rgb(40, 110, 230);
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 enum Tab {
     #[default]
     Pages,
     Outline,
+    Search,
 }
 
 #[derive(Default)]
 pub(super) struct Sidebar {
     tab: Tab,
+    search_visible: bool,
     /// Pages shown as two-page spreads, the first page on its own.
     spreads: bool,
     /// Page pictures the sidebar would show now and does not have.
@@ -44,6 +45,7 @@ pub(super) struct Sidebar {
 
 /// What the sidebar keeps for a file while another tab is in front.
 pub(super) struct SidebarState {
+    search_visible: bool,
     collapsed: HashSet<usize>,
     selected: BTreeSet<usize>,
     anchor: Option<usize>,
@@ -52,6 +54,7 @@ pub(super) struct SidebarState {
 impl Sidebar {
     pub fn take_state(&mut self) -> SidebarState {
         let state = SidebarState {
+            search_visible: self.search_visible,
             collapsed: std::mem::take(&mut self.collapsed),
             selected: std::mem::take(&mut self.selected),
             anchor: self.anchor.take(),
@@ -62,12 +65,20 @@ impl Sidebar {
 
     pub fn restore_state(&mut self, state: SidebarState) {
         self.reset();
+        self.search_visible = state.search_visible;
         self.collapsed = state.collapsed;
         self.selected = state.selected;
         self.anchor = state.anchor;
     }
 
+    pub fn find(&mut self) {
+        self.search_visible = true;
+        self.tab = Tab::Search;
+    }
+
     pub fn reset(&mut self) {
+        self.search_visible = false;
+        self.tab = Tab::Pages;
         self.collapsed.clear();
         self.followed = None;
         self.wanted.clear();
@@ -82,13 +93,12 @@ enum PageAction {
     Move(Vec<usize>, usize),
     Rotate(Vec<usize>, i32),
     Delete(Vec<usize>),
-    Extract(Vec<usize>),
-    Insert(usize),
+    Organize(Vec<usize>),
 }
 
 /// The menu for a right click on a page picture. `pages` are the pages it
 /// acts on; `at` is the page clicked.
-fn page_menu(ui: &mut egui::Ui, pages: &[usize], at: usize, count: usize) -> Option<PageAction> {
+fn page_menu(ui: &mut egui::Ui, pages: &[usize], count: usize) -> Option<PageAction> {
     let n = pages.len();
     let these = if n == 1 {
         "this page".to_string()
@@ -106,9 +116,6 @@ fn page_menu(ui: &mut egui::Ui, pages: &[usize], at: usize, count: usize) -> Opt
         action = Some(PageAction::Rotate(pages.to_vec(), -1));
     }
     ui.separator();
-    if ui.button(format!("Save {these} as a new file…")).clicked() {
-        action = Some(PageAction::Extract(pages.to_vec()));
-    }
     if ui
         .add_enabled(
             n < count,
@@ -119,14 +126,8 @@ fn page_menu(ui: &mut egui::Ui, pages: &[usize], at: usize, count: usize) -> Opt
         action = Some(PageAction::Delete(pages.to_vec()));
     }
     ui.separator();
-    if ui
-        .button("Add pages from a file before this one…")
-        .clicked()
-    {
-        action = Some(PageAction::Insert(at));
-    }
-    if ui.button("Add pages from a file at the end…").clicked() {
-        action = Some(PageAction::Insert(count));
+    if ui.button("Organize selected pages…").clicked() {
+        action = Some(PageAction::Organize(pages.to_vec()));
     }
     if action.is_some() {
         ui.close();
@@ -165,38 +166,159 @@ impl Viewer {
         }
         egui::Panel::left("sidebar")
             .resizable(true)
-            .default_size(THUMB_W + 40.0)
-            .min_size(120.0)
+            .default_size(240.0)
+            .min_size(200.0)
             .show(ui, |ui| {
                 ui.add_space(4.0);
+                let current = self.current_page();
+                let count = self.open.as_ref().map_or(0, |o| o.layout.page_count());
                 ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(current > 0, egui::Button::new("‹"))
+                        .on_hover_text("Previous page")
+                        .clicked()
+                    {
+                        self.go_to_page(current - 1);
+                    }
+                    let resp = ui.add(
+                        egui::TextEdit::singleline(&mut self.page_input)
+                            .desired_width(48.0)
+                            .align(egui::Align2::CENTER_CENTER)
+                            .hint_text("Page"),
+                    );
+                    if resp.lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        && let Ok(n) = self.page_input.trim().parse::<usize>()
+                    {
+                        self.go_to_page(n.saturating_sub(1));
+                    }
+                    if !resp.has_focus() {
+                        self.page_input = if count > 0 {
+                            (current + 1).to_string()
+                        } else {
+                            String::new()
+                        };
+                    }
+                    ui.label(format!("/ {count}"));
+                    if ui
+                        .add_enabled(current + 1 < count, egui::Button::new("›"))
+                        .on_hover_text("Next page")
+                        .clicked()
+                    {
+                        self.go_to_page(current + 1);
+                    }
+                });
+                if self.sidebar.search_visible {
+                    egui::Frame::new()
+                        .fill(ui.visuals().extreme_bg_color)
+                        .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
+                        .corner_radius(7)
+                        .inner_margin(4)
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 2.0;
+                                let width = (ui.available_width() - 88.0).max(60.0);
+                                let search = ui.add(
+                                    egui::TextEdit::singleline(&mut self.search_input)
+                                        .frame(egui::Frame::NONE)
+                                        .desired_width(width)
+                                        .hint_text("Search document…"),
+                                );
+                                if self.focus_search {
+                                    search.request_focus();
+                                    self.focus_search = false;
+                                }
+                                if search.lost_focus()
+                                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                                {
+                                    self.run_search(ui.input(|i| i.modifiers.shift));
+                                    search.request_focus();
+                                }
+                                if ui
+                                    .add_sized([24.0, 24.0], egui::Button::new("↑").frame(false))
+                                    .on_hover_text("Previous match (Shift+Enter)")
+                                    .clicked()
+                                {
+                                    self.run_search(true);
+                                }
+                                if ui
+                                    .add_sized([24.0, 24.0], egui::Button::new("↓").frame(false))
+                                    .on_hover_text("Next match (Enter, F3)")
+                                    .clicked()
+                                {
+                                    self.run_search(false);
+                                }
+                                if ui
+                                    .add_sized([24.0, 24.0], egui::Button::new("×").frame(false))
+                                    .on_hover_text("Close search (Esc)")
+                                    .clicked()
+                                    || (search.has_focus()
+                                        && ui.input(|i| i.key_pressed(egui::Key::Escape)))
+                                {
+                                    self.sidebar.search_visible = false;
+                                }
+                            });
+                        });
+                    if !self.search.query.is_empty() {
+                        let n = self.search.hits.len();
+                        let label = match (self.search.current, self.search.done) {
+                            (_, false) => format!("{n} found, searching…"),
+                            (_, true) if n == 0 => "No matches".to_string(),
+                            (Some(c), true) => format!("{} of {n}", c + 1),
+                            (None, true) => format!("{n} found"),
+                        };
+                        ui.label(label);
+                    }
+                    if !self.sidebar.search_visible {
+                        self.pool.stop_search();
+                        self.search = Default::default();
+                        self.search_input.clear();
+                        self.sidebar.tab = Tab::Pages;
+                    }
+                }
+                ui.horizontal_wrapped(|ui| {
                     let tab = &mut self.sidebar.tab;
                     ui.selectable_value(tab, Tab::Pages, "Pages");
                     ui.selectable_value(tab, Tab::Outline, "Outline");
-                    if self.sidebar.tab == Tab::Pages {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.toggle_value(&mut self.sidebar.spreads, "Spreads")
-                                .on_hover_text("Show pages side by side, as a book opens");
-                        });
+                    if self.sidebar.search_visible {
+                        ui.selectable_value(tab, Tab::Search, "Results");
                     }
                 });
                 if self.sidebar.tab == Tab::Pages {
-                    let add = ui
-                        .small_button("+ Add pages")
-                        .on_hover_text(
-                            "Add the pages of another PDF at the end.\n\
-                             Drag pages to move them; right-click for more.",
-                        )
-                        .clicked();
-                    if add {
-                        let count = self.open.as_ref().map_or(0, |o| o.layout.page_count());
-                        self.insert_file(count);
-                    }
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut self.sidebar.spreads, "Thumbnail spreads");
+                        ui.weak(format!("{count} pages"));
+                    });
                 }
                 ui.separator();
                 match self.sidebar.tab {
                     Tab::Pages => self.page_list(ui),
                     Tab::Outline => self.outline_list(ui),
+                    Tab::Search => {
+                        if self.search.hits.is_empty() {
+                            ui.label("Search the document text with the field above.");
+                        } else {
+                            let hits: Vec<_> = self
+                                .search
+                                .hits
+                                .iter()
+                                .enumerate()
+                                .map(|(i, hit)| (i, hit.page))
+                                .collect();
+                            egui::ScrollArea::vertical().show(ui, |ui| {
+                                for (i, page) in hits {
+                                    let label = format!("Match {} · page {}", i + 1, page + 1);
+                                    if ui
+                                        .selectable_label(self.search.current == Some(i), label)
+                                        .clicked()
+                                    {
+                                        self.search.current = Some(i);
+                                        self.reveal_hit(i);
+                                    }
+                                }
+                            });
+                        }
+                    }
                 }
             });
     }
@@ -360,7 +482,7 @@ impl Viewer {
                             vec![page]
                         };
                         resp.context_menu(|ui| {
-                            if let Some(a) = page_menu(ui, &targets, page, count) {
+                            if let Some(a) = page_menu(ui, &targets, count) {
                                 action = Some(a);
                             }
                         });
@@ -384,12 +506,15 @@ impl Viewer {
                             action = Some(PageAction::Move(targets.clone(), to));
                         }
                         if picked {
-                            ui.painter()
-                                .rect_filled(rect, 0.0, ACCENT.gamma_multiply(0.25));
+                            ui.painter().rect_filled(
+                                rect,
+                                0.0,
+                                ui.visuals().selection.bg_fill.gamma_multiply(0.25),
+                            );
                         }
                         if page == current || resp.hovered() || picked {
                             let stroke = if page == current || picked {
-                                Stroke::new(2.5, ACCENT)
+                                Stroke::new(2.5, ui.visuals().selection.bg_fill)
                             } else {
                                 Stroke::new(1.0, ui.visuals().widgets.hovered.fg_stroke.color)
                             };
@@ -415,8 +540,11 @@ impl Viewer {
                     );
                 }
                 if let Some((y, _)) = drop_line {
-                    ui.painter()
-                        .hline(area.x_range().shrink(6.0), y, Stroke::new(3.0, ACCENT));
+                    ui.painter().hline(
+                        area.x_range().shrink(6.0),
+                        y,
+                        Stroke::new(3.0, ui.visuals().selection.bg_fill),
+                    );
                 }
             });
         // Delete removes the picked pages while the pointer is over the
@@ -445,8 +573,10 @@ impl Viewer {
             }
             Some(PageAction::Rotate(pages, quarters)) => self.rotate_some(&pages, quarters),
             Some(PageAction::Delete(pages)) => self.delete_pages(&pages),
-            Some(PageAction::Extract(pages)) => self.extract_pages(&pages),
-            Some(PageAction::Insert(at)) => self.insert_file(at),
+            Some(PageAction::Organize(pages)) => {
+                self.sidebar.selected = pages.into_iter().collect();
+                self.organize_pages(self.sidebar.selected.clone());
+            }
             None => {}
         }
     }

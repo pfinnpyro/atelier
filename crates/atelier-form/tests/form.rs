@@ -469,3 +469,110 @@ fn ocr_text_layers_are_saved_as_invisible_text() {
     // And the page looks the same.
     assert_eq!(render(&built.doc).data(), render(&doc).data());
 }
+
+#[test]
+fn cyclic_action_chains_are_bounded() {
+    let doc = Document::open(build(
+        "<< /Fields [] >>",
+        "[4 0 R]",
+        &[
+            "<< /Subtype /Link /A 5 0 R >>",
+            "<< /S /JavaScript /JS (while(true){}) /Next 5 0 R >>",
+        ],
+    ))
+    .unwrap();
+    let actions = document_actions(&doc);
+    assert!(!actions.is_empty());
+    assert!(actions.len() <= 33);
+    assert!(
+        actions
+            .iter()
+            .all(|a| a.javascript.as_deref() == Some("while(true){}"))
+    );
+}
+
+#[test]
+fn action_arrays_preserve_external_targets_without_running_them() {
+    let doc = Document::open(build(
+        "<< /Fields [] >>", "[4 0 R]",
+        &["<< /Subtype /Link /A << /S /JavaScript /JS (app.alert(1)) /Next [<< /S /SubmitForm /F << /UF (https://example.invalid/submit) >> >> << /S /Launch /F (do-not-run.exe) >>] >> >>"],
+    )).unwrap();
+    let actions = document_actions(&doc);
+    assert_eq!(
+        actions.iter().map(|a| a.kind.as_str()).collect::<Vec<_>>(),
+        ["JavaScript", "SubmitForm", "Launch"]
+    );
+    assert_eq!(
+        actions[1].target.as_deref(),
+        Some("https://example.invalid/submit")
+    );
+    assert_eq!(actions[2].target.as_deref(), Some("do-not-run.exe"));
+}
+
+#[test]
+fn hybrid_xfa_is_detected_and_preserved_when_filling_acroform() {
+    for xfa in ["5 0 R", "[(template) 5 0 R]"] {
+        let data = build(
+            &format!("<< /Fields [4 0 R] /XFA {xfa} >>"),
+            "[4 0 R]",
+            &[
+                "<< /Subtype /Widget /FT /Tx /T (name) /Rect [0 0 100 20] >>",
+                "<< /Length 11 >>\nstream\n<template/>\nendstream",
+            ],
+        );
+        let doc = Document::open(data).unwrap();
+        let mut form = Form::load(&doc).unwrap().unwrap();
+        assert!(form.has_xfa);
+        let mut update = doc.update();
+        form.set_value(&mut update, 0, Value::Text("QA".into()))
+            .unwrap();
+        let reopened = Document::open(update.to_bytes().unwrap()).unwrap();
+        let filled = Form::load(&reopened).unwrap().unwrap();
+        assert!(filled.has_xfa);
+        assert_eq!(filled.fields[0].value, Value::Text("QA".into()));
+        let catalog = reopened.catalog().unwrap();
+        let acro = reopened.get_key(&catalog, b"AcroForm").unwrap();
+        assert!(acro.as_dict().unwrap().get(b"XFA").is_some());
+    }
+}
+
+#[test]
+fn signature_fields_are_not_editable_as_text() {
+    let doc = Document::open(build(
+        "<< /Fields [4 0 R] /SigFlags 3 >>",
+        "[4 0 R]",
+        &["<< /Subtype /Widget /FT /Sig /T (approval) /Rect [0 0 100 20] >>"],
+    ))
+    .unwrap();
+    let mut form = Form::load(&doc).unwrap().unwrap();
+    assert_eq!(form.fields[0].kind, FieldKind::Signature);
+    assert_eq!(form.sig_flags, 3);
+    let mut update = doc.update();
+    let warnings = form
+        .set_value(&mut update, 0, Value::Text("QA".into()))
+        .unwrap();
+    assert!(!warnings.is_empty());
+    assert!(update.is_empty());
+}
+
+#[test]
+fn xfa_detection_does_not_depend_on_acroform_fields() {
+    for xfa in ["4 0 R", "[(template) 4 0 R]"] {
+        let doc = Document::open(build(
+            &format!("<< /Fields [] /XFA {xfa} >>"),
+            "[]",
+            &["<< /Length 11 >>\nstream\n<template/>\nendstream"],
+        ))
+        .unwrap();
+        assert!(atelier_form::document_has_xfa(&doc));
+        assert!(Form::load(&doc).unwrap().is_none());
+    }
+    for acro in [
+        "<< /Fields [] >>",
+        "<< /Fields [] /XFA null >>",
+        "<< /Fields [] /XFA 99 0 R >>",
+    ] {
+        let doc = Document::open(build(acro, "[]", &[])).unwrap();
+        assert!(!atelier_form::document_has_xfa(&doc));
+    }
+}

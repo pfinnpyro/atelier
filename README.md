@@ -8,10 +8,11 @@ Windows is the first target. Linux and macOS come later.
 
 ## Status
 
-Phases 1 to 5 are done. Pages render with paths, strokes, clipping, colour,
-uncompressed, Flate and JPEG images, and text in every PDF font type, and the
-text of a page can be extracted with each glyph's position. Shadings and
-patterns are not drawn yet.
+The core viewer and editor are in place: pages render with paths, strokes,
+clipping, colour, images, text, shadings and patterns. The app also supports
+multiple tabs, search, forms, page organization, markup, printing and OCR.
+Transparency groups, blend modes and soft masks have working support; PDF
+fidelity still needs broader coverage and validation against real-world files.
 
 The viewer opens a file (from the Open button, Ctrl+O, by dropping it on the
 window, or on the command line), scrolls through all pages, zooms, selects and
@@ -162,14 +163,13 @@ Atelier and with poppler's `pdftoppm` and prints how many pixels differ
 compares every glyph outline with fontTools'. `tools/gen_font_data.py`
 regenerates the font tables in `atelier-font/src/data`.
 
-## Roadmap
+## Next steps
 
-1. Foundation and test harness
-2. Parse files
-3. Paths and images: content stream interpreter and our own rasterizer
-4. Fonts and text
-5. Viewer app: winit, wgpu, egui chrome, tiled rendering
-6. Full fidelity: shadings, transparency, ICC, JBIG2, JPX, encryption
-7. Saving: incremental updates and full rewrites
-8. Annotations and drawing
-9. Forms
+The original phase list is complete enough to retire. The next rendering step
+is to improve transparency fidelity, especially isolated and knockout groups,
+then build a small in-house visual regression corpus for blend modes, soft
+masks, shadings and patterns. Keep the corpus alongside the renderer so each
+fix has a reproducible example and can be compared with a reference renderer.
+
+After that, prioritize tagged PDF structure and accessibility, then broaden
+the GUI's responsive navigation and contextual document tools.

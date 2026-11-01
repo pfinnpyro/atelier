@@ -3,8 +3,43 @@
 
 use std::path::PathBuf;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ButtonDisplay {
+    IconOnly,
+    #[default]
+    IconAndText,
+    TextOnly,
+}
+impl ButtonDisplay {
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::IconOnly => "icon",
+            Self::IconAndText => "both",
+            Self::TextOnly => "text",
+        }
+    }
+    fn parse(value: &str) -> Self {
+        match value {
+            "icon" => Self::IconOnly,
+            "text" => Self::TextOnly,
+            _ => Self::IconAndText,
+        }
+    }
+}
+pub const TOOLBAR_ACTIONS: [&str; 6] = [
+    "Open",
+    "Save",
+    "Fit width",
+    "Fit page",
+    "Side by side",
+    "Organize",
+];
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
+    pub review_author: String,
+    pub theme: String,
+    pub toolbar_display: [ButtonDisplay; 6],
     /// Files open at Fit page (true) or Fit width.
     pub fit_page: bool,
     /// Turn sideways and upside-down pages upright when a file opens.
@@ -24,6 +59,9 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            review_author: "Reviewer".into(),
+            theme: "system".into(),
+            toolbar_display: [ButtonDisplay::IconAndText; 6],
             fit_page: true,
             orient_on_open: true,
             ocr: true,
@@ -80,7 +118,25 @@ impl Settings {
                 continue;
             };
             let on = matches!(value.trim(), "true" | "yes" | "1" | "on");
+            if let Some(index) = key
+                .trim()
+                .strip_prefix("toolbar-")
+                .and_then(|key| key.parse::<usize>().ok())
+                .filter(|&index| index < 6)
+            {
+                s.toolbar_display[index] = ButtonDisplay::parse(value.trim());
+                continue;
+            }
             match key.trim() {
+                "theme" => {
+                    s.theme = match value.trim() {
+                        "light" => "light",
+                        "dark" => "dark",
+                        _ => "system",
+                    }
+                    .into()
+                }
+                "review-author" => s.review_author = value.trim().to_string(),
                 "zoom" => s.fit_page = value.trim() != "fit-width",
                 "orient-on-open" => s.orient_on_open = on,
                 "ocr" => s.ocr = on,
@@ -95,9 +151,11 @@ impl Settings {
     }
 
     pub fn to_text(&self) -> String {
-        format!(
-            "zoom = {}\norient-on-open = {}\nocr = {}\nocr-save = {}\nsidebar = {}\ncheck-updates = {}\n\
+        let mut text = format!(
+            "theme = {}\nreview-author = {}\nzoom = {}\norient-on-open = {}\nocr = {}\nocr-save = {}\nsidebar = {}\ncheck-updates = {}\n\
              channel = {}\n",
+            self.theme,
+            self.review_author.replace(['\n', '\r'], " "),
             if self.fit_page {
                 "fit-page"
             } else {
@@ -109,7 +167,11 @@ impl Settings {
             self.sidebar,
             self.check_updates,
             if self.preview { "preview" } else { "stable" }
-        )
+        );
+        for (index, display) in self.toolbar_display.iter().enumerate() {
+            text.push_str(&format!("toolbar-{index} = {}\n", display.key()));
+        }
+        text
     }
 
     pub fn save(&self) -> std::io::Result<()> {
@@ -130,6 +192,16 @@ mod tests {
     #[test]
     fn settings_survive_a_round_trip() {
         let s = Settings {
+            review_author: "Ada Lovelace".into(),
+            theme: "light".into(),
+            toolbar_display: [
+                ButtonDisplay::IconOnly,
+                ButtonDisplay::TextOnly,
+                ButtonDisplay::IconAndText,
+                ButtonDisplay::IconOnly,
+                ButtonDisplay::TextOnly,
+                ButtonDisplay::IconAndText,
+            ],
             fit_page: false,
             orient_on_open: false,
             ocr: true,

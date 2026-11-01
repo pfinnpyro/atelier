@@ -3,31 +3,168 @@
   <component name="AutoImportSettings">
     <option name="autoReloadType" value="ALL" />
   </component>
+  <component name="CargoProjects">
+    <cargoProject FILE="$PROJECT_DIR$/Cargo.toml">
+      <package file="$PROJECT_DIR$/crates/atelier-app">
+        <feature name="default" enabled="true" />
+      </package>
+      <package file="$PROJECT_DIR$/crates/atelier-cli">
+        <feature name="default" enabled="true" />
+      </package>
+      <package file="$PROJECT_DIR$/crates/atelier-color">
+        <feature name="default" enabled="true" />
+      </package>
+      <package file="$PROJECT_DIR$/crates/atelier-crypto">
+        <feature name="default" enabled="true" />
+      </package>
+      <package file="$PROJECT_DIR$/crates/atelier-filters">
+        <feature name="default" enabled="true" />
+      </package>
+      <package file="$PROJECT_DIR$/crates/atelier-font">
+        <feature name="default" enabled="true" />
+      </package>
+      <package file="$PROJECT_DIR$/crates/atelier-form">
+        <feature name="default" enabled="true" />
+      </package>
+      <package file="$PROJECT_DIR$/crates/atelier-ocr">
+        <feature name="default" enabled="true" />
+      </package>
+      <package file="$PROJECT_DIR$/crates/atelier-print">
+        <feature name="default" enabled="true" />
+      </package>
+      <package file="$PROJECT_DIR$/crates/atelier-raster">
+        <feature name="default" enabled="true" />
+      </package>
+      <package file="$PROJECT_DIR$/crates/atelier-render">
+        <feature name="default" enabled="true" />
+      </package>
+      <package file="$PROJECT_DIR$/crates/atelier-syntax">
+        <feature name="default" enabled="true" />
+      </package>
+      <package file="$PROJECT_DIR$/crates/atelier-view">
+        <feature name="default" enabled="true" />
+      </package>
+    </cargoProject>
+  </component>
   <component name="ChangeListManager">
-    <list default="true" id="bd812176-28fb-44c7-a454-691165a4c82f" name="Changes" comment="Ignored .idea file" />
+    <list default="true" id="bd812176-28fb-44c7-a454-691165a4c82f" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.github/workflows/ci.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/ci.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-app/src/app.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-app/src/app.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-app/src/app/annotate.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-app/src/app/annotate.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-app/src/app/inspect.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-app/src/app/inspect.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-app/src/app/menu.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-app/src/app/menu.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-app/src/app/pages.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-app/src/app/pages.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-app/src/app/settings_window.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-app/src/app/settings_window.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-app/src/app/sidebar.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-app/src/app/sidebar.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-app/src/app/tabs.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-app/src/app/tabs.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-app/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-app/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-app/src/settings.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-app/src/settings.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-form/src/annots.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-form/src/annots.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-form/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-form/src/lib.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-form/src/session.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-form/src/session.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-form/tests/annots.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-form/tests/annots.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-form/tests/form.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-form/tests/form.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-form/tests/pages.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-form/tests/pages.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-render/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-render/src/lib.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-view/src/layout.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-view/src/layout.rs" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="RsBuildProfile:dev" />
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="4" />
+    <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
+  </component>
+  <component name="ExecutionTargetManager" SELECTED_TARGET="RsBuildProfile:release" />
   <component name="Git.Settings">
     <option name="PREVIOUS_COMMIT_AUTHORS">
       <list>
         <option value="Patrick Finnegan &lt;pfinn.e@outlook.com&gt;" />
       </list>
     </option>
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="claude/project-thread-qh9d2f" />
+      </map>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;history&quot;: [
+    {
+      &quot;state&quot;: &quot;OPEN&quot;
+    }
+  ],
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;
+  }
+}</component>
+  <component name="GitHubPullRequestState">{
+  &quot;prStates&quot;: [
+    {
+      &quot;id&quot;: {
+        &quot;id&quot;: &quot;PR_kwDOSlPmNs8AAAABLok3Lg&quot;,
+        &quot;number&quot;: 23
+      },
+      &quot;lastSeen&quot;: 1793378262501
+    },
+    {
+      &quot;id&quot;: {
+        &quot;id&quot;: &quot;PR_kwDOSlPmNs8AAAABLoptQg&quot;,
+        &quot;number&quot;: 24
+      },
+      &quot;lastSeen&quot;: 1793378279001
+    },
+    {
+      &quot;id&quot;: {
+        &quot;id&quot;: &quot;PR_kwDOSlPmNs8AAAABLo2DZg&quot;,
+        &quot;number&quot;: 25
+      },
+      &quot;lastSeen&quot;: 1793378280834
+    },
+    {
+      &quot;id&quot;: {
+        &quot;id&quot;: &quot;PR_kwDOSlPmNs8AAAABLyhR8w&quot;,
+        &quot;number&quot;: 26
+      },
+      &quot;lastSeen&quot;: 1793378300928
+    },
+    {
+      &quot;id&quot;: {
+        &quot;id&quot;: &quot;PR_kwDOSlPmNs8AAAABLyo3aQ&quot;,
+        &quot;number&quot;: 27
+      },
+      &quot;lastSeen&quot;: 1793378307279
+    },
+    {
+      &quot;id&quot;: {
+        &quot;id&quot;: &quot;PR_kwDOSlPmNs8AAAABLyqycg&quot;,
+        &quot;number&quot;: 28
+      },
+      &quot;lastSeen&quot;: 1793378316137
+    },
+    {
+      &quot;id&quot;: {
+        &quot;id&quot;: &quot;PR_kwDOSlPmNs8AAAABLQ-Exg&quot;,
+        &quot;number&quot;: 4
+      },
+      &quot;lastSeen&quot;: 1793549223194
+    }
+  ]
+}</component>
   <component name="GithubDefaultAccount">
     <option name="defaultAccountId" value="215218ec-6652-4650-889b-07967c3a61ba" />
   </component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/pfinnpyro/atelier.git",
-    "accountId": "215218ec-6652-4650-889b-07967c3a61ba"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/pfinnpyro/atelier.git&quot;,
+    &quot;accountId&quot;: &quot;215218ec-6652-4650-889b-07967c3a61ba&quot;
   }
-}]]></component>
+}</component>
   <component name="MacroExpansionManager">
     <option name="directoryName" value="r7QDRT6H" />
   </component>
@@ -35,16 +172,113 @@
     <commands />
     <urls />
   </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 3
+}</component>
+  <component name="ProjectId" id="3LQFATr4AwDsRKhkDsEW366TElq" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "Cargo.Publish macOS.executor": "Run",
+    "Cargo.Publish release.executor": "Run",
+    "Cargo.Run.executor": "Run",
+    "CidrDebugProfileConversion": "true",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.rust.reset.selective.auto.import": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "SHARE_PROJECT_CONFIGURATION_FILES": "true",
-    "git-widget-placeholder": "main",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "git-widget-placeholder": "codex/improvements",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true",
+    "org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon": "",
     "settings.editor.selected.configurable": "org.jetbrains.plugins.github.ui.GithubSettingsConfigurable"
   }
 }]]></component>
+  <component name="RunManager" selected="Cargo.Publish macOS">
+    <configuration name="Publish Windows" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="build --release --bin atelier-viewer --target x86_64-pc-windows-msvc" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="STABLE" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Publish macOS" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="build --release --bin atelier-viewer --target aarch64-apple-darwin" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="STABLE" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run" type="CargoCommandRunConfiguration" factoryName="Cargo Command" nameIsGenerated="true">
+      <option name="buildProfileId" value="release" />
+      <option name="command" value="run --bin atelier-viewer" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <list>
+      <item itemvalue="Cargo.Run" />
+      <item itemvalue="Cargo.Publish Windows" />
+      <item itemvalue="Cargo.Publish macOS" />
+    </list>
+  </component>
+  <component name="RustProjectSettings">
+    <option name="toolchainHomeDirectory" value="$USER_HOME$/.cargo/bin" />
+  </component>
   <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="bd812176-28fb-44c7-a454-691165a4c82f" name="Changes" comment="" />
+      <created>1793378242028</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1793378242028</updated>
+    </task>
     <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Ignored .idea file" />

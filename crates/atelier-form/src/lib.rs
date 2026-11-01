@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 
 use atelier_syntax::{Dict, Document, ObjRef, Object, Rect, Result};
 
-pub use annots::{Markup, NOTE_SIZE, NewAnnot, line_quads};
+pub use annots::{Markup, NOTE_SIZE, NewAnnot, Review, annotation_date, line_quads};
 pub use da::DefaultAppearance;
 pub use fill::FillWarning;
 pub use pages::PageSlot;
@@ -268,6 +268,19 @@ const MAX_DEPTH: usize = 64;
 /// More fields than this are ignored, as a guard against hostile files.
 const MAX_FIELDS: usize = 100_000;
 
+/// XFA presence is independent of the AcroForm field tree. In particular,
+/// XFA-only documents often have no editable AcroForm fields at all.
+pub fn document_has_xfa(doc: &Document) -> bool {
+    let Ok(catalog) = doc.catalog() else {
+        return false;
+    };
+    let Ok(Object::Dict(acro)) = doc.get_key(&catalog, b"AcroForm") else {
+        return false;
+    };
+    doc.get_key(&acro, b"XFA")
+        .is_ok_and(|value| !value.is_null())
+}
+
 impl Form {
     /// Reads the document's AcroForm, or None when it has no fields.
     pub fn load(doc: &Document) -> Result<Option<Self>> {
@@ -288,7 +301,7 @@ impl Form {
                 .ok()
                 .and_then(|o| o.as_bool())
                 .unwrap_or(false),
-            has_xfa: acro.get(b"XFA").is_some_and(|x| !x.is_null()),
+            has_xfa: document_has_xfa(doc),
             sig_flags: doc
                 .get_key(&acro, b"SigFlags")
                 .ok()

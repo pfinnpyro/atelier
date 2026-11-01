@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use atelier_form::{Markup, NewAnnot, line_quads};
+use atelier_form::{Markup, NewAnnot, Review, line_quads};
 use atelier_raster::Point;
 use atelier_syntax::Object;
 use eframe::egui::{self, Color32, CursorIcon, Key, Modifiers, Pos2, Sense, Shape, Stroke, Vec2};
@@ -44,12 +44,47 @@ const NOTE_COLOR: [f64; 3] = [1.0, 0.82, 0.25];
 /// A placed signature's width, in points.
 const SIGNATURE_WIDTH: f64 = 150.0;
 
+pub(super) fn display_date(date: &str) -> String {
+    let raw = date.strip_prefix("D:").unwrap_or(date);
+    if raw.len() >= 14 && raw.as_bytes()[..14].iter().all(u8::is_ascii_digit) {
+        format!(
+            "{}-{}-{} {}:{}:{} {}",
+            &raw[..4],
+            &raw[4..6],
+            &raw[6..8],
+            &raw[8..10],
+            &raw[10..12],
+            &raw[12..14],
+            if raw.ends_with('Z') {
+                "UTC"
+            } else {
+                &raw[14..]
+            }
+        )
+    } else {
+        date.to_owned()
+    }
+}
+
 /// The comment being written.
 pub(super) struct NoteEditor {
     page: usize,
     at: Point,
     text: String,
     focus: bool,
+    created: String,
+    modified: String,
+    author: String,
+    subject: String,
+    target: Option<ReviewTarget>,
+    highlights: Vec<(usize, Vec<[Point; 4]>)>,
+    generation: u64,
+}
+
+#[derive(Clone, Copy)]
+enum ReviewTarget {
+    Saved(usize),
+    Added(usize),
 }
 
 /// The signature pad: strokes in its own box, 0 to 1 across.
@@ -199,6 +234,10 @@ impl Viewer {
 
     /// Highlights the selected text.
     pub(super) fn highlight_selection(&mut self) {
+        self.review_selection(None);
+    }
+
+    pub(super) fn review_selection(&mut self, strike: Option<bool>) {
         let Some(sel) = self.selection.filter(|s| !s.is_empty()) else {
             self.notice = Some("Select some text first, then highlight it.".into());
             return;
@@ -221,7 +260,10 @@ impl Viewer {
             o.session.add_annot(
                 page,
                 NewAnnot {
-                    markup: Markup::Highlight { quads },
+                    markup: match strike {
+                        Some(strike) => Markup::TextLine { quads, strike },
+                        None => Markup::Highlight { quads },
+                    },
                     color,
                 },
             );
@@ -298,37 +340,103 @@ impl Viewer {
 
     /// The text of a comment (or any annotation with text) under a layout
     /// point, from the document as it stands.
-    fn comment_at(&self, lx: f64, ly: f64) -> Option<String> {
+    fn comment_at(&self, lx: f64, ly: f64) -> Option<NoteEditor> {
         let o = self.open.as_ref()?;
         let (page, _, _) = o.layout.page_at(lx, ly)?;
         let p = o.layout.to_user(page, lx, ly)?;
-        let doc = &o.doc;
-        let pages = doc.pages().ok()?;
-        let Ok(Object::Array(annots)) = doc.get_key(&pages.get(page)?.dict, b"Annots") else {
+        let pages = o.doc.pages().ok()?;
+        let Object::Array(annots) = o.doc.get_key(&pages.get(page)?.dict, b"Annots").ok()? else {
             return None;
         };
-        for a in annots.iter().rev().take(2000) {
-            let Ok(d) = doc.resolve_dict(a) else { continue };
-            let popup = doc
-                .get_key(&d, b"Subtype")
-                .ok()
-                .is_some_and(|s| s.as_name().is_some_and(|n| *n == b"Popup"));
-            let Ok(Object::String(text)) = doc.get_key(&d, b"Contents") else {
+        let added = o.session.added_annots();
+        let page_added: Vec<_> = added
+            .iter()
+            .enumerate()
+            .filter(|(_, (on, _))| *on == page)
+            .map(|(i, _)| i)
+            .collect();
+        let original_count = annots.len().saturating_sub(page_added.len());
+        for (ordinal, a) in annots.iter().enumerate().rev().take(2000) {
+            let Ok(d) = o.doc.resolve_dict(a) else {
                 continue;
             };
-            let rect = doc
+            let kind = o.doc.get_key(&d, b"Subtype").ok()?;
+            if !kind.as_name().is_some_and(|n| {
+                matches!(
+                    n.0.as_slice(),
+                    b"Text"
+                        | b"Highlight"
+                        | b"Underline"
+                        | b"StrikeOut"
+                        | b"Squiggly"
+                        | b"FreeText"
+                        | b"Ink"
+                )
+            }) {
+                continue;
+            }
+            let value = |key: &[u8]| {
+                o.doc
+                    .get_key(&d, key)
+                    .ok()
+                    .and_then(|v| {
+                        if let Object::String(s) = v {
+                            Some(s.to_text())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_default()
+            };
+            let text = value(b"Contents");
+            if text.is_empty() && !kind.as_name().is_some_and(|n| *n == b"Text") {
+                continue;
+            }
+            let rect = o
+                .doc
                 .get_key(&d, b"Rect")
                 .ok()
                 .and_then(|r| atelier_syntax::Rect::from_array(r.as_array()?));
-            let inside = rect.is_some_and(|r| {
+            let mut hit = rect.is_some_and(|r| {
                 p.x >= r.x0.min(r.x1)
                     && p.x <= r.x0.max(r.x1)
                     && p.y >= r.y0.min(r.y1)
                     && p.y <= r.y0.max(r.y1)
             });
-            let text = text.to_text();
-            if inside && !popup && !text.trim().is_empty() {
-                return Some(text);
+            if let Ok(Object::Array(points)) = o.doc.get_key(&d, b"QuadPoints") {
+                hit = points.as_chunks::<8>().0.iter().any(|q| {
+                    let numbers: Option<Vec<_>> = q.iter().map(Object::as_f64).collect();
+                    numbers.is_some_and(|v| {
+                        super::inside(
+                            &[
+                                Point::new(v[4], v[5]),
+                                Point::new(v[6], v[7]),
+                                Point::new(v[2], v[3]),
+                                Point::new(v[0], v[1]),
+                            ],
+                            p,
+                        )
+                    })
+                });
+            }
+            if hit {
+                return Some(NoteEditor {
+                    page,
+                    at: p,
+                    text,
+                    focus: false,
+                    created: value(b"CreationDate"),
+                    modified: value(b"M"),
+                    author: value(b"T"),
+                    subject: value(b"Subj"),
+                    target: Some(if ordinal >= original_count {
+                        ReviewTarget::Added(page_added[ordinal - original_count])
+                    } else {
+                        ReviewTarget::Saved(ordinal)
+                    }),
+                    highlights: Vec::new(),
+                    generation: o.generation,
+                });
             }
         }
         None
@@ -347,13 +455,20 @@ impl Viewer {
             if let Some((lx, ly)) = at
                 && response.hovered()
                 && !self.selecting
-                && let Some(text) = self.comment_at(lx, ly)
+                && let Some(note) = self.comment_at(lx, ly)
             {
-                let mut text = text;
-                if text.chars().count() > 600 {
-                    text = text.chars().take(600).collect::<String>() + "…";
+                ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+                if response.clicked() {
+                    self.annotate.note = Some(note);
+                    self.selection = None;
+                    return true;
                 }
-                response.clone().on_hover_text_at_pointer(text);
+                response.clone().on_hover_text_at_pointer(format!(
+                    "{} · {}\n{}\nClick to open comment",
+                    note.author,
+                    display_date(&note.created),
+                    note.text.chars().take(500).collect::<String>()
+                ));
             }
             return false;
         }
@@ -372,12 +487,7 @@ impl Viewer {
                     && let Some((page, p)) = user
                 {
                     if tool == Tool::Note {
-                        self.annotate.note = Some(NoteEditor {
-                            page,
-                            at: p,
-                            text: String::new(),
-                            focus: true,
-                        });
+                        self.comment_here(page, p);
                     } else {
                         self.place_signature(page, p);
                     }
@@ -452,7 +562,8 @@ impl Viewer {
         o.session.add_annot(page, annot);
         self.annotate.tool = Tool::Select;
         self.rebuild(&HashSet::from([page]), false);
-        self.notice = Some("Signed. Right-click the signature to remove it, or Ctrl+Z.".into());
+        self.notice =
+            Some("Ink signature added. This is not certificate-backed. Ctrl+Z to undo.".into());
     }
 
     /// Draws the lines being drawn, and the signature under the pointer
@@ -606,7 +717,10 @@ impl Viewer {
             ui.close();
         }
         if ui
-            .add(egui::Button::selectable(tool == Tool::Sign, "Sign…"))
+            .add(egui::Button::selectable(
+                tool == Tool::Sign,
+                "Ink signature…",
+            ))
             .on_hover_text("Draw your signature once, then click to place it")
             .clicked()
         {
@@ -630,60 +744,168 @@ impl Viewer {
         }
     }
 
-    /// The comment being written, by the spot it goes.
+    pub(super) fn comment_here(&mut self, page: usize, at: Point) {
+        let mut highlights = Vec::new();
+        if let Some(selection) = self.selection.filter(|s| !s.is_empty())
+            && let Some(o) = &self.open
+        {
+            for page in selection.start().page..=selection.end().page {
+                if let Some(text) = o.text.get(&page)
+                    && let Some(range) = selection.range_on(page, text.glyphs.len())
+                {
+                    let quads = line_quads(&text.glyphs[range]);
+                    if !quads.is_empty() {
+                        highlights.push((page, quads));
+                    }
+                }
+            }
+        }
+        let date = atelier_form::annotation_date();
+        self.annotate.note = Some(NoteEditor {
+            page,
+            at,
+            text: String::new(),
+            focus: true,
+            created: date.clone(),
+            modified: date,
+            author: self.settings.review_author.clone(),
+            subject: String::new(),
+            target: None,
+            highlights,
+            generation: self.open.as_ref().map_or(0, |o| o.generation),
+        });
+    }
+
     pub(super) fn note_window(&mut self, ctx: &egui::Context) {
         let Some(note) = &mut self.annotate.note else {
             return;
         };
-        let mut add = false;
+        let current = self
+            .open
+            .as_ref()
+            .is_some_and(|o| o.generation == note.generation);
+        let mut save = false;
         let mut cancel = false;
-        egui::Window::new("Comment")
-            .collapsible(false)
-            .resizable(false)
-            .default_pos(
-                ctx.pointer_interact_pos()
-                    .unwrap_or(Pos2::new(200.0, 200.0)),
-            )
-            .show(ctx, |ui| {
-                // Taken before the text box, which would make it a new line.
-                let shortcut = ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Enter));
-                let edit = ui.add(
-                    egui::TextEdit::multiline(&mut note.text)
-                        .desired_rows(4)
-                        .desired_width(260.0)
-                        .hint_text("Type your comment"),
-                );
-                if note.focus {
-                    edit.request_focus();
-                    note.focus = false;
-                }
-                ui.horizontal(|ui| {
-                    add = ui
-                        .add_enabled(
-                            !note.text.trim().is_empty(),
-                            egui::Button::new("Add").shortcut_text("Ctrl+Enter"),
-                        )
-                        .clicked()
-                        || (shortcut && !note.text.trim().is_empty());
-                    cancel =
-                        ui.button("Cancel").clicked() || ui.input(|i| i.key_pressed(Key::Escape));
-                });
+        let mut open = true;
+        egui::Window::new(if note.target.is_some() {
+            "Review comment"
+        } else {
+            "New comment"
+        })
+        .id(egui::Id::unique("review-comment-editor"))
+        .open(&mut open)
+        .collapsible(false)
+        .resizable(true)
+        .default_width(340.0)
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Author");
+                ui.text_edit_singleline(&mut note.author);
             });
-        if cancel {
-            self.annotate.note = None;
-        } else if add && let Some(note) = self.annotate.note.take() {
-            let Some(o) = &mut self.open else { return };
-            o.session.add_annot(
-                note.page,
-                NewAnnot {
-                    markup: Markup::Note {
-                        at: note.at,
-                        text: note.text.trim_end().to_string(),
-                    },
-                    color: NOTE_COLOR,
-                },
+            ui.horizontal(|ui| {
+                ui.label("Subject");
+                ui.text_edit_singleline(&mut note.subject);
+            });
+            ui.weak(format!("Created {}", display_date(&note.created)));
+            if note.target.is_some() {
+                ui.weak(format!("Modified {}", display_date(&note.modified)));
+            }
+            if !note.highlights.is_empty() {
+                ui.weak("Anchored to the selected text highlight.");
+            }
+            ui.label("Note");
+            let shortcut = ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Enter));
+            let edit = ui.add(
+                egui::TextEdit::multiline(&mut note.text)
+                    .desired_rows(5)
+                    .desired_width(f32::INFINITY)
+                    .hint_text("Write a review note…"),
             );
-            self.rebuild(&HashSet::from([note.page]), false);
+            if note.focus {
+                edit.request_focus();
+                note.focus = false;
+            }
+            if !current {
+                ui.colored_label(
+                    ui.visuals().warn_fg_color,
+                    "The document changed. Copy your note, then reopen the comment before saving.",
+                );
+            }
+            let valid = current && !note.text.trim().is_empty() && !note.author.trim().is_empty();
+            ui.horizontal(|ui| {
+                save = ui
+                    .add_enabled(
+                        valid,
+                        egui::Button::new(if note.target.is_some() {
+                            "Save comment"
+                        } else {
+                            "Add comment"
+                        }),
+                    )
+                    .clicked()
+                    || (shortcut && valid);
+                cancel = ui.button("Cancel").clicked() || ui.input(|i| i.key_pressed(Key::Escape));
+            });
+        });
+        if cancel || !open {
+            self.annotate.note = None;
+        } else if save && let Some(note) = self.annotate.note.take() {
+            let date = atelier_form::annotation_date();
+            let review = Review {
+                text: note.text.trim_end().to_owned(),
+                author: note.author.trim().to_owned(),
+                subject: note.subject.trim().to_owned(),
+                created: if note.created.is_empty() {
+                    date.clone()
+                } else {
+                    note.created
+                },
+                modified: date,
+            };
+            let Some(o) = &mut self.open else { return };
+            let mut pages = HashSet::from([note.page]);
+            match note.target {
+                Some(ReviewTarget::Saved(ordinal)) => {
+                    o.session.set_review(note.page, ordinal, review)
+                }
+                Some(ReviewTarget::Added(index)) => {
+                    o.session.set_added_review(index, review);
+                }
+                None => {
+                    self.settings.review_author = review.author.clone();
+                    if note.highlights.is_empty() {
+                        o.session.add_annot(
+                            note.page,
+                            NewAnnot {
+                                markup: Markup::Note {
+                                    at: note.at,
+                                    review,
+                                },
+                                color: NOTE_COLOR,
+                            },
+                        );
+                    } else {
+                        for (page, quads) in note.highlights {
+                            o.session.add_annot(
+                                page,
+                                NewAnnot {
+                                    markup: Markup::Comment {
+                                        quads,
+                                        review: review.clone(),
+                                    },
+                                    color: self.annotate.highlight,
+                                },
+                            );
+                            pages.insert(page);
+                        }
+                    }
+                    if let Err(error) = self.settings.save() {
+                        self.error = Some(format!("Could not save review identity: {error}"));
+                    }
+                }
+            }
+            self.selection = None;
+            self.rebuild(&pages, false);
         }
     }
 
@@ -802,5 +1024,75 @@ mod tests {
         assert_eq!(t.first(), line.first());
         assert_eq!(t.last(), line.last());
         assert!(t.len() < 10);
+    }
+    #[test]
+    fn saved_inline_comments_hit_the_highlight_not_the_gap() {
+        let doc=atelier_syntax::Document::open(b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >> endobj\n%%EOF".to_vec()).unwrap();
+        let mut session = atelier_form::Session::new(std::sync::Arc::new(doc));
+        let p = Point::new;
+        let quads = vec![
+            [
+                p(20.0, 130.0),
+                p(80.0, 130.0),
+                p(80.0, 145.0),
+                p(20.0, 145.0),
+            ],
+            [
+                p(20.0, 100.0),
+                p(60.0, 100.0),
+                p(60.0, 115.0),
+                p(20.0, 115.0),
+            ],
+        ];
+        session.add_annot(
+            0,
+            NewAnnot {
+                markup: Markup::Comment {
+                    quads,
+                    review: Review {
+                        text: "Check totals".into(),
+                        author: "Ada".into(),
+                        subject: "Totals".into(),
+                        created: "D:20261101120000Z".into(),
+                        modified: "D:20261101120000Z".into(),
+                    },
+                },
+                color: [1.0, 0.9, 0.0],
+            },
+        );
+        let saved = session.build().unwrap().doc;
+        let ctx = egui::Context::default();
+        let mut viewer = Viewer::initialize(
+            &eframe::CreationContext::_new_kittest(ctx),
+            Settings {
+                check_updates: false,
+                ocr: false,
+                orient_on_open: false,
+                ..Default::default()
+            },
+        );
+        viewer.open_with_password(saved.data().to_vec(), "review-test.pdf".into(), "", None);
+        let transform = viewer
+            .open
+            .as_ref()
+            .unwrap()
+            .layout
+            .user_to_layout(0)
+            .unwrap();
+        for point in [p(30.0, 135.0), p(30.0, 105.0)] {
+            let point = transform.apply(point);
+            let note = viewer
+                .comment_at(point.x, point.y)
+                .expect("saved highlight must open a review editor");
+            assert_eq!(note.text, "Check totals");
+            assert_eq!(note.author, "Ada");
+            assert_eq!(note.subject, "Totals");
+            assert!(matches!(note.target, Some(ReviewTarget::Saved(0))));
+        }
+        let gap = transform.apply(p(30.0, 122.0));
+        assert!(
+            viewer.comment_at(gap.x, gap.y).is_none(),
+            "whitespace between highlight lines must remain selectable"
+        );
     }
 }

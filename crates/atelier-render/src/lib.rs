@@ -1,9 +1,9 @@
 //! Renders PDF pages to pixmaps with Atelier's own rasterizer.
 //!
 //! Covers paths, strokes, clipping, device and CIE colour, Form XObjects,
-//! images (including JPEG) and text with embedded or substituted fonts.
-//! Shadings, patterns, transparency groups and annotations come in later
-//! phases.
+//! images, text with embedded or substituted fonts, shadings, patterns and
+//! common transparency features. Unsupported or malformed content is
+//! reported through render warnings where possible.
 
 mod colorspace;
 mod font;
