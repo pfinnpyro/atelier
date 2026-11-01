@@ -37,10 +37,14 @@ impl Viewer {
             fv.form = form;
         }
         o.doc = built.doc;
+        o.safety.refresh(o.doc.clone());
+        Self::refresh_script_state(o);
         if turned {
             if let Ok(p) = o.doc.pages() {
                 let zoom = o.layout.zoom();
+                let facing = o.layout.facing_pages();
                 o.layout = Layout::new(p.iter().map(PageGeom::of).collect(), zoom);
+                o.layout.set_facing_pages(facing);
             }
             for &p in pages {
                 o.tiles.remove_page(p);
@@ -356,20 +360,18 @@ impl Viewer {
         ));
     }
 
-    /// Asks for a PDF and adds all its pages before page `at` (the page
-    /// count for the end).
-    pub(super) fn insert_file(&mut self, at: usize) {
+    /// Inserts the chosen PDF before `at` (the page count means the end).
+    /// Errors are returned to the insertion dialog so the source can be corrected.
+    pub(super) fn insert_pdf_path(
+        &mut self,
+        path: &std::path::Path,
+        at: usize,
+    ) -> Result<(), String> {
         if !self.can_arrange() {
-            return;
+            return Err("Open a PDF before inserting pages.".into());
         }
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("PDF documents", &["pdf"])
-            .pick_file()
-        else {
-            return;
-        };
-        let name = super::display_name(&path);
-        let doc = match std::fs::read(&path)
+        let name = super::display_name(path);
+        let doc = match std::fs::read(path)
             .map_err(|e| e.to_string())
             .and_then(|data| {
                 atelier_syntax::Document::open(data).map_err(|e| match e {
@@ -381,22 +383,31 @@ impl Viewer {
             }) {
             Ok(d) => Arc::new(d),
             Err(e) => {
-                self.error = Some(format!("Could not add {name}: {e}."));
-                return;
+                return Err(format!("Could not insert {name}: {e}."));
             }
         };
-        let Some(o) = &mut self.open else { return };
+        let Some(o) = &mut self.open else {
+            return Err("The document was closed.".into());
+        };
         match o.session.insert_file(doc, at) {
             Ok(old) => {
                 let added = old.iter().filter(|o| o.is_none()).count();
                 let first = old.iter().position(Option::is_none);
+                let before = self.generation;
                 self.rearranged(&old, first);
+                if self.generation == before {
+                    return Err(self
+                        .error
+                        .clone()
+                        .unwrap_or_else(|| "Could not rebuild the inserted pages.".into()));
+                }
                 self.notice = Some(format!(
                     "Added {added} {} from {name}.",
                     if added == 1 { "page" } else { "pages" }
                 ));
+                Ok(())
             }
-            Err(e) => self.error = Some(format!("Could not add {name}: {e}.")),
+            Err(e) => Err(format!("Could not insert {name}: {e}.")),
         }
     }
 
@@ -441,7 +452,7 @@ impl Viewer {
     /// Swaps in the document after pages moved, went or came. `old` gives
     /// each page's index before (`None` for a new one); what the viewer
     /// keeps per page follows its page. Shows `show` afterwards.
-    fn rearranged(&mut self, old: &[Option<usize>], show: Option<usize>) {
+    pub(super) fn rearranged(&mut self, old: &[Option<usize>], show: Option<usize>) {
         let Some(o) = &mut self.open else { return };
         let built = match o.session.build() {
             Ok(b) => b,
@@ -453,17 +464,20 @@ impl Viewer {
         if let Some(w) = built.warnings.first() {
             self.error = Some(w.to_string());
         }
-        match (&mut o.form, built.form) {
-            (Some(fv), Some(form)) => {
-                fv.tab = form.tab_order(&built.doc);
-                fv.form = form;
-            }
-            (form, _) => *form = None,
-        }
+        let highlight = o.form.as_ref().is_none_or(|fv| fv.highlight);
+        o.form = built.form.map(|form| {
+            let mut view = super::form::FormView::new(form, &built.doc);
+            view.highlight = highlight;
+            view
+        });
         o.doc = built.doc;
+        o.safety.refresh(o.doc.clone());
+        Self::refresh_script_state(o);
         if let Ok(p) = o.doc.pages() {
             let zoom = o.layout.zoom();
+            let facing = o.layout.facing_pages();
             o.layout = Layout::new(p.iter().map(PageGeom::of).collect(), zoom);
+            o.layout.set_facing_pages(facing);
         }
         fn remap<T>(map: &mut HashMap<usize, T>, old: &[Option<usize>]) {
             let mut was: HashMap<usize, T> = std::mem::take(map);

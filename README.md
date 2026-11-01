@@ -8,10 +8,11 @@ Windows is the first target. Linux and macOS come later.
 
 ## Status
 
-Phases 1 to 5 are done. Pages render with paths, strokes, clipping, colour,
-uncompressed, Flate and JPEG images, and text in every PDF font type, and the
-text of a page can be extracted with each glyph's position. Shadings and
-patterns are not drawn yet.
+The core viewer and editor are in place: pages render with paths, strokes,
+clipping, colour, images, text, shadings and patterns. The app also supports
+multiple tabs, search, forms, page organization, markup, printing and OCR.
+Transparency groups, blend modes and soft masks have working support; PDF
+fidelity still needs broader coverage and validation against real-world files.
 
 The viewer opens a file (from the Open button, Ctrl+O, by dropping it on the
 window, or on the command line), scrolls through all pages, zooms, selects and
@@ -89,30 +90,37 @@ The **Mark** menu:
 - **Highlight**: select text, then pick a colour and *Highlight the selected
   text* (or right-click the selection). Each line gets its own box, and the
   text shows through.
-- **Add a comment**: click where it goes and type. Pointing at a comment, or
-  at any annotation with text (including ones already in the file), shows
-  its text.
+- **Add a comment**: select text and choose *Comment on selected text* for an
+  inline highlighted note, or right-click a page to pin a note. Click saved or
+  new comments to edit their author, subject and text. Creation and modification
+  timestamps are kept as standard PDF metadata.
 - **Draw**: drag on a page; pick an ink colour and width in the bar along
   the bottom. Enter adds the lines drawn so far, Esc puts the pen down.
-- **Sign…**: draw your signature once on the pad, then click where it goes.
+- **Ink signature…**: draw your signature once on the pad, then click where it goes.
   It is kept in `signature.txt` beside the settings, on this computer only,
   for next time; *Draw a new signature…* replaces it. This is a drawn
   signature, not a cryptographic digital signature.
 
 Ctrl+Z takes back the newest mark, and right-clicking a mark added since the
 last save removes it. Marks are saved as standard Highlight, Text and Ink
-annotations, each with its own appearance, so other PDF apps show them too.
+annotations (also Underline and StrikeOut), each with its own appearance, so
+other PDF apps show them too.
 
 ## Organizing pages
 
-In the sidebar's page list:
+Use **Organize** in the toolbar to open a page grid. Select pages using the
+checkboxes, Shift-click a range, and drag a page to move the selected group.
+Move to start/end, rotate and export work on the selected pages.
 
-- Click a page to go to it; Ctrl+click and Shift+click pick several.
-- Drag pages to move them (in the one-column view).
-- Right-click for: rotate, save the pages as a new file, remove them, and add
-  the pages of another PDF before this page or at the end. **+ Add pages**
-  adds a file's pages at the end, which is how files are merged.
-- Delete removes the picked pages while the pointer is over the list.
+- **Insert PDF…** chooses another PDF and inserts its pages at the document's
+  beginning/end, or before/after the selected pages.
+- **Split…** exports two new PDFs at a page boundary.
+- **Export…** saves the selected pages as a separate PDF.
+
+The navigation sidebar retains page previews, outline, thumbnail spreads,
+selection, rotation and deletion. Find (Ctrl/Cmd+F or the main menu) reveals
+search. **Side by side** in the toolbar pairs pages in the main document view.
+Each main toolbar button's icon/text mode is configurable in Settings.
 
 Changes are saved like any other. Once pages are removed, saving writes the
 file out whole without them, so their content is gone from the file's bytes
@@ -187,14 +195,13 @@ Atelier and with poppler's `pdftoppm` and prints how many pixels differ
 compares every glyph outline with fontTools'. `tools/gen_font_data.py`
 regenerates the font tables in `atelier-font/src/data`.
 
-## Roadmap
+## Next steps
 
-1. Foundation and test harness
-2. Parse files
-3. Paths and images: content stream interpreter and our own rasterizer
-4. Fonts and text
-5. Viewer app: winit, wgpu, egui chrome, tiled rendering
-6. Full fidelity: shadings, transparency, ICC, JBIG2, JPX, encryption
-7. Saving: incremental updates and full rewrites
-8. Annotations and drawing
-9. Forms
+The original phase list is complete enough to retire. The next rendering step
+is to improve transparency fidelity, especially isolated and knockout groups,
+then build a small in-house visual regression corpus for blend modes, soft
+masks, shadings and patterns. Keep the corpus alongside the renderer so each
+fix has a reproducible example and can be compared with a reference renderer.
+
+After that, prioritize tagged PDF structure and accessibility, then broaden
+the GUI's responsive navigation and contextual document tools.

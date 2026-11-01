@@ -41,6 +41,7 @@ pub struct Session {
     layers: BTreeMap<PageSlot, Arc<PageText>>,
     /// Annotations added, oldest first, with their page.
     annots: Vec<(PageSlot, NewAnnot)>,
+    review_edits: BTreeMap<(PageSlot, usize), crate::Review>,
     /// Fields shown (false) or hidden (true) by form scripts, by index.
     hidden: BTreeMap<usize, bool>,
 }
@@ -66,6 +67,7 @@ impl Session {
             quiet: BTreeMap::new(),
             layers: BTreeMap::new(),
             annots: Vec::new(),
+            review_edits: BTreeMap::new(),
             hidden: BTreeMap::new(),
         }
     }
@@ -99,6 +101,20 @@ impl Session {
         if let Some(&slot) = self.order.get(page) {
             self.annots.push((slot, annot));
         }
+    }
+
+    /// Edit a saved review by its ordinal in the original page's Annots array.
+    /// The page slot follows reordering and imported pages through copying.
+    pub fn set_review(&mut self, page: usize, ordinal: usize, review: crate::Review) {
+        if let Some(&slot) = self.order.get(page) {
+            self.review_edits.insert((slot, ordinal), review);
+        }
+    }
+
+    pub fn set_added_review(&mut self, index: usize, review: crate::Review) -> bool {
+        self.annots
+            .get_mut(index)
+            .is_some_and(|(_, annot)| annot.set_review(review))
     }
 
     /// Takes back the newest annotation added; returns its page.
@@ -252,6 +268,7 @@ impl Session {
         self.quiet.retain(|s, _| kept.contains(s));
         self.layers.retain(|s, _| kept.contains(s));
         self.annots.retain(|(s, _)| kept.contains(s));
+        self.review_edits.retain(|(slot, _), _| kept.contains(slot));
         Some(old)
     }
 
@@ -280,6 +297,7 @@ impl Session {
             || self.rotations != self.quiet
             || self.pages_changed()
             || !self.annots.is_empty()
+            || !self.review_edits.is_empty()
             || !self.hidden.is_empty()
     }
 
@@ -292,6 +310,7 @@ impl Session {
         self.quiet.clear();
         self.layers.clear();
         self.annots.clear();
+        self.review_edits.clear();
         self.hidden.clear();
     }
 
@@ -305,6 +324,7 @@ impl Session {
             && self.rotations.is_empty()
             && self.layers.is_empty()
             && self.annots.is_empty()
+            && self.review_edits.is_empty()
             && self.hidden.is_empty()
             && !redraw
             && !reorder
@@ -363,6 +383,35 @@ impl Session {
             if let Object::Dict(mut d) = update.get(page_ref)? {
                 d.insert("Rotate", Object::Integer(i64::from(r)));
                 update.set(page_ref, Object::Dict(d));
+            }
+        }
+        for ((slot, ordinal), review) in &self.review_edits {
+            let Some(&page_ref) = refs.get(slot) else {
+                continue;
+            };
+            let Object::Dict(mut page) = update.get(page_ref)? else {
+                continue;
+            };
+            let Some(list) = page.get(b"Annots") else {
+                continue;
+            };
+            let Object::Array(mut list) = update.resolve(list)? else {
+                continue;
+            };
+            let Some(target) = list.get(*ordinal) else {
+                continue;
+            };
+            let reference = target.as_reference();
+            let Object::Dict(mut annot) = update.resolve(target)? else {
+                continue;
+            };
+            crate::annots::write_review(&mut annot, review);
+            if let Some(reference) = reference {
+                update.set(reference, Object::Dict(annot));
+            } else {
+                list[*ordinal] = Object::Dict(annot);
+                page.insert("Annots", Object::Array(list));
+                update.set(page_ref, Object::Dict(page));
             }
         }
         for (n, (slot, a)) in self.annots.iter().enumerate() {
@@ -554,6 +603,8 @@ impl Session {
         self.quiet.clear();
         self.layers.clear();
         self.annots.clear();
+        self.review_edits.clear();
+        self.hidden.clear();
     }
 
     /// Pages whose widgets show `field`, as the pages are now ordered.

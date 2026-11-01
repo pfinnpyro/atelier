@@ -12,6 +12,7 @@ use super::Viewer;
 pub(super) enum MenuTarget {
     Text {
         page: usize,
+        at: atelier_raster::Point,
     },
     Field((usize, usize)),
     /// A mark added since the file was opened or saved.
@@ -55,7 +56,9 @@ impl Viewer {
             return;
         }
         let Some(o) = &self.open else { return };
-        let page = o.layout.page_at_y(ly);
+        let Some((page, _, _)) = o.layout.page_at(lx, ly) else {
+            return;
+        };
         if self.over_text(lx, ly) {
             let in_selection = self.caret_at(lx, ly).is_some_and(|c| {
                 self.selection
@@ -68,15 +71,39 @@ impl Viewer {
                 self.selection = word_at(text, page, user);
             }
         }
-        self.menu = Some(MenuTarget::Text { page });
+        if let Some(at) = o.layout.to_user(page, lx, ly) {
+            self.menu = Some(MenuTarget::Text { page, at });
+        }
     }
 
     /// The menu's items.
     pub(super) fn context_menu(&mut self, ui: &mut egui::Ui) {
         match self.menu {
-            Some(MenuTarget::Text { page }) => self.text_menu(ui, page),
+            Some(MenuTarget::Text { page, at }) => self.text_menu(ui, page, at),
             Some(MenuTarget::Field(at)) => self.field_menu(ui, at),
             Some(MenuTarget::Mark(i)) => {
+                let mark = self.open.as_ref().and_then(|o| {
+                    o.session
+                        .added_annots()
+                        .get(i)
+                        .map(|(page, annot)| (*page, (*annot).clone()))
+                });
+                if let Some((page, annot)) = mark {
+                    if let Some(review) = annot.review() {
+                        ui.strong(&review.author);
+                        ui.weak(super::annotate::display_date(&review.created));
+                        if ui.button("Copy comment text").clicked() {
+                            ui.ctx().copy_text(review.text.clone());
+                            ui.close();
+                        }
+                    }
+                    if ui.button("Add comment in this area…").clicked() {
+                        let rect = annot.rect();
+                        self.comment_here(page, atelier_raster::Point::new(rect[0], rect[3]));
+                        ui.close();
+                    }
+                    ui.separator();
+                }
                 if ui.button("Remove this mark").clicked() {
                     self.remove_mark(i);
                     ui.close();
@@ -88,7 +115,7 @@ impl Viewer {
         }
     }
 
-    fn text_menu(&mut self, ui: &mut egui::Ui, page: usize) {
+    fn text_menu(&mut self, ui: &mut egui::Ui, page: usize, at: atelier_raster::Point) {
         let has_selection = self.selection.is_some_and(|s| !s.is_empty());
         if ui
             .add_enabled(
@@ -107,6 +134,30 @@ impl Viewer {
             self.highlight_selection();
             ui.close();
         }
+        for (label, strike) in [("Underline", false), ("Strike out", true)] {
+            if ui
+                .add_enabled(has_selection, egui::Button::new(label))
+                .clicked()
+            {
+                self.review_selection(Some(strike));
+                ui.close();
+            }
+        }
+        if ui
+            .button(if has_selection {
+                "Comment on selected text…"
+            } else {
+                "Add comment here…"
+            })
+            .clicked()
+        {
+            self.comment_here(page, at);
+            ui.close();
+        }
+        ui.menu_button("Review tools", |ui| {
+            self.mark_menu(ui);
+        });
+        ui.separator();
         let glyphs = self
             .open
             .as_ref()

@@ -1,6 +1,6 @@
 //! The inspector panel: the file at a glance, its objects and streams, its
 //! form fields, and every script and action it carries. Scripts are shown
-//! as text and never run.
+//! as text; approved form and click scripts run only through the helper sandbox.
 
 use atelier_form::{Field, FieldKind, Value, flags};
 use atelier_syntax::{Document, ObjRef, Object};
@@ -14,7 +14,6 @@ const PREVIEW_LIMIT: usize = 256 * 1024;
 /// Object tree depth at most, against reference loops.
 const MAX_DEPTH: usize = 48;
 const RISKY: Color32 = Color32::from_rgb(230, 140, 60);
-const NOTE: Color32 = Color32::from_rgb(140, 180, 255);
 /// Orange at 15% opacity, premultiplied.
 const PICK_FILL: Color32 = Color32::from_rgba_premultiplied(35, 21, 9, 38);
 
@@ -144,19 +143,27 @@ impl Viewer {
     /// widget picked to go to.
     fn fields_tab(&mut self, ui: &mut egui::Ui) -> Option<(usize, usize)> {
         let Some(fv) = self.open.as_ref().and_then(|o| o.form.as_ref()) else {
-            ui.label("This file has no form fields.");
+            if self
+                .open
+                .as_ref()
+                .is_some_and(|o| atelier_form::document_has_xfa(&o.doc))
+            {
+                ui.colored_label(ui.visuals().warn_fg_color, "This PDF contains an XFA-only form. XFA layout, calculations and scripts are unsupported; no editable AcroForm fallback is available.");
+            } else {
+                ui.label("This file has no form fields.");
+            }
             return None;
         };
         let form = &fv.form;
         if form.has_xfa {
             ui.colored_label(
-                NOTE,
-                "The file also has an XFA form. Atelier uses its AcroForm.",
+                ui.visuals().hyperlink_color,
+                "Hybrid XFA form: edits update only the AcroForm fallback. XFA data and calculations are not synchronized.",
             );
         }
         if form.need_appearances {
             ui.colored_label(
-                NOTE,
+                ui.visuals().hyperlink_color,
                 "The file asks viewers to redraw its fields; Atelier did.",
             );
         }
@@ -424,7 +431,10 @@ fn objects_tab(ui: &mut egui::Ui, doc: &Document, insp: &mut Inspector) {
         }
     });
     if insp.picking {
-        ui.colored_label(NOTE, "Click something on the page. Esc cancels.");
+        ui.colored_label(
+            ui.visuals().hyperlink_color,
+            "Click something on the page. Esc cancels.",
+        );
     }
     let mut tree = Tree { doc, show: None };
     // With stream data open, the tree takes the top half.

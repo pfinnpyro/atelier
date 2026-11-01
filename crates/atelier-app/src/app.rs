@@ -23,9 +23,11 @@ use crate::worker::{Done, Job, Pool};
 
 mod annotate;
 mod colors;
+mod controls;
 mod form;
 mod inspect;
 mod menu;
+mod organize;
 mod pages;
 mod print;
 mod safety;
@@ -47,7 +49,6 @@ const MIN_ZOOM: f64 = 0.05;
 const MAX_ZOOM: f64 = 64.0;
 /// GPU memory for page tiles.
 const TILE_BUDGET: usize = 512 << 20;
-const BACKDROP: Color32 = Color32::from_gray(82);
 const SELECTION: Color32 = Color32::from_rgba_premultiplied(0, 70, 160, 90);
 const HIT: Color32 = Color32::from_rgba_premultiplied(120, 100, 0, 110);
 const CURRENT_HIT: Color32 = Color32::from_rgba_premultiplied(160, 70, 0, 150);
@@ -142,6 +143,8 @@ pub struct Viewer {
     /// A message about something done, shown until dismissed.
     notice: Option<String>,
     zoom_mode: ZoomMode,
+    zoom_input: String,
+    organize: organize::Organize,
     /// The scroll offset as of the last frame.
     offset: Vec2,
     /// The page view's size as of the last frame.
@@ -193,11 +196,29 @@ struct Locked {
 
 impl Viewer {
     pub fn new(cc: &eframe::CreationContext<'_>, path: Option<PathBuf>) -> Self {
+        let mut v = Self::initialize(cc, Settings::load());
+        v.ctx.set_theme(match v.settings.theme.as_str() {
+            "light" => egui::ThemePreference::Light,
+            "dark" => egui::ThemePreference::Dark,
+            _ => egui::ThemePreference::System,
+        });
+        crate::update::clean_up();
+        if v.settings.check_updates {
+            v.updater.check(v.settings.preview, true, v.ctx.clone());
+        }
+        if let Some(p) = path {
+            v.open_path(&p);
+        }
+        v
+    }
+
+    fn initialize(cc: &eframe::CreationContext<'_>, settings: Settings) -> Self {
         let ctx = cc.egui_ctx.clone();
         // Ctrl +/- zoom the document, not the interface.
         ctx.options_mut(|o| o.zoom_with_keyboard = false);
+        controls::style(&ctx);
         let wake = ctx.clone();
-        let mut v = Self {
+        Self {
             pool: Pool::new(move || wake.request_repaint()),
             ctx,
             open: None,
@@ -205,6 +226,8 @@ impl Viewer {
             error: None,
             notice: None,
             zoom_mode: ZoomMode::FitWidth,
+            zoom_input: String::new(),
+            organize: organize::Organize::default(),
             offset: Vec2::ZERO,
             view_size: Vec2::new(800.0, 600.0),
             scroll_to: None,
@@ -220,7 +243,7 @@ impl Viewer {
             closing: false,
             inspector: Inspector::default(),
             menu: None,
-            settings: Settings::load(),
+            settings,
             window: None,
             ocr_download: None,
             colors: colors::Colors::default(),
@@ -230,15 +253,7 @@ impl Viewer {
             tabs: Vec::new(),
             recent: crate::recent::Recent::load(),
             annotate: annotate::Annotate::default(),
-        };
-        crate::update::clean_up();
-        if v.settings.check_updates {
-            v.updater.check(v.settings.preview, true, v.ctx.clone());
         }
-        if let Some(p) = path {
-            v.open_path(&p);
-        }
-        v
     }
 
     fn open_path(&mut self, path: &Path) {
@@ -529,7 +544,10 @@ impl Viewer {
         }
         let lx = f64::from(self.offset.x + anchor.x) - shift;
         let ly = f64::from(self.offset.y + anchor.y);
-        let page = o.layout.page_at_y(ly);
+        let page = o
+            .layout
+            .page_at(lx, ly)
+            .map_or_else(|| o.layout.page_at_y(ly), |(page, _, _)| page);
         let user = o.layout.to_user(page, lx, ly);
         o.layout.set_zoom(zoom);
         if let (Some(u), Some(t)) = (user, o.layout.user_to_layout(page)) {
@@ -866,7 +884,7 @@ impl Viewer {
         }
         self.form_keys();
         if shortcut(Key::F) {
-            self.focus_search = true;
+            self.request_find();
         }
         if pressed(Key::F3) {
             self.run_search(shift);
@@ -913,6 +931,16 @@ impl Viewer {
         }
     }
 
+    fn request_find(&mut self) {
+        if self.open.is_none() {
+            return;
+        }
+        self.settings.sidebar = true;
+        self.organize.grid = false;
+        self.sidebar.find();
+        self.focus_search = true;
+    }
+
     fn toggle_sidebar(&mut self) {
         self.settings.sidebar = !self.settings.sidebar;
         if let Err(e) = self.settings.save() {
@@ -933,7 +961,10 @@ impl Viewer {
     /// The caret nearest a layout point, on the page nearest it.
     fn caret_at(&self, lx: f64, ly: f64) -> Option<Caret> {
         let o = self.open.as_ref()?;
-        let page = o.layout.page_at_y(ly);
+        let page = o
+            .layout
+            .page_at(lx, ly)
+            .map_or_else(|| o.layout.page_at_y(ly), |(page, _, _)| page);
         let text = o.text.get(&page)?;
         let user = o.layout.to_user(page, lx, ly)?;
         hit_test(text, page, user)
@@ -956,7 +987,73 @@ impl Viewer {
     // ----- Panels -------------------------------------------------------
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
+        ui.spacing_mut().interact_size.y = controls::HEIGHT;
+        ui.horizontal_wrapped(|ui| {
+            if crate::chrome::integrated_mac() {
+                ui.add_space(76.0);
+            }
+            ui.menu_button("☰", |ui| {
+                if ui
+                    .add_enabled(
+                        self.open.is_some(),
+                        egui::Button::new("Find in document…").shortcut_text("Ctrl+F"),
+                    )
+                    .clicked()
+                {
+                    self.request_find();
+                    ui.close();
+                }
+                if ui.button("Print…").clicked() {
+                    self.open_print();
+                    ui.close();
+                }
+                ui.add_enabled_ui(self.open.is_some(), |ui| {
+                    ui.menu_button("Mark", |ui| self.mark_menu(ui));
+                });
+                ui.separator();
+                if let Some(fv) = self.open.as_ref().and_then(|o| o.form.as_ref())
+                    && ui.selectable_label(fv.highlight, "Fields").clicked()
+                {
+                    self.toggle_highlight();
+                    ui.close();
+                }
+                if ui
+                    .selectable_label(self.inspector.open, "Inspect")
+                    .clicked()
+                {
+                    self.inspector.open = !self.inspector.open;
+                    ui.close();
+                }
+                if ui.selectable_label(self.colors.open, "Colours").clicked() {
+                    self.toggle_colors();
+                    ui.close();
+                }
+                if ui.button("Rotate pages left").clicked() {
+                    self.rotate_pages(-1);
+                    ui.close();
+                }
+                if ui.button("Rotate pages right").clicked() {
+                    self.rotate_pages(1);
+                    ui.close();
+                }
+                let orienting = self.open.as_ref().is_some_and(|o| o.orienting.is_some());
+                if ui
+                    .add_enabled(!orienting, egui::Button::new("Auto-orient pages"))
+                    .clicked()
+                {
+                    self.auto_orient();
+                    ui.close();
+                }
+                ui.separator();
+                if ui.button("Settings…").clicked() {
+                    self.window = Some(Window::Settings);
+                    ui.close();
+                }
+                if ui.button("About Atelier").clicked() {
+                    self.window = Some(Window::About);
+                    ui.close();
+                }
+            });
             if ui
                 .add(egui::Button::selectable(self.settings.sidebar, "◧"))
                 .on_hover_text("Page pictures and outline (F4)")
@@ -964,35 +1061,33 @@ impl Viewer {
             {
                 self.toggle_sidebar();
             }
-            ui.scope(|ui| {
-                ui.spacing_mut().item_spacing.x = 1.0;
-                if ui
-                    .button("Open…")
-                    .on_hover_text("Open a PDF (Ctrl+O)")
-                    .clicked()
-                {
-                    self.pick_file();
+            let (open, recent) = controls::split_button(
+                ui,
+                "Open",
+                controls::Icon::Open,
+                self.settings.toolbar_display[0],
+                "Recent files",
+            );
+            if open.on_hover_text("Open a PDF (Ctrl+O)").clicked() {
+                self.pick_file();
+            }
+            egui::Popup::menu(&recent).show(|ui| {
+                if let Some(path) = self.recent_menu(ui) {
+                    self.open_recent(&path);
                 }
-                ui.menu_button("⏷", |ui| {
-                    if let Some(path) = self.recent_menu(ui) {
-                        self.open_recent(&path);
-                    }
-                })
-                .response
-                .on_hover_text("Recent files");
             });
-            let dirty = self.is_dirty();
             ui.add_enabled_ui(self.open.is_some(), |ui| {
-                // A split button: Save a copy, with Save and Save as beside it.
-                ui.spacing_mut().item_spacing.x = 1.0;
-                if ui
-                    .button("Save a copy…")
-                    .on_hover_text("Save the file with your changes under a new name")
-                    .clicked()
-                {
-                    self.save(SaveTo::Copy);
+                let (save, options) = controls::split_button(
+                    ui,
+                    "Save",
+                    controls::Icon::Save,
+                    self.settings.toolbar_display[1],
+                    "Save options",
+                );
+                if save.on_hover_text("Save changes (Ctrl+S)").clicked() {
+                    self.save(SaveTo::Overwrite);
                 }
-                ui.menu_button("⏷", |ui| {
+                egui::Popup::menu(&options).show(|ui| {
                     if ui
                         .add(egui::Button::new("Save").shortcut_text("Ctrl+S"))
                         .on_hover_text("Save over the file it was opened from")
@@ -1014,168 +1109,112 @@ impl Viewer {
                     }
                 });
             });
-            if dirty {
-                ui.label("●").on_hover_text("Unsaved changes");
-            }
-            if ui
-                .add_enabled(self.open.is_some(), egui::Button::new("Print…"))
-                .on_hover_text("Print (Ctrl+P)")
-                .clicked()
-            {
-                self.open_print();
-            }
-            ui.add_enabled_ui(self.open.is_some(), |ui| {
-                ui.menu_button("Mark", |ui| self.mark_menu(ui))
-                    .response
-                    .on_hover_text("Highlight, comment, draw and sign");
-            });
-            if let Some(fv) = self.open.as_ref().and_then(|o| o.form.as_ref()) {
-                let on = fv.highlight;
-                if ui
-                    .selectable_label(on, "Fields")
-                    .on_hover_text("Highlight fields you can fill in (Tab moves between them)")
-                    .clicked()
-                {
-                    self.toggle_highlight();
-                }
-            }
-            if ui
-                .add_enabled(
-                    self.open.is_some(),
-                    egui::Button::selectable(self.inspector.open, "Inspect"),
-                )
-                .on_hover_text("Objects, fields and scripts in this file (F12)")
-                .clicked()
-            {
-                self.inspector.open = !self.inspector.open;
-            }
-            if ui
-                .add_enabled(
-                    self.open.is_some(),
-                    egui::Button::selectable(self.colors.open, "Colours"),
-                )
-                .on_hover_text("Pick a colour from the page; list the spot colours (F6)")
-                .clicked()
-            {
-                self.toggle_colors();
-            }
             ui.separator();
-            let count = self.open.as_ref().map_or(0, |o| o.layout.page_count());
-            let enabled = count > 0;
+            let enabled = self.open.is_some();
             ui.add_enabled_ui(enabled, |ui| {
-                let current = self.current_page();
-                let field = egui::TextEdit::singleline(&mut self.page_input)
-                    .desired_width(40.0)
-                    .align(Align2::CENTER_CENTER);
-                let resp = ui.add(field).on_hover_text("Go to page");
-                // Read what was typed before the box shows the current page
-                // again: it loses focus in the same frame Enter is pressed.
-                if resp.lost_focus()
-                    && ui.input(|i| i.key_pressed(Key::Enter))
-                    && let Ok(n) = self.page_input.trim().parse::<usize>()
-                {
-                    self.go_to_page(n.saturating_sub(1));
-                }
-                if !resp.has_focus() {
-                    self.page_input = if enabled {
-                        (current + 1).to_string()
-                    } else {
-                        String::new()
-                    };
-                }
-                ui.label(format!("/ {count}"));
-                ui.separator();
                 let centre = self.view_size / 2.0;
                 if ui.button("−").on_hover_text("Zoom out (Ctrl+−)").clicked() {
                     self.zoom_by(0.8, centre);
                 }
-                ui.label(format!("{:.0}%", self.zoom() * 100.0));
+                let zoom = ui
+                    .add(
+                        egui::TextEdit::singleline(&mut self.zoom_input)
+                            .id_salt("custom-zoom")
+                            .desired_width(54.0)
+                            .align(egui::Align2::CENTER_CENTER),
+                    )
+                    .on_hover_text("Enter a zoom from 10% to 800%, then press Enter");
+                if zoom.lost_focus() {
+                    if ui.input(|i| i.key_pressed(Key::Enter)) {
+                        if let Some(value) = controls::parse_zoom(&self.zoom_input) {
+                            self.zoom_mode = ZoomMode::Custom;
+                            self.set_zoom(value, centre);
+                        } else {
+                            self.notice = Some("Enter a zoom between 10% and 800%.".into());
+                        }
+                    }
+                    self.zoom_input = format!("{:.0}%", self.zoom() * 100.0);
+                } else if !zoom.has_focus() {
+                    self.zoom_input = format!("{:.0}%", self.zoom() * 100.0);
+                }
                 if ui.button("+").on_hover_text("Zoom in (Ctrl+=)").clicked() {
                     self.zoom_by(1.25, centre);
                 }
-                if ui
-                    .selectable_label(self.zoom_mode == ZoomMode::FitWidth, "Fit width")
-                    .clicked()
+                if controls::toolbar_button(
+                    ui,
+                    "Fit width",
+                    controls::Icon::FitWidth,
+                    self.settings.toolbar_display[2],
+                    self.zoom_mode == ZoomMode::FitWidth,
+                )
+                .clicked()
                 {
                     self.zoom_mode = ZoomMode::FitWidth;
                     self.apply_fit();
                 }
-                if ui
-                    .selectable_label(self.zoom_mode == ZoomMode::FitPage, "Fit page")
-                    .clicked()
+                if controls::toolbar_button(
+                    ui,
+                    "Fit page",
+                    controls::Icon::FitPage,
+                    self.settings.toolbar_display[3],
+                    self.zoom_mode == ZoomMode::FitPage,
+                )
+                .clicked()
                 {
                     self.zoom_mode = ZoomMode::FitPage;
                     self.apply_fit();
                 }
-                ui.separator();
-                if ui
-                    .button("↺")
-                    .on_hover_text("Rotate all pages counterclockwise (Ctrl+Shift+−)")
-                    .clicked()
-                {
-                    self.rotate_pages(-1);
-                }
-                if ui
-                    .button("↻")
-                    .on_hover_text("Rotate all pages clockwise (Ctrl+Shift+=)")
-                    .clicked()
-                {
-                    self.rotate_pages(1);
-                }
-                let orienting = self.open.as_ref().is_some_and(|o| o.orienting.is_some());
-                if ui
-                    .add_enabled(!orienting, egui::Button::new("Auto-orient"))
-                    .on_hover_text("Turn each page so its text reads upright")
-                    .clicked()
-                {
-                    self.auto_orient();
-                }
-                ui.separator();
-                let field = egui::TextEdit::singleline(&mut self.search_input)
-                    .hint_text("Search")
-                    .desired_width(180.0);
-                let resp = ui.add(field);
-                if self.focus_search {
-                    resp.request_focus();
-                    self.focus_search = false;
-                }
-                if resp.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
-                    let back = ui.input(|i| i.modifiers.shift);
-                    self.run_search(back);
-                    resp.request_focus();
-                }
-                if ui
-                    .button("▲")
-                    .on_hover_text("Previous (Shift+Enter)")
-                    .clicked()
-                {
-                    self.run_search(true);
-                }
-                if ui.button("▼").on_hover_text("Next (Enter, F3)").clicked() {
-                    self.run_search(false);
-                }
-                if !self.search.query.is_empty() {
-                    let n = self.search.hits.len();
-                    let label = match (self.search.current, self.search.done) {
-                        (_, false) => format!("{n} found, searching…"),
-                        (_, true) if n == 0 => "No matches".to_string(),
-                        (Some(c), true) => format!("{} of {n}", c + 1),
-                        (None, true) => format!("{n} found"),
-                    };
-                    ui.label(label);
-                }
             });
+            let facing = self.open.as_ref().is_some_and(|o| o.layout.facing_pages());
+            let facing_button = ui
+                .add_enabled_ui(self.open.is_some() && !self.organize.grid, |ui| {
+                    controls::toolbar_button(
+                        ui,
+                        "Side by side",
+                        controls::Icon::SideBySide,
+                        self.settings.toolbar_display[4],
+                        facing,
+                    )
+                })
+                .inner;
+            if facing_button
+                .on_hover_text("Show two pages side by side")
+                .clicked()
+            {
+                let page = self.current_page();
+                if let Some(o) = &mut self.open {
+                    o.layout.set_facing_pages(!facing);
+                }
+                self.apply_fit();
+                self.go_to_page(page);
+            }
+            let organize_button = ui
+                .add_enabled_ui(self.open.is_some(), |ui| {
+                    controls::toolbar_button(
+                        ui,
+                        "Organize",
+                        controls::Icon::Organize,
+                        self.settings.toolbar_display[5],
+                        self.organize.grid,
+                    )
+                })
+                .inner;
+            if organize_button
+                .on_hover_text("Rearrange pages in a grid")
+                .clicked()
+            {
+                self.toggle_page_grid();
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.menu_button("☰", |ui| {
-                    if ui.button("Settings…").clicked() {
-                        self.window = Some(Window::Settings);
-                        ui.close();
-                    }
-                    if ui.button("About Atelier").clicked() {
-                        self.window = Some(Window::About);
-                        ui.close();
-                    }
-                });
+                crate::chrome::window_buttons(ui);
+                if ui
+                    .add(egui::Button::selectable(self.inspector.open, "◨"))
+                    .on_hover_text("Toggle inspector sidebar")
+                    .clicked()
+                {
+                    self.inspector.open = !self.inspector.open;
+                }
+                crate::chrome::drag_space(ui);
                 if let Some(o) = &self.open
                     && !o.warnings.is_empty()
                 {
@@ -1223,10 +1262,7 @@ impl Viewer {
                     submit = true;
                 }
                 if locked.wrong {
-                    ui.colored_label(
-                        Color32::from_rgb(220, 90, 70),
-                        "That password is not right.",
-                    );
+                    ui.colored_label(ui.visuals().error_fg_color, "That password is not right.");
                 }
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
@@ -1320,7 +1356,8 @@ impl Viewer {
 
     fn empty_view(&mut self, ui: &mut egui::Ui) {
         let rect = ui.available_rect_before_wrap();
-        ui.painter().rect_filled(rect, CornerRadius::ZERO, BACKDROP);
+        ui.painter()
+            .rect_filled(rect, CornerRadius::ZERO, ui.visuals().panel_fill);
         let msg = self
             .error
             .clone()
@@ -1331,7 +1368,7 @@ impl Viewer {
                 Align2::CENTER_CENTER,
                 msg,
                 FontId::proportional(16.0),
-                Color32::from_gray(230),
+                ui.visuals().text_color(),
             );
             return;
         }
@@ -1345,13 +1382,13 @@ impl Viewer {
             ui.label(
                 egui::RichText::new(msg)
                     .size(16.0)
-                    .color(Color32::from_gray(230)),
+                    .color(ui.visuals().text_color()),
             );
             ui.add_space(14.0);
             ui.label(
                 egui::RichText::new("Recent files")
                     .strong()
-                    .color(Color32::from_gray(200)),
+                    .color(ui.visuals().text_color()),
             );
             ui.add_space(4.0);
             for path in &self.recent.files {
@@ -1362,15 +1399,17 @@ impl Viewer {
                     .unwrap_or_default();
                 let resp = ui
                     .add(
-                        egui::Button::new(egui::RichText::new(name).color(Color32::from_gray(235)))
-                            .frame(false)
-                            .truncate(),
+                        egui::Button::new(
+                            egui::RichText::new(name).color(ui.visuals().text_color()),
+                        )
+                        .frame(false)
+                        .truncate(),
                     )
                     .on_hover_text(path.display().to_string());
                 ui.label(
                     egui::RichText::new(folder)
                         .small()
-                        .color(Color32::from_gray(150)),
+                        .color(ui.visuals().weak_text_color()),
                 );
                 ui.add_space(4.0);
                 if resp.clicked() {
@@ -1412,7 +1451,11 @@ impl Viewer {
         let ppp = ui.ctx().pixels_per_point();
         let shift = self.centre_shift();
         let painter = ui.painter();
-        painter.rect_filled(viewport.translate(origin.to_vec2()), 0.0, BACKDROP);
+        painter.rect_filled(
+            viewport.translate(origin.to_vec2()),
+            0.0,
+            ui.visuals().panel_fill,
+        );
         let print_page = self.print_preview_page();
         let Some(o) = &mut self.open else { return };
         o.tiles.next_frame();
@@ -1705,7 +1748,10 @@ impl Viewer {
                     && !on_field
                     && let Some(o) = &self.open
                 {
-                    let page = o.layout.page_at_y(ly);
+                    let page = o
+                        .layout
+                        .page_at(lx, ly)
+                        .map_or_else(|| o.layout.page_at_y(ly), |(page, _, _)| page);
                     if let (Some(text), Some(user)) =
                         (o.text.get(&page), o.layout.to_user(page, lx, ly))
                         && self.over_text(lx, ly)
@@ -1744,6 +1790,7 @@ impl eframe::App for Viewer {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             self.confirm = Some(Pending::Close);
         }
+        crate::chrome::resize_edges(&ctx);
         self.receive();
         if self.confirm.is_none() {
             self.annot_keys(&ctx);
@@ -1756,6 +1803,7 @@ impl eframe::App for Viewer {
             self.toolbar(ui);
             ui.add_space(2.0);
         });
+        self.organize_window(&ctx);
         self.tab_bar(ui);
         self.update_banner(ui);
         self.tool_bar(ui);
@@ -1773,7 +1821,7 @@ impl eframe::App for Viewer {
         if let Some(err) = self.error.clone().filter(|_| self.open.is_some()) {
             egui::Panel::bottom("status").show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.colored_label(Color32::from_rgb(220, 90, 70), err);
+                    ui.colored_label(ui.visuals().error_fg_color, err);
                     if ui.small_button("Dismiss").clicked() {
                         self.error = None;
                     }
@@ -1786,7 +1834,16 @@ impl eframe::App for Viewer {
         if self.inspector.open {
             self.inspector_panel(ui);
         }
-        egui::CentralPanel::no_frame().show(ui, |ui| self.page_view(ui));
+        egui::CentralPanel::no_frame().show(ui, |ui| {
+            if self.organize.grid {
+                egui::Frame::new()
+                    .fill(ui.visuals().panel_fill)
+                    .inner_margin(12)
+                    .show(ui, |ui| self.page_grid(ui));
+            } else {
+                self.page_view(ui);
+            }
+        });
         if self.show_warnings {
             self.warnings_window(&ctx);
         }

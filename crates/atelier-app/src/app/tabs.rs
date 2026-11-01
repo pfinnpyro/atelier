@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use atelier_view::Selection;
-use eframe::egui::{self, Key, Modifiers, RichText, Vec2};
+use eframe::egui::{self, Key, Modifiers, Vec2};
 
 use super::sidebar::SidebarState;
 use super::{Open, Pending, Search, Viewer, ZoomMode};
@@ -84,6 +84,7 @@ impl Viewer {
 
     /// Clears what belongs to the file that was in front.
     fn after_switch(&mut self) {
+        self.organize = Default::default();
         self.selecting = false;
         self.menu = None;
         self.annotate.reset();
@@ -250,32 +251,19 @@ impl Viewer {
                             if name.chars().count() > 32 {
                                 name = name.chars().take(30).collect::<String>() + "…";
                             }
-                            let text = if front {
-                                RichText::new(name).strong()
-                            } else {
-                                RichText::new(name)
-                            };
                             let hover = open
                                 .path
                                 .as_ref()
                                 .map_or(open.name.clone(), |p| p.display().to_string());
-                            ui.spacing_mut().item_spacing.x = 0.0;
-                            let resp = ui.selectable_label(front, text).on_hover_text(hover);
-                            if resp.clicked() {
+                            let (tab, close_button) =
+                                super::controls::document_tab(ui, i, &name, front);
+                            let tab = tab.on_hover_text(hover);
+                            if tab.clicked() {
                                 go = Some(i);
                             }
-                            if resp.middle_clicked() {
+                            if tab.middle_clicked() || close_button.clicked() {
                                 close = Some(i);
                             }
-                            if ui
-                                .small_button("×")
-                                .on_hover_text("Close (Ctrl+W)")
-                                .clicked()
-                            {
-                                close = Some(i);
-                            }
-                            ui.spacing_mut().item_spacing.x = 8.0;
-                            ui.separator();
                         }
                     });
                 });

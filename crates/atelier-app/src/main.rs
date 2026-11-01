@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod chrome;
 mod default_app;
 mod recent;
 mod settings;
@@ -27,12 +28,14 @@ fn main() -> eframe::Result {
     let icon = load_icon();
     let path = std::env::args_os().nth(1).map(PathBuf::from);
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("Atelier")
-            .with_inner_size([1100.0, 800.0])
-            .with_min_inner_size([360.0, 240.0])
-            .with_drag_and_drop(true)
-            .with_icon(Arc::new(icon)),
+        viewport: chrome::viewport(
+            eframe::egui::ViewportBuilder::default()
+                .with_title("Atelier")
+                .with_inner_size([1100.0, 800.0])
+                .with_min_inner_size([360.0, 240.0])
+                .with_drag_and_drop(true)
+                .with_icon(Arc::new(icon)),
+        ),
         ..Default::default()
     };
     eframe::run_native(

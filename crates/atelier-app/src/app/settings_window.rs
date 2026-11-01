@@ -35,7 +35,8 @@ impl Viewer {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .default_width(380.0)
+            .default_width(420.0)
+            .vscroll(true)
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .show(ctx, |ui| match which {
                 Window::Settings => self.settings_ui(ui),
@@ -118,6 +119,47 @@ impl Viewer {
 
     fn settings_ui(&mut self, ui: &mut egui::Ui) {
         let s = &mut self.settings;
+        ui.heading("Appearance");
+        egui::widgets::global_theme_preference_buttons(ui);
+        s.theme = ui
+            .ctx()
+            .options(|o| match o.theme_preference {
+                egui::ThemePreference::Light => "light",
+                egui::ThemePreference::Dark => "dark",
+                egui::ThemePreference::System => "system",
+            })
+            .into();
+        ui.add_space(6.0);
+        ui.heading("Toolbar buttons");
+        egui::Grid::new("toolbar-button-display")
+            .num_columns(2)
+            .spacing([12.0, 6.0])
+            .show(ui, |ui| {
+                for (index, label) in crate::settings::TOOLBAR_ACTIONS.iter().enumerate() {
+                    ui.label(*label);
+                    egui::ComboBox::from_id_salt(("toolbar-display", index))
+                        .selected_text(match s.toolbar_display[index] {
+                            crate::settings::ButtonDisplay::IconOnly => "Icon only",
+                            crate::settings::ButtonDisplay::IconAndText => "Icon and text",
+                            crate::settings::ButtonDisplay::TextOnly => "Text only",
+                        })
+                        .show_ui(ui, |ui| {
+                            for (mode, label) in [
+                                (crate::settings::ButtonDisplay::IconOnly, "Icon only"),
+                                (crate::settings::ButtonDisplay::IconAndText, "Icon and text"),
+                                (crate::settings::ButtonDisplay::TextOnly, "Text only"),
+                            ] {
+                                ui.selectable_value(&mut s.toolbar_display[index], mode, label);
+                            }
+                        });
+                    ui.end_row();
+                }
+            });
+        ui.add_space(6.0);
+        ui.heading("Review identity");
+        ui.text_edit_singleline(&mut s.review_author)
+            .on_hover_text("Saved as the author of new PDF comments");
+        ui.add_space(6.0);
         ui.heading("Opening files");
         ui.horizontal(|ui| {
             ui.label("Start at");

@@ -26,6 +26,8 @@ const AUTO_CHECK: usize = 16 << 20;
 pub(super) struct Safety {
     /// The file exactly as opened, for saving out untouched.
     pub original: Arc<Document>,
+    /// Current document used for action and attachment object references.
+    document: Arc<Document>,
     pub actions: Vec<Action>,
     /// What each action's script uses, by action index.
     pub traits: Vec<Vec<(ScriptTrait, &'static str)>>,
@@ -62,6 +64,7 @@ impl Safety {
         let files = attachments(&doc);
         Self {
             held: xfa.as_ref().is_some_and(|x| x.dynamic),
+            document: doc.clone(),
             original: doc,
             actions,
             traits,
@@ -73,6 +76,20 @@ impl Safety {
             review: None,
             hovered: None,
         }
+    }
+
+    /// Rebuild page/object indexes while retaining the untouched original and
+    /// the user's explicit choice to show an already-known dynamic XFA fallback.
+    pub fn refresh(&mut self, doc: Arc<Document>) {
+        let mut fresh = Self::new(doc);
+        let was_dynamic = self.xfa.as_ref().is_some_and(|x| x.dynamic);
+        fresh.held &= !was_dynamic || self.held;
+        fresh.dismissed = self.dismissed
+            && self.actions == fresh.actions
+            && self.files == fresh.files
+            && self.xfa == fresh.xfa;
+        fresh.original = self.original.clone();
+        *self = fresh;
     }
 
     fn scripts(&self) -> usize {
@@ -212,7 +229,7 @@ impl Viewer {
         }
         let rect = ui.available_rect_before_wrap();
         ui.painter()
-            .rect_filled(rect, CornerRadius::ZERO, super::BACKDROP);
+            .rect_filled(rect, CornerRadius::ZERO, ui.visuals().panel_fill);
         let reasons = o
             .safety
             .xfa
@@ -535,7 +552,7 @@ impl Viewer {
     pub(super) fn files_tab(&mut self, ui: &mut egui::Ui) {
         let Some(o) = &mut self.open else { return };
         let s = &mut o.safety;
-        let doc = s.original.clone();
+        let doc = s.document.clone();
         let mut save = None;
         let mut open = None;
         egui::ScrollArea::vertical()
@@ -663,7 +680,7 @@ impl Viewer {
             return;
         };
         let Some(a) = s.files.get(i) else { return };
-        let data = match attachment_data(&s.original, a) {
+        let data = match attachment_data(&s.document, a) {
             Ok(d) => d,
             Err(e) => {
                 self.error = Some(format!("Could not read {}: {e}", a.name));
@@ -689,7 +706,7 @@ impl Viewer {
             return;
         };
         let Some(a) = s.files.get(i) else { return };
-        match attachment_data(&s.original, a) {
+        match attachment_data(&s.document, a) {
             Ok(data) => {
                 let name = safe_file_name(&a.name);
                 self.open_bytes(data, name, None);

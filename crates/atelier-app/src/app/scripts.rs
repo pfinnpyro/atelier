@@ -197,6 +197,23 @@ pub(super) struct Scripted {
 }
 
 impl Viewer {
+    /// Page edits can remove fields or change widget/object indexes. Approval
+    /// remains tied to exact source hashes; new script text stays blocked.
+    pub(super) fn refresh_script_state(o: &mut super::Open) {
+        let all = o
+            .form
+            .as_ref()
+            .map(|fv| atelier_form::form_scripts(&o.doc, &fv.form))
+            .unwrap_or_default();
+        let allowed = o
+            .scripts
+            .take()
+            .map(|state| state.allowed)
+            .unwrap_or_default();
+        o.scripts = (!all.is_empty() || o.safety.actions.iter().any(|a| a.is_javascript()))
+            .then_some(ScriptState { all, allowed });
+    }
+
     /// Runs the allowed scripts for a value about to be committed. Returns
     /// what to change, or `None` when a script rejected the value.
     pub(super) fn run_scripts(&mut self, field: usize, value: Value) -> Option<Scripted> {

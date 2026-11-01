@@ -71,7 +71,13 @@ fn annotations_are_saved_and_drawn() {
         NewAnnot {
             markup: Markup::Note {
                 at: p(150.0, 180.0),
-                text: "Check this — ✓".into(),
+                review: atelier_form::Review {
+                    text: "Check this — ✓".into(),
+                    author: "Ada Reviewer".into(),
+                    subject: "Review".into(),
+                    created: "D:20261101120000Z".into(),
+                    modified: "D:20261101120000Z".into(),
+                },
             },
             color: [1.0, 0.8, 0.2],
         },
@@ -106,6 +112,16 @@ fn annotations_are_saved_and_drawn() {
         panic!("no comment text");
     };
     assert_eq!(text.to_text(), "Check this — ✓");
+    for (key, expected) in [
+        (b"T".as_slice(), "Ada Reviewer"),
+        (b"CreationDate", "D:20261101120000Z"),
+        (b"M", "D:20261101120000Z"),
+    ] {
+        let Object::String(value) = saved.get_key(&note, key).unwrap() else {
+            panic!("missing review metadata")
+        };
+        assert_eq!(value.to_text(), expected);
+    }
     // The highlight is yellow over white, the ink blue, the note filled.
     let hl = colour_at(&saved, 85, 109);
     assert!(hl[0] > 200 && hl[1] > 180 && hl[2] < 80, "{hl:?}");
@@ -125,4 +141,188 @@ fn selections_become_one_box_per_line() {
     let quads = atelier_form::line_quads(&text.glyphs);
     assert_eq!(quads.len(), 1);
     assert!(quads[0][1].x > 70.0 && quads[0][0].x < 25.0, "{quads:?}");
+}
+
+#[test]
+fn review_lines_save_standard_subtypes_and_visible_appearances() {
+    let base = doc();
+    let p = Point::new;
+    let quads = vec![[p(20.0, 40.0), p(120.0, 40.0), p(120.0, 60.0), p(20.0, 60.0)]];
+    for (strike, subtype, y) in [(false, "Underline", 41), (true, "StrikeOut", 49)] {
+        let mut session = Session::new(base.clone());
+        session.add_annot(
+            0,
+            NewAnnot {
+                markup: Markup::TextLine {
+                    quads: quads.clone(),
+                    strike,
+                },
+                color: [0.8, 0.0, 0.0],
+            },
+        );
+        let saved = Document::open(session.build().unwrap().doc.data().to_vec()).unwrap();
+        let page = &saved.pages().unwrap()[0];
+        let Object::Array(annots) = saved.get_key(&page.dict, b"Annots").unwrap() else {
+            panic!("no annotations")
+        };
+        let annot = saved.resolve_dict(&annots[0]).unwrap();
+        assert_eq!(
+            saved
+                .get_key(&annot, b"Subtype")
+                .unwrap()
+                .as_name()
+                .unwrap()
+                .as_str_lossy(),
+            subtype
+        );
+        assert_eq!(
+            saved
+                .get_key(&annot, b"QuadPoints")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            8
+        );
+        let pixel = colour_at(&saved, 70, y);
+        assert!(pixel[0] > pixel[1] + 20, "{subtype}: {pixel:?}");
+    }
+}
+
+#[test]
+fn inline_comment_metadata_can_be_edited_after_save() {
+    let base = doc();
+    let p = Point::new;
+    let review = atelier_form::Review {
+        text: "Original note".into(),
+        author: "Ada".into(),
+        subject: "Verify amount".into(),
+        created: "D:20261101120000Z".into(),
+        modified: "D:20261101120000Z".into(),
+    };
+    let mut session = Session::new(base);
+    session.add_annot(
+        0,
+        NewAnnot {
+            markup: Markup::Comment {
+                quads: vec![[p(18.0, 96.0), p(90.0, 96.0), p(90.0, 112.0), p(18.0, 112.0)]],
+                review: review.clone(),
+            },
+            color: [1.0, 0.9, 0.0],
+        },
+    );
+    let saved = session.build().unwrap().doc;
+    let mut session = Session::new(saved);
+    let edited = atelier_form::Review {
+        text: "Checked against source".into(),
+        subject: "Verified".into(),
+        modified: "D:20261101130000Z".into(),
+        ..review.clone()
+    };
+    session.set_review(0, 0, edited.clone());
+    assert!(session.is_dirty());
+    let rebuilt = session.build().unwrap().doc;
+    let reopened = Document::open(rebuilt.data().to_vec()).unwrap();
+    let Object::Array(annots) = reopened
+        .get_key(&reopened.pages().unwrap()[0].dict, b"Annots")
+        .unwrap()
+    else {
+        panic!("missing annotation")
+    };
+    assert_eq!(
+        annots.len(),
+        1,
+        "editing must not create another annotation"
+    );
+    let annot = reopened.resolve_dict(&annots[0]).unwrap();
+    for (key, expected) in [
+        (b"Contents".as_slice(), edited.text.as_str()),
+        (b"T", "Ada"),
+        (b"Subj", "Verified"),
+        (b"CreationDate", review.created.as_str()),
+        (b"M", edited.modified.as_str()),
+    ] {
+        let Object::String(value) = reopened.get_key(&annot, key).unwrap() else {
+            panic!("missing metadata")
+        };
+        assert_eq!(value.to_text(), expected);
+    }
+    assert_eq!(
+        reopened
+            .get_key(&annot, b"Subtype")
+            .unwrap()
+            .as_name()
+            .unwrap()
+            .as_str_lossy(),
+        "Highlight"
+    );
+    assert_eq!(
+        reopened
+            .get_key(&annot, b"QuadPoints")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        8
+    );
+    let pixel = colour_at(&reopened, 85, 109);
+    assert!(pixel[0] > 200 && pixel[2] < 80);
+    session.saved(rebuilt);
+    assert!(!session.is_dirty());
+    session.set_review(0, 0, review);
+    assert!(session.is_dirty());
+    session.revert();
+    assert!(!session.is_dirty());
+}
+
+#[test]
+fn unsaved_comment_edits_survive_rebuild_without_duplicate_notes() {
+    let mut session = Session::new(doc());
+    let review = atelier_form::Review {
+        text: "Draft".into(),
+        author: "Reviewer".into(),
+        subject: "Question".into(),
+        created: "D:20261101120000Z".into(),
+        modified: "D:20261101120000Z".into(),
+    };
+    session.add_annot(
+        0,
+        NewAnnot {
+            markup: Markup::Note {
+                at: Point::new(100.0, 180.0),
+                review: review.clone(),
+            },
+            color: [1.0, 0.8, 0.2],
+        },
+    );
+    assert!(session.set_added_review(
+        0,
+        atelier_form::Review {
+            text: "Updated draft".into(),
+            ..review
+        }
+    ));
+    assert!(!session.set_added_review(
+        9,
+        atelier_form::Review {
+            text: String::new(),
+            author: String::new(),
+            subject: String::new(),
+            created: String::new(),
+            modified: String::new()
+        }
+    ));
+    let saved = session.build().unwrap().doc;
+    let Object::Array(annots) = saved
+        .get_key(&saved.pages().unwrap()[0].dict, b"Annots")
+        .unwrap()
+    else {
+        panic!("missing note")
+    };
+    assert_eq!(annots.len(), 1);
+    let note = saved.resolve_dict(&annots[0]).unwrap();
+    let Object::String(text) = saved.get_key(&note, b"Contents").unwrap() else {
+        panic!("missing text")
+    };
+    assert_eq!(text.to_text(), "Updated draft");
 }

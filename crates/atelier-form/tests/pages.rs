@@ -217,3 +217,51 @@ fn fields_follow_their_page() {
             .same_as(&atelier_form::Value::Text("Ada".into()))
     );
 }
+
+#[test]
+fn saved_review_edits_follow_pages_through_reordering() {
+    use atelier_form::{Markup, NewAnnot, Review};
+    let mut session = Session::new(open(pages(&[50, 80])));
+    let review = Review {
+        text: "Before".into(),
+        author: "Ada".into(),
+        subject: "Amount".into(),
+        created: "D:20261101120000Z".into(),
+        modified: "D:20261101120000Z".into(),
+    };
+    session.add_annot(
+        0,
+        NewAnnot {
+            markup: Markup::Note {
+                at: atelier_raster::Point::new(30.0, 100.0),
+                review: review.clone(),
+            },
+            color: [1.0, 0.8, 0.2],
+        },
+    );
+    let mut session = Session::new(session.build().unwrap().doc);
+    session.set_review(
+        0,
+        0,
+        Review {
+            text: "After".into(),
+            ..review
+        },
+    );
+    session.move_pages(&[0], 2);
+    let doc = session.build().unwrap().doc;
+    assert_eq!(
+        shape(&doc).iter().map(|s| s.0).collect::<Vec<_>>(),
+        [80, 50]
+    );
+    let page = &doc.pages().unwrap()[1];
+    let Object::Array(annots) = doc.get_key(&page.dict, b"Annots").unwrap() else {
+        panic!("missing notes")
+    };
+    assert_eq!(annots.len(), 1);
+    let note = doc.resolve_dict(&annots[0]).unwrap();
+    let Object::String(text) = doc.get_key(&note, b"Contents").unwrap() else {
+        panic!("missing text")
+    };
+    assert_eq!(text.to_text(), "After");
+}
