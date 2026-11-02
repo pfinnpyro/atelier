@@ -1,11 +1,18 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Build Windows x64" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="build --locked --release --target x86_64-pc-windows-msvc -p atelier-app -p atelier-cli" />
+    <option name="buildProfileId" value="release" />
+    <option name="command" value="build --locked --target x86_64-pc-windows-msvc -p atelier-app -p atelier-cli" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
-    <option name="channel" value="DEFAULT" />
-    <option name="allFeatures" value="false" />
+    <envs />
     <option name="emulateTerminal" value="false" />
+    <option name="channel" value="DEFAULT" />
+    <option name="requiredFeatures" value="true" />
+    <option name="allFeatures" value="false" />
     <option name="withSudo" value="false" />
+    <option name="buildTarget" value="REMOTE" />
+    <option name="backtrace" value="SHORT" />
+    <option name="isRedirectInput" value="false" />
+    <option name="redirectInputPath" value="" />
     <method v="2" />
   </configuration>
 </component>

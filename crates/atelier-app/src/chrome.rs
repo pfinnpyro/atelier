@@ -18,19 +18,32 @@ pub fn window_buttons(ui: &mut egui::Ui) {
     if !custom_windows() {
         return;
     }
-    if ui.button("×").on_hover_text("Close window").clicked() {
+    if crate::icons::button(ui, crate::icons::Icon::Close, "Close window")
+        .on_hover_text("Close window")
+        .clicked()
+    {
         ui.ctx().send_viewport_cmd(ViewportCommand::Close);
     }
     let maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
     if ui
-        .button(if maximized { "❐" } else { "□" })
+        .add(
+            if maximized {
+                crate::icons::Icon::Restore
+            } else {
+                crate::icons::Icon::Max
+            }
+            .button(),
+        )
         .on_hover_text("Maximize / restore")
         .clicked()
     {
         ui.ctx()
             .send_viewport_cmd(ViewportCommand::Maximized(!maximized));
     }
-    if ui.button("−").on_hover_text("Minimize window").clicked() {
+    if crate::icons::button(ui, crate::icons::Icon::Minimize, "Minimize window")
+        .on_hover_text("Minimize window")
+        .clicked()
+    {
         ui.ctx().send_viewport_cmd(ViewportCommand::Minimized(true));
     }
 }

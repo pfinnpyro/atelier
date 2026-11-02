@@ -388,16 +388,16 @@ pub(crate) fn text_appearance(
                 size = if da.size > 0.0 {
                     da.size
                 } else {
-                    auto_size_multiline(font, &shown, inner_w, h - 2.0 * pad)
+                    auto_size_multiline(font, &shown, inner_w, h - 2.0 * pad, da)
                 };
-                let lines = wrap(font, &shown, inner_w / size);
+                let lines = wrap_measured(&shown, inner_w, |s| spaced_width(font, s, size, da));
                 let mut y = h - pad - asc * size;
                 for line in lines {
                     let (bytes, l) = encode_lossy(font, &line);
                     *lossy |= l;
-                    let lw = font.width(&bytes) * size;
+                    let lw = spaced_width(font, &line, size, da);
                     runs.push((align(field.quadding, pad, w, lw), y, bytes));
-                    y -= size * LINE_HEIGHT;
+                    y -= line_step(size, da);
                 }
             } else {
                 let (bytes, l) = encode_lossy(font, &shown);
@@ -408,13 +408,13 @@ pub(crate) fn text_appearance(
                 } else {
                     let by_height = (h - 2.0 * frame.border_width - 2.0) / LINE_HEIGHT;
                     let by_width = if unit > 0.0 {
-                        inner_w / unit
+                        (inner_w - (spaced_width(font, &shown, 0.0, da))).max(0.0) / unit
                     } else {
                         by_height
                     };
                     by_height.min(by_width).max(MIN_AUTO_SIZE)
                 };
-                let tw = unit * size;
+                let tw = spaced_width(font, &shown, size, da);
                 // Text too long for the box starts at the left, like Acrobat.
                 let x = if tw > inner_w {
                     pad
@@ -430,7 +430,7 @@ pub(crate) fn text_appearance(
             } else {
                 MAX_AUTO_SIZE_MULTILINE
             };
-            let step = size * LINE_HEIGHT;
+            let step = line_step(size, da);
             let mut top = h - frame.border_width;
             for (text, selected) in options.iter().skip(field.top_index) {
                 if top <= frame.border_width {
@@ -472,6 +472,12 @@ pub(crate) fn text_appearance(
         out.push_str("BT\n");
         let _ = writeln!(out, "{} {} Tf", Name(chosen.name.clone()), num(size));
         let _ = writeln!(out, "{}", da.color);
+        let _ = writeln!(
+            out,
+            "{} Tc {} Tw",
+            num(da.character_spacing),
+            num(da.word_spacing)
+        );
         for (x, y, bytes) in runs {
             let s = PdfString::literal(bytes);
             let _ = writeln!(out, "1 0 0 1 {} {} Tm {s} Tj", num(x), num(y));
@@ -636,11 +642,11 @@ fn align(q: u8, pad: f64, w: f64, tw: f64) -> f64 {
 }
 
 /// The largest size up to 12 at which wrapped text fits the box.
-fn auto_size_multiline(font: &TextFont, text: &str, w: f64, h: f64) -> f64 {
+fn auto_size_multiline(font: &TextFont, text: &str, w: f64, h: f64, da: &DefaultAppearance) -> f64 {
     let mut size = MAX_AUTO_SIZE_MULTILINE;
     while size > MIN_AUTO_SIZE {
-        let lines = wrap(font, text, w / size).len() as f64;
-        if lines * size * LINE_HEIGHT <= h {
+        let lines = wrap_measured(text, w, |s| spaced_width(font, s, size, da)).len() as f64;
+        if lines * line_step(size, da) <= h {
             return size;
         }
         size -= 0.5;
@@ -650,9 +656,29 @@ fn auto_size_multiline(font: &TextFont, text: &str, w: f64, h: f64) -> f64 {
 
 /// Breaks text into lines no wider than `width` (in font size units):
 /// at line breaks, then between words, then inside words that are too long.
-pub(crate) fn wrap(font: &TextFont, text: &str, width: f64) -> Vec<String> {
-    let measure = |s: &str| encode_lossy(font, s).0;
-    let w = |s: &str| font.width(&measure(s));
+fn line_step(size: f64, da: &DefaultAppearance) -> f64 {
+    if da.leading > 0.0 {
+        da.leading
+    } else {
+        size * LINE_HEIGHT
+    }
+}
+
+fn spaced_width(font: &TextFont, text: &str, size: f64, da: &DefaultAppearance) -> f64 {
+    // Word spacing applies only to single-byte character code 32 in PDF.
+    let bytes = encode_lossy(font, text).0;
+    let chars = text.chars().count();
+    let spaces = if bytes.len() == chars {
+        bytes.iter().filter(|&&b| b == 32).count()
+    } else {
+        0
+    };
+    font.width(&bytes) * size
+        + chars.saturating_sub(1) as f64 * da.character_spacing
+        + spaces as f64 * da.word_spacing
+}
+
+fn wrap_measured(text: &str, width: f64, w: impl Fn(&str) -> f64) -> Vec<String> {
     let mut lines = Vec::new();
     let text = text.replace("\r\n", "\n");
     for para in text.split(['\n', '\r']) {

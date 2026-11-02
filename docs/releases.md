@@ -1,5 +1,14 @@
 # Releases and GitHub updates
 
+## Current preview: 1.1.0-beta.1
+
+The `prerelease` branch and `v1.1.0-beta.1` tag identify the review flight.
+Notes are in `release-notes-1.1.0-beta.1.md`. The package workflow reads the
+matching version-specific notes file and attaches Windows x64 installer,
+portable binaries, macOS ARM64 app, and the combined SHA-256 manifest.
+The release must be published with GitHub's prerelease flag.
+
+
 ## First official release: 1.0.0
 
 The workspace and lockfile identify this release as **1.0.0**. Previous 0.x
