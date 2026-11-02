@@ -35,8 +35,11 @@ impl Viewer {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .default_width(420.0)
+            .default_width(500.0)
+            .default_height(560.0)
+            .frame(egui::Frame::window(&ctx.global_style()).inner_margin(18.0))
             .vscroll(true)
+            .max_height(620.0)
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .show(ctx, |ui| match which {
                 Window::Settings => self.settings_ui(ui),
@@ -129,8 +132,26 @@ impl Viewer {
                 egui::ThemePreference::System => "system",
             })
             .into();
-        ui.add_space(6.0);
+        ui.add_space(14.0);
+        ui.separator();
+        ui.add_space(8.0);
         ui.heading("Toolbar buttons");
+        ui.horizontal(|ui| {
+            ui.label("Set all");
+            for (mode, label) in [
+                (crate::settings::ButtonDisplay::IconOnly, "Icons"),
+                (
+                    crate::settings::ButtonDisplay::IconAndText,
+                    "Icons and text",
+                ),
+                (crate::settings::ButtonDisplay::TextOnly, "Text"),
+            ] {
+                if ui.button(label).clicked() {
+                    s.toolbar_display.fill(mode);
+                }
+            }
+        });
+        ui.add_space(8.0);
         egui::Grid::new("toolbar-button-display")
             .num_columns(2)
             .spacing([12.0, 6.0])
@@ -155,11 +176,15 @@ impl Viewer {
                     ui.end_row();
                 }
             });
-        ui.add_space(6.0);
+        ui.add_space(14.0);
+        ui.separator();
+        ui.add_space(8.0);
         ui.heading("Review identity");
         ui.text_edit_singleline(&mut s.review_author)
             .on_hover_text("Saved as the author of new PDF comments");
-        ui.add_space(6.0);
+        ui.add_space(14.0);
+        ui.separator();
+        ui.add_space(8.0);
         ui.heading("Opening files");
         ui.horizontal(|ui| {
             ui.label("Start at");
@@ -174,7 +199,9 @@ impl Viewer {
             "Uses the page's text, or for scans the look of the page. The turns are \
                  saved only if you save the file.",
         );
-        ui.add_space(6.0);
+        ui.add_space(14.0);
+        ui.separator();
+        ui.add_space(8.0);
         ui.heading("Scans");
         ui.checkbox(&mut s.ocr, "Read the text of scans (OCR)")
             .on_hover_text(
@@ -191,7 +218,9 @@ impl Viewer {
             "When you save, the words are added as invisible text, the way scanners \
                  make searchable PDFs, so other apps can search and copy them too.",
         );
-        ui.add_space(6.0);
+        ui.add_space(14.0);
+        ui.separator();
+        ui.add_space(8.0);
         ui.heading("Updates");
         let s = &mut self.settings;
         ui.checkbox(
@@ -205,19 +234,40 @@ impl Viewer {
             ui.selectable_value(&mut s.preview, true, "Preview")
                 .on_hover_text("Also offer test versions before they are released");
         });
-        ui.add_space(6.0);
+        ui.add_space(14.0);
+        ui.separator();
+        ui.add_space(8.0);
         ui.heading("Default app");
-        if default_app::supported() {
-            ui.label("Windows asks you to choose the default PDF app yourself.");
-            if ui.button("Make Atelier the default PDF app…").clicked() {
-                match default_app::offer() {
-                    Ok(msg) => self.notice = Some(msg.into()),
-                    Err(e) => self.error = Some(e),
+        ui.label(default_app::guidance());
+        if cfg!(target_os = "macos") {
+            ui.hyperlink_to(
+                "Apple's default-app guide",
+                "https://support.apple.com/guide/mac-help/mh35597/mac",
+            );
+            if ui.button("Show a PDF in Finder…").clicked() {
+                let path = self.open.as_ref().and_then(|o| o.path.clone()).or_else(|| {
+                    rfd::FileDialog::new()
+                        .add_filter("PDF documents", &["pdf"])
+                        .pick_file()
+                });
+                if let Some(path) = path
+                    && let Err(e) = default_app::reveal_pdf(&path)
+                {
+                    self.error = Some(e);
                 }
             }
-        } else {
-            ui.label("Choose the default PDF app in your desktop's settings.");
         }
+        if default_app::supported() && ui.button("Make Atelier the default PDF app…").clicked() {
+            match default_app::offer() {
+                Ok(msg) => self.notice = Some(msg.into()),
+                Err(e) => self.error = Some(e),
+            }
+        }
+        ui.add_space(14.0);
+        ui.separator();
+        ui.add_space(8.0);
+        ui.heading("Ink signatures");
+        self.ink_settings_ui(ui);
     }
 }
 

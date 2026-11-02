@@ -13,6 +13,7 @@ mod lexer;
 mod object;
 mod page;
 mod parser;
+mod signature;
 mod write;
 mod xref;
 
@@ -27,3 +28,5 @@ pub use page::{Page, Rect};
 pub use parser::Parser;
 pub use write::{Update, serialize};
 pub use xref::XrefEntry;
+
+pub use signature::PreparedSignature;
