@@ -174,7 +174,7 @@ impl Viewer {
                 let count = self.open.as_ref().map_or(0, |o| o.layout.page_count());
                 ui.horizontal(|ui| {
                     if ui
-                        .add_enabled(current > 0, egui::Button::new("‹"))
+                        .add_enabled(current > 0, crate::icons::Icon::Left.button())
                         .on_hover_text("Previous page")
                         .clicked()
                     {
@@ -201,11 +201,15 @@ impl Viewer {
                     }
                     ui.label(format!("/ {count}"));
                     if ui
-                        .add_enabled(current + 1 < count, egui::Button::new("›"))
+                        .add_enabled(current + 1 < count, crate::icons::Icon::Right.button())
                         .on_hover_text("Next page")
                         .clicked()
                     {
                         self.go_to_page(current + 1);
+                    }
+                    if crate::icons::button(ui, crate::icons::Icon::Find, "Find (Ctrl+F)").clicked()
+                    {
+                        self.request_find();
                     }
                 });
                 if self.sidebar.search_visible {
@@ -249,7 +253,13 @@ impl Viewer {
                                     self.run_search(false);
                                 }
                                 if ui
-                                    .add_sized([24.0, 24.0], egui::Button::new("×").frame(false))
+                                    .add_sized(
+                                        [24.0, 24.0],
+                                        crate::icons::Icon::Close
+                                            .button()
+                                            .min_size(egui::Vec2::splat(24.0))
+                                            .frame(false),
+                                    )
                                     .on_hover_text("Close search (Esc)")
                                     .clicked()
                                     || (search.has_focus()

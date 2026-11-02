@@ -23,6 +23,8 @@ pub struct Built {
 
 pub struct Session {
     base: Arc<Document>,
+    history: crate::revisions::History,
+    savepoint: Arc<Document>,
     base_form: Option<Form>,
     /// Changed fields and their new values, oldest change first, one entry
     /// per field.
@@ -59,6 +61,8 @@ impl Session {
         let base_form = Form::load(&base).ok().flatten();
         Self {
             order: own_order(&base),
+            savepoint: base.clone(),
+            history: crate::revisions::History::load(&base),
             base,
             base_form,
             edits: Vec::new(),
@@ -69,6 +73,127 @@ impl Session {
             annots: Vec::new(),
             review_edits: BTreeMap::new(),
             hidden: BTreeMap::new(),
+        }
+    }
+
+    pub fn tracking_enabled(&self) -> bool {
+        self.history.enabled
+    }
+    pub fn tracking_problem(&self) -> Option<&str> {
+        self.history.problem.as_deref()
+    }
+    pub fn revisions(&self) -> &[crate::Revision] {
+        &self.history.revisions
+    }
+    pub fn set_tracking(&mut self, enabled: bool, author: &str) -> Result<()> {
+        if let Some(problem) = &self.history.problem {
+            return Err(atelier_syntax::Error::Structure(problem.clone()));
+        }
+        self.history.enabled = enabled;
+        self.history.author = if author.trim().is_empty() {
+            "Reviewer".into()
+        } else {
+            author.trim().to_owned()
+        };
+        self.history.dirty = true;
+        Ok(())
+    }
+    pub fn set_revision_author(&mut self, author: &str) {
+        let author = if author.trim().is_empty() {
+            "Reviewer"
+        } else {
+            author.trim()
+        };
+        if self.history.enabled && self.history.author != author {
+            self.history.author = author.to_owned();
+            self.history.dirty = true;
+        }
+    }
+    fn saved_review_summary(&self, slot: PageSlot, ordinal: usize) -> String {
+        let source = match slot {
+            PageSlot::Own(_) => &self.base,
+            PageSlot::Added { file, .. } => &self.files[file],
+        };
+        let read = || -> Option<String> {
+            let page = self.page(slot)?;
+            let Object::Array(list) = source.get_key(&page.dict, b"Annots").ok()? else {
+                return None;
+            };
+            let d = source.resolve_dict(list.get(ordinal)?).ok()?;
+            let text = |key: &[u8]| match source.get_key(&d, key).ok() {
+                Some(Object::String(s)) => s.to_text(),
+                _ => String::new(),
+            };
+            Some(Self::review_summary(&crate::Review {
+                text: text(b"Contents"),
+                author: text(b"T"),
+                subject: text(b"Subj"),
+                created: text(b"CreationDate"),
+                modified: text(b"M"),
+                state: Some(text(b"State")).filter(|s| !s.is_empty()),
+            }))
+        };
+        read().unwrap_or_else(|| "Saved comment".into())
+    }
+    pub fn revision_undo_id(&self) -> Option<u64> {
+        self.history.undo_id()
+    }
+    pub fn revision_redo(&self) -> Option<(u64, crate::RevisionState)> {
+        self.history.redo_id()
+    }
+    /// Build one user transaction and record its original/new document state.
+    pub fn build_tracked(&mut self, before: &Document) -> Result<Built> {
+        let mut built = self.build_content()?;
+        let mut history = self.history.clone();
+        history.record(before, &built.doc)?;
+        built.doc = history.write(built.doc)?;
+        history.pending.clear();
+        self.history = history;
+        Ok(built)
+    }
+    pub fn decide_revision(
+        &mut self,
+        current: &Document,
+        id: u64,
+        state: crate::RevisionState,
+        author: &str,
+    ) -> Result<()> {
+        let mut history = self.history.clone();
+        let restore = history.decide(current, id, state, author)?;
+        if let Some(doc) = restore {
+            let savepoint = self.savepoint.clone();
+            *self = Self::new(doc);
+            self.savepoint = savepoint;
+        }
+        self.history = history;
+        Ok(())
+    }
+    fn touch(&mut self, target: String, before: String, after: String, page: Option<usize>) {
+        self.history.touch(target, before, after, page);
+    }
+    fn review_summary(review: &crate::Review) -> String {
+        format!(
+            "{}: {}\n{}\n{} [{}]",
+            review.author,
+            review.subject,
+            review.text,
+            review.modified,
+            review.state.as_deref().unwrap_or("Pending")
+        )
+    }
+    fn annot_summary(a: &NewAnnot) -> String {
+        match &a.markup {
+            crate::Markup::Note { review, .. } | crate::Markup::Comment { review, .. } => format!(
+                "{}: {} [{}]",
+                review.author,
+                review.text,
+                review.state.as_deref().unwrap_or("Pending")
+            ),
+            crate::Markup::Highlight { .. } => "Highlight".into(),
+            crate::Markup::TextLine { strike, .. } => {
+                if *strike { "Strikeout" } else { "Underline" }.into()
+            }
+            crate::Markup::Ink { .. } => "Ink / signature".into(),
         }
     }
 
@@ -89,6 +214,18 @@ impl Session {
 
     /// Shows or hides a field's widgets (as form scripts do).
     pub fn set_hidden(&mut self, field: usize, hidden: bool) {
+        if let Some(f) = self
+            .base_form
+            .as_ref()
+            .and_then(|form| form.fields.get(field))
+        {
+            self.touch(
+                format!("Field visibility: {} ({})", f.name, f.obj),
+                self.is_hidden(field).to_string(),
+                hidden.to_string(),
+                self.pages_of(field).first().copied(),
+            );
+        }
         if hidden == self.hidden_at_first(field) {
             self.hidden.remove(&field);
         } else {
@@ -99,6 +236,16 @@ impl Session {
     /// Adds an annotation (a highlight, comment or ink) to a page.
     pub fn add_annot(&mut self, page: usize, annot: NewAnnot) {
         if let Some(&slot) = self.order.get(page) {
+            self.touch(
+                format!(
+                    "Annotation on page {} ({slot:?}, added {})",
+                    page + 1,
+                    self.annots.len()
+                ),
+                String::new(),
+                Self::annot_summary(&annot),
+                Some(page),
+            );
             self.annots.push((slot, annot));
         }
     }
@@ -107,11 +254,37 @@ impl Session {
     /// The page slot follows reordering and imported pages through copying.
     pub fn set_review(&mut self, page: usize, ordinal: usize, review: crate::Review) {
         if let Some(&slot) = self.order.get(page) {
+            let before = self
+                .review_edits
+                .get(&(slot, ordinal))
+                .map(Self::review_summary)
+                .unwrap_or_else(|| self.saved_review_summary(slot, ordinal));
+            self.touch(
+                format!(
+                    "Comment on page {} ({slot:?}, annotation {ordinal})",
+                    page + 1
+                ),
+                before,
+                Self::review_summary(&review),
+                Some(page),
+            );
             self.review_edits.insert((slot, ordinal), review);
         }
     }
 
     pub fn set_added_review(&mut self, index: usize, review: crate::Review) -> bool {
+        if let Some((slot, annot)) = self.annots.get(index) {
+            if let Some(old) = annot.review() {
+                let before = Self::review_summary(old);
+                let page = self.order.iter().position(|s| s == slot);
+                self.touch(
+                    format!("Added comment {index} ({slot:?})"),
+                    before,
+                    Self::review_summary(&review),
+                    page,
+                );
+            }
+        }
         self.annots
             .get_mut(index)
             .is_some_and(|(_, annot)| annot.set_review(review))
@@ -119,7 +292,14 @@ impl Session {
 
     /// Takes back the newest annotation added; returns its page.
     pub fn undo_annot(&mut self) -> Option<usize> {
-        let (slot, _) = self.annots.pop()?;
+        let (slot, annot) = self.annots.pop()?;
+        let page = self.order.iter().position(|s| *s == slot);
+        self.touch(
+            format!("Remove annotation ({slot:?})"),
+            Self::annot_summary(&annot),
+            String::new(),
+            page,
+        );
         self.order.iter().position(|s| *s == slot)
     }
 
@@ -128,7 +308,14 @@ impl Session {
         if index >= self.annots.len() {
             return None;
         }
-        let (slot, _) = self.annots.remove(index);
+        let (slot, annot) = self.annots.remove(index);
+        let page = self.order.iter().position(|s| *s == slot);
+        self.touch(
+            format!("Remove annotation {index} ({slot:?})"),
+            Self::annot_summary(&annot),
+            String::new(),
+            page,
+        );
         self.order.iter().position(|s| *s == slot)
     }
 
@@ -181,6 +368,24 @@ impl Session {
     /// Records a new value for a field. Setting a field back to the value
     /// it was opened with drops the change.
     pub fn set(&mut self, field: usize, value: Value) {
+        if let Some(f) = self
+            .base_form
+            .as_ref()
+            .and_then(|form| form.fields.get(field))
+        {
+            let before = self
+                .edits
+                .iter()
+                .find(|(i, _)| *i == field)
+                .map_or(&f.value, |(_, v)| v)
+                .display();
+            self.touch(
+                format!("Field: {} ({})", f.name, f.obj),
+                before,
+                value.display(),
+                self.pages_of(field).first().copied(),
+            );
+        }
         self.edits.retain(|(f, _)| *f != field);
         let changed = self
             .base_form
@@ -214,6 +419,12 @@ impl Session {
             return;
         };
         let r = degrees.rem_euclid(360) as u16 / 90 * 90;
+        self.touch(
+            format!("Rotate page {} ({slot:?})", page + 1),
+            self.rotation(page).to_string(),
+            r.to_string(),
+            Some(page),
+        );
         if r == self.original_rotation(slot) {
             self.rotations.remove(&slot);
         } else {
@@ -225,6 +436,7 @@ impl Session {
     /// are still part of the document and saved with it.
     pub fn quiet_rotations(&mut self) {
         self.quiet = self.rotations.clone();
+        self.history.pending.clear();
     }
 
     /// Moves `pages` (current indices) so they sit together, in their
@@ -247,7 +459,14 @@ impl Session {
                 old.push(i);
             }
         }
+        let before = format!("{:?}", self.order);
         self.order = old.iter().map(|&i| self.order[i]).collect();
+        self.touch(
+            "Page order".into(),
+            before,
+            format!("{:?}", self.order),
+            pages.iter().min().copied(),
+        );
         old
     }
 
@@ -262,7 +481,14 @@ impl Session {
         if old.is_empty() {
             return None;
         }
+        let before = format!("{:?}", self.order);
         self.order = old.iter().map(|&i| self.order[i]).collect();
+        self.touch(
+            "Delete pages".into(),
+            before,
+            format!("{:?}", self.order),
+            old.first().copied(),
+        );
         let kept: BTreeSet<PageSlot> = self.order.iter().copied().collect();
         self.rotations.retain(|s, _| kept.contains(s));
         self.quiet.retain(|s, _| kept.contains(s));
@@ -281,7 +507,14 @@ impl Session {
         self.files.push(doc);
         let at = at.min(self.order.len());
         let added = (0..count).map(|page| PageSlot::Added { file, page });
+        let before = format!("{:?}", self.order);
         self.order.splice(at..at, added);
+        self.touch(
+            "Insert PDF pages".into(),
+            before,
+            format!("{:?}", self.order),
+            Some(at),
+        );
         Ok((0..self.order.len())
             .map(|i| match i {
                 i if i < at => Some(i),
@@ -299,24 +532,23 @@ impl Session {
             || !self.annots.is_empty()
             || !self.review_edits.is_empty()
             || !self.hidden.is_empty()
+            || self.history.dirty
     }
 
     /// Drops every change.
     pub fn revert(&mut self) {
-        self.edits.clear();
-        self.order = own_order(&self.base);
-        self.files.clear();
-        self.rotations.clear();
-        self.quiet.clear();
-        self.layers.clear();
-        self.annots.clear();
-        self.review_edits.clear();
-        self.hidden.clear();
+        *self = Self::new(self.savepoint.clone());
     }
 
     /// The document with the changes, and with every field redrawn when
     /// the file asks for that (/NeedAppearances).
     pub fn build(&self) -> Result<Built> {
+        let mut built = self.build_content()?;
+        built.doc = self.history.write(built.doc)?;
+        Ok(built)
+    }
+
+    fn build_content(&self) -> Result<Built> {
         let mut form = self.base_form.clone();
         let redraw = form.as_ref().is_some_and(|f| f.need_appearances);
         let reorder = self.pages_changed();
@@ -585,6 +817,7 @@ impl Session {
             b"Outlines",
             b"Dests",
             b"StructTreeRoot",
+            b"AtelierRevisions",
         ] {
             catalog.remove(key);
         }
@@ -594,6 +827,8 @@ impl Session {
 
     /// After saving: the saved document becomes the new original.
     pub fn saved(&mut self, doc: Arc<Document>) {
+        self.savepoint = doc.clone();
+        self.history = crate::revisions::History::load(&doc);
         self.base_form = Form::load(&doc).ok().flatten();
         self.order = own_order(&doc);
         self.base = doc;

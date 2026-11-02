@@ -228,6 +228,7 @@ fn saved_review_edits_follow_pages_through_reordering() {
         subject: "Amount".into(),
         created: "D:20261101120000Z".into(),
         modified: "D:20261101120000Z".into(),
+        state: None,
     };
     session.add_annot(
         0,

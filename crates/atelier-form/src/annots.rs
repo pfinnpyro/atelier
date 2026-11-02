@@ -14,6 +14,8 @@ pub struct Review {
     pub subject: String,
     pub created: String,
     pub modified: String,
+    /// PDF review state: Accepted or Rejected; None means pending.
+    pub state: Option<String>,
 }
 
 /// What an annotation marks.
@@ -169,6 +171,11 @@ pub fn annotation_date() -> String {
 }
 
 pub(crate) fn write_review(dict: &mut Dict, review: &Review) {
+    if let Some(state) = &review.state {
+        dict.insert("StateModel", Object::String(PdfString::from_text("Review")));
+        dict.insert("State", Object::String(PdfString::from_text(state)));
+    }
+
     for (key, text) in [
         ("Contents", &review.text),
         ("T", &review.author),

@@ -22,7 +22,8 @@ impl Viewer {
     pub(super) fn rebuild(&mut self, pages: &HashSet<usize>, turned: bool) {
         let keep_page = self.current_page();
         let Some(o) = &mut self.open else { return };
-        let built = match o.session.build() {
+        o.session.set_revision_author(&self.settings.review_author);
+        let built = match o.session.build_tracked(&o.doc) {
             Ok(b) => b,
             Err(e) => {
                 self.error = Some(format!("Could not make the change: {e}"));
@@ -454,7 +455,8 @@ impl Viewer {
     /// keeps per page follows its page. Shows `show` afterwards.
     pub(super) fn rearranged(&mut self, old: &[Option<usize>], show: Option<usize>) {
         let Some(o) = &mut self.open else { return };
-        let built = match o.session.build() {
+        o.session.set_revision_author(&self.settings.review_author);
+        let built = match o.session.build_tracked(&o.doc) {
             Ok(b) => b,
             Err(e) => {
                 self.error = Some(format!("Could not change the pages: {e}"));

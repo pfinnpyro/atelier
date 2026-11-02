@@ -77,6 +77,7 @@ fn annotations_are_saved_and_drawn() {
                     subject: "Review".into(),
                     created: "D:20261101120000Z".into(),
                     modified: "D:20261101120000Z".into(),
+                    state: None,
                 },
             },
             color: [1.0, 0.8, 0.2],
@@ -199,6 +200,7 @@ fn inline_comment_metadata_can_be_edited_after_save() {
         subject: "Verify amount".into(),
         created: "D:20261101120000Z".into(),
         modified: "D:20261101120000Z".into(),
+        state: None,
     };
     let mut session = Session::new(base);
     session.add_annot(
@@ -284,6 +286,7 @@ fn unsaved_comment_edits_survive_rebuild_without_duplicate_notes() {
         subject: "Question".into(),
         created: "D:20261101120000Z".into(),
         modified: "D:20261101120000Z".into(),
+        state: None,
     };
     session.add_annot(
         0,
@@ -309,7 +312,8 @@ fn unsaved_comment_edits_survive_rebuild_without_duplicate_notes() {
             author: String::new(),
             subject: String::new(),
             created: String::new(),
-            modified: String::new()
+            modified: String::new(),
+            state: None,
         }
     ));
     let saved = session.build().unwrap().doc;
@@ -325,4 +329,68 @@ fn unsaved_comment_edits_survive_rebuild_without_duplicate_notes() {
         panic!("missing text")
     };
     assert_eq!(text.to_text(), "Updated draft");
+}
+
+#[test]
+fn review_decisions_survive_save_reopen_and_reversal() {
+    let mut session = Session::new(doc());
+    let mut review = atelier_form::Review {
+        text: "Check this".into(),
+        author: "Ada".into(),
+        subject: "Review".into(),
+        created: "D:20261102120000Z".into(),
+        modified: "D:20261102120000Z".into(),
+        state: Some("Accepted".into()),
+    };
+    session.add_annot(
+        0,
+        NewAnnot {
+            markup: Markup::Note {
+                at: Point::new(30.0, 100.0),
+                review: review.clone(),
+            },
+            color: [1.0, 0.8, 0.2],
+        },
+    );
+    review.state = Some("Rejected".into());
+    assert!(session.set_added_review(0, review.clone()));
+    let added = session.build().unwrap().doc;
+    let Object::Array(list) = added
+        .get_key(&added.pages().unwrap()[0].dict, b"Annots")
+        .unwrap()
+    else {
+        panic!("missing annotations")
+    };
+    let annot = added.resolve_dict(&list[0]).unwrap();
+    let Object::String(state) = added.get_key(&annot, b"State").unwrap() else {
+        panic!("missing state")
+    };
+    assert_eq!(state.to_text(), "Rejected");
+    session = Session::new(added);
+    for state in ["Accepted", "Rejected", "Accepted"] {
+        review.state = Some(state.into());
+        session.set_review(0, 0, review.clone());
+        // First build writes the new annotation; subsequent builds edit the saved one.
+        let built = session.build().unwrap().doc;
+        let reopened = Document::open(built.data().to_vec()).unwrap();
+        let Object::Array(annots) = reopened
+            .get_key(&reopened.pages().unwrap()[0].dict, b"Annots")
+            .unwrap()
+        else {
+            panic!("missing annotations")
+        };
+        assert_eq!(annots.len(), 1);
+        let annot = reopened.resolve_dict(&annots[0]).unwrap();
+        for (key, expected) in [
+            (b"State".as_slice(), state),
+            (b"StateModel".as_slice(), "Review"),
+            (b"Contents".as_slice(), "Check this"),
+        ] {
+            let Object::String(value) = reopened.get_key(&annot, key).unwrap() else {
+                panic!("missing review metadata")
+            };
+            assert_eq!(value.to_text(), expected);
+        }
+        session = Session::new(std::sync::Arc::new(reopened));
+    }
 }
