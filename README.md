@@ -1,6 +1,7 @@
 # Atelier
 
-<img src="/crates/atelier-app/assets/atelier.png" alt="Atelier logo, document with a decorative roman letter 'A'." width="300">
+
+<img src="/crates/atelier-app/assets/atelier.png" alt="Atelier logo, document with a decorative roman letter 'A'." align="left" width="250">
 A native PDF viewer and editor, written from the ground up in Rust. No webview:
 the PDF engine (parsing, decompression, fonts, rendering, saving) is our own code,
 and the app draws pages straight to the GPU.
@@ -8,8 +9,7 @@ and the app draws pages straight to the GPU.
 Packaged releases target Windows x64 and macOS on Apple Silicon.
 Linux can be built from source.
 
-## Status
-
+### Status
 The core viewer and editor are in place: pages render with paths, strokes,
 clipping, colour, images, text, shadings and patterns. The app also supports
 multiple tabs, search, forms, page organization, markup, printing and OCR.
