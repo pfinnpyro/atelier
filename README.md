@@ -1,6 +1,6 @@
 # Atelier
 
-[!Atelier logo, document with a decorative roman letter 'A'. ](/crates/atelier-app/assets/atelier.png)
+![Atelier logo, document with a decorative roman letter 'A'. ](/crates/atelier-app/assets/atelier.png)
 A native PDF viewer and editor, written from the ground up in Rust. No webview:
 the PDF engine (parsing, decompression, fonts, rendering, saving) is our own code,
 and the app draws pages straight to the GPU.
