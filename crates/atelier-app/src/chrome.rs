@@ -6,17 +6,9 @@ use eframe::egui::{self, CursorIcon, ResizeDirection, Sense, Vec2, ViewportComma
 pub fn custom_windows() -> bool {
     cfg!(target_os = "windows") && std::env::var_os("ATELIER_NATIVE_TITLEBAR").is_none()
 }
-pub fn integrated_mac() -> bool {
-    cfg!(target_os = "macos") && std::env::var_os("ATELIER_NATIVE_TITLEBAR").is_none()
-}
 pub fn viewport(builder: egui::ViewportBuilder) -> egui::ViewportBuilder {
     if custom_windows() {
         builder.with_decorations(false)
-    } else if integrated_mac() {
-        builder
-            .with_fullsize_content_view(true)
-            .with_title_shown(false)
-            .with_titlebar_shown(false)
     } else {
         builder
     }
@@ -44,7 +36,7 @@ pub fn window_buttons(ui: &mut egui::Ui) {
 }
 
 pub fn drag_space(ui: &mut egui::Ui) {
-    if !custom_windows() && !integrated_mac() {
+    if !custom_windows() {
         return;
     }
     let (_, response) = ui.allocate_exact_size(

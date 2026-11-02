@@ -104,12 +104,38 @@ The **Mark** menu:
 - **Ink signature…**: draw your signature once on the pad, then click where it goes.
   It is kept in `signature.txt` beside the settings, on this computer only,
   for next time; *Draw a new signature…* replaces it. This is a drawn
-  signature, not a cryptographic digital signature.
+  signature. Use **Back ink with a certificate…** to sign the complete document revision.
+  Settings provides a preview, named signature copies, selection, replacement and deletion,
+  plus an option to offer certificate signing after placing ink.
 
-Ctrl+Z takes back the newest mark, and right-clicking a mark added since the
-last save removes it. Marks are saved as standard Highlight, Text and Ink
+Right-click ink, including saved ink, to edit, redraw or remove it. The drawing
+bar provides a stroke eraser, erase-last-stroke and clear controls. Changes to colour
+and width apply when the drawing is committed. Ctrl/Cmd+Z undoes annotation
+additions, removals and comment edits (up to 100 operations). Marks are saved as standard Highlight, Text and Ink
 annotations (also Underline and StrikeOut), each with its own appearance, so
 other PDF apps show them too.
+
+## Document security
+
+The Save dropdown offers **Encrypt a copy…** and **Sign with certificate…**.
+Both export to a separate file and leave the working document open.
+
+- Encryption writes AES-256 revision 6 (PDF 2.0), using system randomness for
+  keys, salts and per-object IVs. The first UI uses one password for opening and
+  owner access, with unrestricted permissions after opening. New passwords must
+  be printable ASCII and at most 127 bytes. Changing existing encryption and
+  encrypting documents with signature fields are not supported yet.
+- Signing uses an installed `openssl` command and a PEM certificate/private key,
+  producing an invisible `adbe.pkcs7.detached` CMS signature over the current
+  revision. Placed ink is part of that signed revision. A private key password
+  can be supplied for an encrypted PEM; it is passed to the child process through
+  its environment and is not stored in settings. Atelier does not yet validate
+  certificate trust, expiration, revocation, or signatures when opening files.
+  PKCS#12, OS certificate stores, timestamps and signing encrypted PDFs are future work.
+
+Tests cover password rejection and reopening, Apple PDFKit interoperability on
+macOS, and external CMS verification with OpenSSL, including rejection after tampering.
+See [feature passes and implementation options](docs/feature-passes.md) for the next steps.
 
 ## Organizing pages
 
@@ -125,7 +151,9 @@ Move to start/end, rotate and export work on the selected pages.
 The navigation sidebar retains page previews, outline, thumbnail spreads,
 selection, rotation and deletion. Find (Ctrl/Cmd+F or the main menu) reveals
 search. **Side by side** in the toolbar pairs pages in the main document view.
-Each main toolbar button's icon/text mode is configurable in Settings.
+Each main toolbar button's icon/text mode is configurable in Settings; **Set all**
+applies one style to every configurable button. macOS uses its native titlebar
+so window controls retain the system's vertical placement.
 
 Changes are saved like any other. Once pages are removed, saving writes the
 file out whole without them, so their content is gone from the file's bytes

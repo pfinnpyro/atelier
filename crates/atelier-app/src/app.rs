@@ -32,6 +32,7 @@ mod pages;
 mod print;
 mod safety;
 mod scripts;
+mod security;
 mod settings_window;
 mod sidebar;
 mod tabs;
@@ -181,6 +182,7 @@ pub struct Viewer {
     tabs: Vec<Option<tabs::Parked>>,
     recent: crate::recent::Recent,
     annotate: annotate::Annotate,
+    security: security::SecurityUi,
 }
 
 /// An encrypted file the password prompt is open for.
@@ -253,6 +255,7 @@ impl Viewer {
             tabs: Vec::new(),
             recent: crate::recent::Recent::load(),
             annotate: annotate::Annotate::default(),
+            security: security::SecurityUi::default(),
         }
     }
 
@@ -288,7 +291,7 @@ impl Viewer {
     }
 
     fn is_dirty(&self) -> bool {
-        self.open.as_ref().is_some_and(|o| o.session.is_dirty())
+        self.annotate.has_pending_ink() || self.open.as_ref().is_some_and(|o| o.session.is_dirty())
     }
 
     fn open_with_password(
@@ -406,6 +409,8 @@ impl Viewer {
     /// to one the person picks. The file is written beside the target and
     /// then moved over it, so a failed write never leaves half a file.
     fn save(&mut self, to: SaveTo) {
+        self.commit_ink();
+        self.finish_editing(true);
         // Text OCR read goes into the file too.
         if self.open.as_ref().is_some_and(|o| o.layers_pending) {
             self.rebuild(&HashSet::new(), false);
@@ -468,22 +473,24 @@ impl Viewer {
             Pending::CloseTab => "closing it",
         };
         let mut choice = None;
-        egui::Modal::new(egui::Id::unique("unsaved")).show(ctx, |ui| {
-            ui.heading("Unsaved changes");
-            ui.label(format!("Save the changes to {name} before {what}?"));
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                if ui.button("Save").clicked() {
-                    choice = Some(0);
-                }
-                if ui.button("Don't save").clicked() {
-                    choice = Some(1);
-                }
-                if ui.button("Cancel").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
-                    choice = Some(2);
-                }
+        egui::Modal::new(egui::Id::unique("unsaved"))
+            .frame(egui::Frame::popup(&ctx.global_style()).inner_margin(20.0))
+            .show(ctx, |ui| {
+                ui.heading("Unsaved changes");
+                ui.label(format!("Save the changes to {name} before {what}?"));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Save").clicked() {
+                        choice = Some(0);
+                    }
+                    if ui.button("Don't save").clicked() {
+                        choice = Some(1);
+                    }
+                    if ui.button("Cancel").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                        choice = Some(2);
+                    }
+                });
             });
-        });
         let Some(choice) = choice else { return };
         let Some(pending) = self.confirm.take() else {
             return;
@@ -989,9 +996,7 @@ impl Viewer {
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.spacing_mut().interact_size.y = controls::HEIGHT;
         ui.horizontal_wrapped(|ui| {
-            if crate::chrome::integrated_mac() {
-                ui.add_space(76.0);
-            }
+            ui.set_row_height(controls::HEIGHT);
             ui.menu_button("☰", |ui| {
                 if ui
                     .add_enabled(
@@ -1101,6 +1106,14 @@ impl Viewer {
                         .clicked()
                     {
                         self.save(SaveTo::As);
+                        ui.close();
+                    }
+                    if ui.button("Encrypt a copy…").clicked() {
+                        self.open_security(false);
+                        ui.close();
+                    }
+                    if ui.button("Sign with certificate…").clicked() {
+                        self.open_security(true);
                         ui.close();
                     }
                     if ui.button("Save a copy…").clicked() {
@@ -1677,6 +1690,14 @@ impl Viewer {
             .interact_pointer_pos()
             .or(response.hover_pos())
             .map(to_layout);
+        if response.secondary_clicked()
+            && let Some(p) = response.interact_pointer_pos()
+        {
+            let (lx, ly) = to_layout(p);
+            self.menu = None;
+            self.menu_target_at(lx, ly);
+        }
+        response.context_menu(|ui| self.context_menu(ui));
         if self.annot_pointer(ui, response, at) {
             return;
         }
@@ -1761,14 +1782,6 @@ impl Viewer {
                 }
             }
         }
-        if response.secondary_clicked()
-            && let Some(p) = response.interact_pointer_pos()
-        {
-            let (lx, ly) = to_layout(p);
-            self.menu = None;
-            self.menu_target_at(lx, ly);
-        }
-        response.context_menu(|ui| self.context_menu(ui));
     }
 }
 
@@ -1855,6 +1868,7 @@ impl eframe::App for Viewer {
         self.note_window(&ctx);
         self.pad_window(&ctx);
         self.confirm_window(&ctx);
+        self.security_window(&ctx);
     }
 }
 

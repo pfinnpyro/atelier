@@ -38,6 +38,7 @@ pub const TOOLBAR_ACTIONS: [&str; 6] = [
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub review_author: String,
+    pub certify_ink: bool,
     pub theme: String,
     pub toolbar_display: [ButtonDisplay; 6],
     /// Files open at Fit page (true) or Fit width.
@@ -60,6 +61,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             review_author: "Reviewer".into(),
+            certify_ink: false,
             theme: "system".into(),
             toolbar_display: [ButtonDisplay::IconAndText; 6],
             fit_page: true,
@@ -136,6 +138,7 @@ impl Settings {
                     }
                     .into()
                 }
+                "certify-ink" => s.certify_ink = on,
                 "review-author" => s.review_author = value.trim().to_string(),
                 "zoom" => s.fit_page = value.trim() != "fit-width",
                 "orient-on-open" => s.orient_on_open = on,
@@ -168,6 +171,7 @@ impl Settings {
             self.check_updates,
             if self.preview { "preview" } else { "stable" }
         );
+        text.push_str(&format!("certify-ink = {}\n", self.certify_ink));
         for (index, display) in self.toolbar_display.iter().enumerate() {
             text.push_str(&format!("toolbar-{index} = {}\n", display.key()));
         }
@@ -193,6 +197,7 @@ mod tests {
     fn settings_survive_a_round_trip() {
         let s = Settings {
             review_author: "Ada Lovelace".into(),
+            certify_ink: true,
             theme: "light".into(),
             toolbar_display: [
                 ButtonDisplay::IconOnly,

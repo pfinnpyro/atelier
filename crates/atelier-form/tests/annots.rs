@@ -326,3 +326,51 @@ fn unsaved_comment_edits_survive_rebuild_without_duplicate_notes() {
     };
     assert_eq!(text.to_text(), "Updated draft");
 }
+
+#[test]
+fn saved_annotation_removal_tracks_ordinals_and_undo_restores_it() {
+    let mut session = Session::new(doc());
+    for x in [20.0, 60.0, 100.0] {
+        session.add_annot(
+            0,
+            NewAnnot {
+                markup: Markup::Ink {
+                    strokes: vec![vec![Point::new(x, 20.0), Point::new(x + 10.0, 30.0)]],
+                    width: 2.0,
+                },
+                color: [0.0, 0.0, 1.0],
+            },
+        );
+    }
+    let saved = session.build().unwrap().doc;
+    session.saved(saved);
+    session.remove_saved_annot(0, 0);
+    assert_eq!(session.original_annot_ordinal(0, 0), Some(1));
+    assert_eq!(session.original_annot_ordinal(0, 1), Some(2));
+    session.remove_saved_annot(0, 1);
+    let built = session.build().unwrap().doc;
+    let Object::Array(list) = built
+        .get_key(&built.pages().unwrap()[0].dict, b"Annots")
+        .unwrap()
+    else {
+        panic!("no annotations")
+    };
+    assert_eq!(list.len(), 1);
+    let remaining = built.resolve_dict(&list[0]).unwrap();
+    let rect = remaining.get(b"Rect").unwrap().as_array().unwrap();
+    assert!(rect[0].as_f64().unwrap() > 90.0);
+    assert_eq!(session.undo_annot(), Some(0));
+    assert_eq!(session.original_annot_ordinal(0, 0), Some(1));
+    let restored = session.build().unwrap().doc;
+    assert_eq!(
+        restored
+            .get_key(&restored.pages().unwrap()[0].dict, b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(session.undo_annot(), Some(0));
+    assert!(!session.is_dirty());
+}

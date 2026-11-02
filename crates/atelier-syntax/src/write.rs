@@ -33,6 +33,48 @@ impl<'a> Update<'a> {
         self.doc
     }
 
+    /// Exports a fresh AES-256 revision 6 encrypted PDF. Does not mutate the source.
+    /// Existing encrypted files and signature fields are rejected in this first pass.
+    pub fn to_encrypted_bytes(mut self, user: &str, owner: &str) -> Result<Vec<u8>> {
+        if self.doc.is_encrypted() {
+            return Err(Error::Unsupported("changing existing encryption".into()));
+        }
+        for n in self.doc.object_numbers() {
+            let generation = match self.doc.xref_entry(n) {
+                Some(XrefEntry::Offset { generation, .. }) => generation,
+                _ => 0,
+            };
+            let obj = self.doc.get(ObjRef::new(n, generation))?;
+            let dict = match &obj {
+                Object::Dict(d) => Some(d),
+                Object::Stream(s) => Some(&s.dict),
+                _ => None,
+            };
+            if let Some(d) = dict {
+                if d.is_type(b"Sig")
+                    || d.get(b"FT")
+                        .and_then(Object::as_name)
+                        .is_some_and(|n| *n == b"Sig")
+                {
+                    return Err(Error::Unsupported(
+                        "encrypting a document with signature fields would invalidate signatures"
+                            .into(),
+                    ));
+                }
+                if matches!(obj, Object::Stream(_)) && crate::document::has_identity_crypt_filter(d)
+                {
+                    return Err(Error::Unsupported(
+                        "encrypting streams with an explicit Identity crypt filter".into(),
+                    ));
+                }
+            }
+        }
+        let r = ObjRef::new(self.next, 0);
+        let (security, dict) = crate::crypt::Security::create(user, owner, r)?;
+        self.add(Object::Dict(dict));
+        self.write_whole_secured(None, Some(&security), Some(r))
+    }
+
     /// Replaces object `r`.
     pub fn set(&mut self, r: ObjRef, obj: Object) {
         self.objects.insert(r.num, (r.generation, obj));
@@ -99,7 +141,7 @@ impl<'a> Update<'a> {
         let mut offsets = BTreeMap::new();
         for (r, obj) in self.changed() {
             offsets.insert(r.num, (out.len(), r.generation));
-            write_object(&mut out, r, obj, self.doc);
+            write_object(&mut out, r, obj, self.doc)?;
         }
         let mut size = self.next.max(self.doc.next_object_number());
         let mut trailer = Dict::new();
@@ -167,8 +209,22 @@ impl<'a> Update<'a> {
     /// Writes the objects (all, or those in `keep`) with a fresh
     /// cross-reference table.
     fn write_whole(&self, keep: Option<&std::collections::HashSet<u32>>) -> Result<Vec<u8>> {
+        self.write_whole_secured(keep, self.doc.security(), None)
+    }
+
+    fn write_whole_secured(
+        &self,
+        keep: Option<&std::collections::HashSet<u32>>,
+        security: Option<&crate::crypt::Security>,
+        encrypt: Option<ObjRef>,
+    ) -> Result<Vec<u8>> {
         let doc = self.doc;
-        let mut out = format!("%PDF-{}\n%\u{e2}\u{e3}\u{cf}\u{d3}\n", doc.version()).into_bytes();
+        let version = if encrypt.is_some() {
+            "2.0".to_owned()
+        } else {
+            doc.version().to_string()
+        };
+        let mut out = format!("%PDF-{}\n%\u{e2}\u{e3}\u{cf}\u{d3}\n", version).into_bytes();
         let mut offsets = BTreeMap::new();
         let mut nums: Vec<u32> = doc.object_numbers();
         nums.extend(self.objects.keys());
@@ -196,7 +252,7 @@ impl<'a> Update<'a> {
                 }
             }
             offsets.insert(num, (out.len(), r.generation));
-            write_object(&mut out, r, &obj, doc);
+            write_object_with_security(&mut out, r, &obj, security)?;
         }
         let size = offsets.keys().max().map_or(1, |m| m + 1);
         let mut trailer = Dict::new();
@@ -205,6 +261,9 @@ impl<'a> Update<'a> {
             if let Some(v) = doc.trailer().get(key) {
                 trailer.insert(Name::new(key), v.clone());
             }
+        }
+        if let Some(r) = encrypt {
+            trailer.insert("Encrypt", Object::Reference(r));
         }
         let xref_at = out.len();
         write_xref_table(&mut out, &offsets, true);
@@ -244,14 +303,24 @@ fn new_id(doc: &Document, content: &[u8]) -> Option<Object> {
 }
 
 /// Writes `r` as an indirect object, encrypted when the file is.
-fn write_object(out: &mut Vec<u8>, r: ObjRef, obj: &Object, doc: &Document) {
+fn write_object(out: &mut Vec<u8>, r: ObjRef, obj: &Object, doc: &Document) -> Result<()> {
+    write_object_with_security(out, r, obj, doc.security())
+}
+
+fn write_object_with_security(
+    out: &mut Vec<u8>,
+    r: ObjRef,
+    obj: &Object,
+    security: Option<&crate::crypt::Security>,
+) -> Result<()> {
     let mut obj = obj.clone();
-    if let Some(security) = doc.security() {
-        security.encrypt_object(r, &mut obj);
+    if let Some(security) = security {
+        security.encrypt_object(r, &mut obj)?;
     }
     out.extend_from_slice(format!("{} {} obj\n", r.num, r.generation).as_bytes());
     serialize(out, &obj);
     out.extend_from_slice(b"\nendobj\n");
+    Ok(())
 }
 
 /// Writes an object in PDF syntax. A stream's /Length is set to its data.

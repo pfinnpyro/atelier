@@ -62,3 +62,27 @@ mod imp {
         Err("Choose the default PDF app in your desktop's settings.".into())
     }
 }
+
+/// Platform-specific instructions; association changes remain the user's choice.
+pub fn guidance() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "In Finder, select a PDF and choose File → Get Info. Under Open with, choose Atelier, then Change All… and Continue. Install Atelier in Applications first so it appears in the list."
+    } else if cfg!(windows) {
+        "Open Default apps, choose Atelier, and assign it to .pdf files."
+    } else {
+        "In your file manager, right-click a PDF, open Properties → Open With, choose Atelier, and set it as the default. The wording depends on your desktop."
+    }
+}
+
+/// Selects a PDF so the person can open its Get Info association controls.
+pub fn reveal_pdf(path: &std::path::Path) -> Result<(), String> {
+    if !cfg!(target_os = "macos") {
+        return Err("Finder is available on macOS.".into());
+    }
+    std::process::Command::new("/usr/bin/open")
+        .arg("-R")
+        .arg(path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Could not reveal the PDF in Finder: {e}"))
+}

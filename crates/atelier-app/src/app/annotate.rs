@@ -98,6 +98,8 @@ pub(super) struct Annotate {
     highlight: [f64; 3],
     ink: [f64; 3],
     width: f64,
+    erasing: bool,
+    signature_name: String,
     /// Lines drawn and not yet added, on one page.
     strokes: Vec<Vec<Point>>,
     strokes_page: Option<usize>,
@@ -116,6 +118,8 @@ impl Default for Annotate {
             highlight: HIGHLIGHTS[0],
             ink: INKS[0],
             width: 1.5,
+            erasing: false,
+            signature_name: String::new(),
             strokes: Vec::new(),
             strokes_page: None,
             drawing: None,
@@ -127,6 +131,9 @@ impl Default for Annotate {
 }
 
 impl Annotate {
+    pub(super) fn has_pending_ink(&self) -> bool {
+        !self.strokes.is_empty() || self.drawing.is_some()
+    }
     /// Drops work in progress, as when another file comes forward.
     pub fn reset(&mut self) {
         self.tool = Tool::Select;
@@ -216,12 +223,216 @@ fn thin(stroke: &[Point], min: f64) -> Vec<Point> {
     out
 }
 
+/// Distance to an ink segment, including single-point dots.
+fn stroke_hit(line: &[Point], p: Point, tolerance: f64) -> bool {
+    if line.iter().any(|q| (p - *q).length() <= tolerance) {
+        return true;
+    }
+    line.windows(2).any(|pair| {
+        let a = pair[0];
+        let b = pair[1];
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let length = dx * dx + dy * dy;
+        if length == 0.0 {
+            return false;
+        }
+        let t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / length).clamp(0.0, 1.0);
+        (p - Point::new(a.x + t * dx, a.y + t * dy)).length() <= tolerance
+    })
+}
+
 impl Viewer {
+    pub(super) fn ink_settings_ui(&mut self, ui: &mut egui::Ui) {
+        ui.label("Your saved ink signature is stored on this computer as drawing data.");
+        ui.label("Ink alone does not authenticate identity or protect the document.");
+        ui.checkbox(
+            &mut self.settings.certify_ink,
+            "Offer certificate signing after placing ink",
+        );
+        if let Some(sig) = &self.annotate.signature {
+            let (rect, _) = ui.allocate_exact_size(Vec2::new(280.0, 90.0), Sense::hover());
+            ui.painter()
+                .rect_filled(rect, 5.0, ui.visuals().extreme_bg_color);
+            let height = sig
+                .iter()
+                .flatten()
+                .map(|p| p.y)
+                .fold(0.0_f64, f64::max)
+                .max(0.01);
+            let scale = 250.0_f64.min(65.0 / height) as f32;
+            for line in sig {
+                let points = line
+                    .iter()
+                    .map(|p| {
+                        rect.left_center()
+                            + Vec2::new(
+                                12.0 + p.x as f32 * scale,
+                                (p.y - height / 2.0) as f32 * scale,
+                            )
+                    })
+                    .collect();
+                ui.painter().with_clip_rect(rect).add(Shape::line(
+                    points,
+                    Stroke::new(1.8, ui.visuals().text_color()),
+                ));
+            }
+        }
+        if ui
+            .add_enabled(
+                self.open.is_some(),
+                egui::Button::new("Back document ink with a certificate…"),
+            )
+            .clicked()
+        {
+            self.open_security(true);
+        }
+        let exists = self.annotate.signature.is_some();
+        ui.horizontal(|ui| {
+            if ui
+                .button(if exists {
+                    "Replace signature…"
+                } else {
+                    "Create signature…"
+                })
+                .clicked()
+            {
+                self.annotate.pad = Some(Pad::default());
+            }
+            if ui
+                .add_enabled(exists, egui::Button::new("Delete saved signature"))
+                .clicked()
+            {
+                let result = signature_path().map(std::fs::remove_file);
+                match result {
+                    Some(Err(e)) if e.kind() != std::io::ErrorKind::NotFound => {
+                        self.error = Some(format!("Could not delete the signature: {e}"));
+                    }
+                    _ => {
+                        self.annotate.signature = None;
+                        self.annotate.tool = Tool::Select;
+                    }
+                }
+            }
+        });
+        ui.add_space(8.0);
+        ui.label("Signature library");
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.annotate.signature_name)
+                    .hint_text("Signature name")
+                    .desired_width(180.0),
+            );
+            if ui
+                .add_enabled(exists, egui::Button::new("Save named copy"))
+                .clicked()
+            {
+                let name = self.annotate.signature_name.trim();
+                if name.is_empty()
+                    || name.len() > 64
+                    || !name
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, ' ' | '-' | '_'))
+                {
+                    self.error = Some(
+                        "Use a name of 1–64 letters, numbers, spaces, hyphens or underscores."
+                            .into(),
+                    );
+                } else if let (Some(root), Some(sig)) = (
+                    signature_path().and_then(|p| p.parent().map(|d| d.join("signatures"))),
+                    &self.annotate.signature,
+                ) {
+                    let result = std::fs::create_dir_all(&root).and_then(|_| {
+                        use std::io::Write;
+                        let mut file = std::fs::OpenOptions::new()
+                            .write(true)
+                            .create_new(true)
+                            .open(root.join(format!("{name}.txt")))?;
+                        file.write_all(signature_text(sig).as_bytes())
+                    });
+                    match result {
+                        Ok(()) => self.annotate.signature_name.clear(),
+                        Err(e) => self.error = Some(format!("Could not save named signature: {e}")),
+                    }
+                }
+            }
+        });
+        if let Some(root) = signature_path().and_then(|p| p.parent().map(|d| d.join("signatures")))
+        {
+            let mut files: Vec<_> = std::fs::read_dir(&root)
+                .into_iter()
+                .flatten()
+                .filter_map(Result::ok)
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|e| e == "txt"))
+                .collect();
+            files.sort();
+            for path in files {
+                ui.horizontal(|ui| {
+                    ui.label(path.file_stem().unwrap_or_default().to_string_lossy());
+                    if ui.button("Use").clicked() {
+                        match std::fs::read_to_string(&path) {
+                            Ok(text) => {
+                                let sig = parse_signature(&text);
+                                if !sig.is_empty()
+                                    && let Some(active) = signature_path()
+                                {
+                                    match std::fs::write(active, signature_text(&sig)) {
+                                        Ok(()) => self.annotate.signature = Some(sig),
+                                        Err(e) => {
+                                            self.error =
+                                                Some(format!("Could not select signature: {e}"))
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => self.error = Some(format!("Could not read signature: {e}")),
+                        }
+                    }
+                    if ui.button("Delete").clicked()
+                        && let Err(e) = std::fs::remove_file(&path)
+                    {
+                        self.error = Some(format!("Could not delete signature: {e}"));
+                    }
+                });
+            }
+        }
+    }
+
+    /// Reopens an ink mark as editable strokes, preserving its appearance.
+    pub(super) fn edit_ink(&mut self, index: usize, redraw: bool) {
+        self.commit_ink();
+        let mark = self.open.as_ref().and_then(|o| {
+            o.session
+                .added_annots()
+                .get(index)
+                .map(|(page, a)| (*page, (*a).clone()))
+        });
+        let Some((
+            page,
+            NewAnnot {
+                markup: Markup::Ink { strokes, width },
+                color,
+            },
+        )) = mark
+        else {
+            return;
+        };
+        self.remove_mark(index);
+        self.annotate.strokes = if redraw { Vec::new() } else { strokes };
+        self.annotate.strokes_page = Some(page);
+        self.annotate.ink = color;
+        self.annotate.width = width;
+        self.annotate.tool = Tool::Draw;
+        self.selection = None;
+    }
+
     /// Picks a tool; the one in use is put down when picked again.
     pub(super) fn set_tool(&mut self, tool: Tool) {
         self.commit_ink();
         let a = &mut self.annotate;
         a.tool = if a.tool == tool { Tool::Select } else { tool };
+        a.erasing = false;
         a.note = None;
         if a.tool == Tool::Sign && a.signature.is_none() {
             a.pad = Some(Pad::default());
@@ -333,9 +544,218 @@ impl Viewer {
             .rev()
             .find(|(_, (on, a))| {
                 let r = a.rect();
-                *on == page && p.x >= r[0] && p.x <= r[2] && p.y >= r[1] && p.y <= r[3]
+                let geometry = match &a.markup {
+                    Markup::Ink { strokes, width } => strokes
+                        .iter()
+                        .any(|line| stroke_hit(line, p, width / 2.0 + 4.0 / o.layout.zoom())),
+                    _ => true,
+                };
+                *on == page && geometry && p.x >= r[0] && p.x <= r[2] && p.y >= r[1] && p.y <= r[3]
             })
             .map(|(i, _)| i)
+    }
+
+    /// Hit tests saved review annotations, excluding form widgets and locked marks.
+    pub(super) fn saved_mark_at(&self, lx: f64, ly: f64) -> Option<(usize, usize)> {
+        let o = self.open.as_ref()?;
+        let (page, _, _) = o.layout.page_at(lx, ly)?;
+        let p = o.layout.to_user(page, lx, ly)?;
+        let pages = o.doc.pages().ok()?;
+        let Object::Array(annots) = o.doc.get_key(&pages.get(page)?.dict, b"Annots").ok()? else {
+            return None;
+        };
+        let added = o
+            .session
+            .added_annots()
+            .iter()
+            .filter(|(on, _)| *on == page)
+            .count();
+        annots
+            .iter()
+            .take(annots.len().saturating_sub(added))
+            .enumerate()
+            .rev()
+            .find_map(|(i, a)| {
+                let d = o.doc.resolve_dict(a).ok()?;
+                let kind = d.get(b"Subtype")?.as_name()?;
+                if !matches!(
+                    kind.0.as_slice(),
+                    b"Ink"
+                        | b"Text"
+                        | b"Highlight"
+                        | b"Underline"
+                        | b"StrikeOut"
+                        | b"Squiggly"
+                        | b"FreeText"
+                ) {
+                    return None;
+                }
+                if d.get(b"F").and_then(Object::as_i64).unwrap_or(0) & (64 | 128) != 0 {
+                    return None;
+                }
+                if *kind == b"Ink" {
+                    let ink = self.saved_ink(page, i)?;
+                    if let Markup::Ink { strokes, width } = ink.markup
+                        && !strokes
+                            .iter()
+                            .any(|line| stroke_hit(line, p, width / 2.0 + 4.0 / o.layout.zoom()))
+                    {
+                        return None;
+                    }
+                }
+                let r = o.doc.get_key(&d, b"Rect").ok()?;
+                let r = atelier_syntax::Rect::from_array(r.as_array()?)?;
+                (p.x >= r.x0.min(r.x1)
+                    && p.x <= r.x0.max(r.x1)
+                    && p.y >= r.y0.min(r.y1)
+                    && p.y <= r.y0.max(r.y1))
+                .then_some((page, i))
+            })
+    }
+
+    pub(super) fn saved_ink(&self, page: usize, visible: usize) -> Option<NewAnnot> {
+        let o = self.open.as_ref()?;
+        let pages = o.doc.pages().ok()?;
+        let Object::Array(list) = o.doc.get_key(&pages.get(page)?.dict, b"Annots").ok()? else {
+            return None;
+        };
+        let d = o.doc.resolve_dict(list.get(visible)?).ok()?;
+        let Object::Array(lines) = o.doc.get_key(&d, b"InkList").ok()? else {
+            return None;
+        };
+        let strokes: Option<Vec<Vec<Point>>> = lines
+            .iter()
+            .map(|line| {
+                let line = o.doc.resolve(line).ok()?;
+                let values = line.as_array()?;
+                if values.len() % 2 != 0 {
+                    return None;
+                }
+                values
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|p| {
+                        let p = Point::new(p[0].as_f64()?, p[1].as_f64()?);
+                        (p.x.is_finite() && p.y.is_finite()).then_some(p)
+                    })
+                    .collect()
+            })
+            .collect();
+        let color = o
+            .doc
+            .get_key(&d, b"C")
+            .ok()
+            .and_then(|v| {
+                let a = v.as_array()?;
+                Some([
+                    a.first()?.as_f64()?,
+                    a.get(1)?.as_f64()?,
+                    a.get(2)?.as_f64()?,
+                ])
+            })
+            .unwrap_or(INKS[0]);
+        let width = o
+            .doc
+            .get_key(&d, b"BS")
+            .ok()
+            .and_then(|v| o.doc.resolve_dict(&v).ok())
+            .and_then(|d| d.get(b"W").and_then(Object::as_f64))
+            .filter(|w| w.is_finite() && *w > 0.0)
+            .unwrap_or(1.5);
+        Some(NewAnnot {
+            markup: Markup::Ink {
+                strokes: strokes?,
+                width,
+            },
+            color,
+        })
+    }
+
+    pub(super) fn edit_added_comment(&mut self, index: usize) {
+        let Some(o) = &self.open else { return };
+        let list = o.session.added_annots();
+        let Some((page, a)) = list.get(index) else {
+            return;
+        };
+        let Some(review) = a.review() else { return };
+        let rect = a.rect();
+        self.annotate.note = Some(NoteEditor {
+            page: *page,
+            at: Point::new(rect[0], rect[3]),
+            text: review.text.clone(),
+            focus: true,
+            created: review.created.clone(),
+            modified: review.modified.clone(),
+            author: review.author.clone(),
+            subject: review.subject.clone(),
+            target: Some(ReviewTarget::Added(index)),
+            highlights: Vec::new(),
+            generation: o.generation,
+        });
+    }
+
+    pub(super) fn edit_saved_comment(&mut self, page: usize, visible: usize) {
+        let Some(o) = &self.open else { return };
+        let Some(ordinal) = o.session.original_annot_ordinal(page, visible) else {
+            return;
+        };
+        let Ok(pages) = o.doc.pages() else { return };
+        let Ok(Object::Array(list)) = o.doc.get_key(&pages[page].dict, b"Annots") else {
+            return;
+        };
+        let Some(target) = list.get(visible) else {
+            return;
+        };
+        let Ok(d) = o.doc.resolve_dict(target) else {
+            return;
+        };
+        let text = |key: &[u8]| {
+            o.doc
+                .get_key(&d, key)
+                .ok()
+                .and_then(|v| v.as_string().map(|s| s.to_text()))
+                .unwrap_or_default()
+        };
+        self.annotate.note = Some(NoteEditor {
+            page,
+            at: Point::new(0.0, 0.0),
+            text: text(b"Contents"),
+            focus: true,
+            created: text(b"CreationDate"),
+            modified: text(b"M"),
+            author: text(b"T"),
+            subject: text(b"Subj"),
+            target: Some(ReviewTarget::Saved(ordinal)),
+            highlights: Vec::new(),
+            generation: o.generation,
+        });
+    }
+
+    pub(super) fn remove_saved_mark(&mut self, page: usize, visible: usize) {
+        let Some(o) = &mut self.open else { return };
+        if let Some(ordinal) = o.session.original_annot_ordinal(page, visible) {
+            o.session.remove_saved_annot(page, ordinal);
+            self.rebuild(&HashSet::from([page]), false);
+        }
+    }
+
+    pub(super) fn edit_saved_ink(&mut self, page: usize, visible: usize, redraw: bool) {
+        let Some(NewAnnot {
+            markup: Markup::Ink { strokes, width },
+            color,
+        }) = self.saved_ink(page, visible)
+        else {
+            return;
+        };
+        self.commit_ink();
+        self.remove_saved_mark(page, visible);
+        self.annotate.strokes = if redraw { Vec::new() } else { strokes };
+        self.annotate.strokes_page = Some(page);
+        self.annotate.ink = color;
+        self.annotate.width = width;
+        self.annotate.tool = Tool::Draw;
+        self.selection = None;
     }
 
     /// The text of a comment (or any annotation with text) under a layout
@@ -432,7 +852,7 @@ impl Viewer {
                     target: Some(if ordinal >= original_count {
                         ReviewTarget::Added(page_added[ordinal - original_count])
                     } else {
-                        ReviewTarget::Saved(ordinal)
+                        ReviewTarget::Saved(o.session.original_annot_ordinal(page, ordinal)?)
                     }),
                     highlights: Vec::new(),
                     generation: o.generation,
@@ -499,6 +919,29 @@ impl Viewer {
                     ui.ctx().set_cursor_icon(CursorIcon::Crosshair);
                 }
                 let zoom = o.layout.zoom();
+                if self.annotate.erasing {
+                    if response.hovered()
+                        && ui.input(|i| i.pointer.primary_down())
+                        && let Some((page, p)) = user
+                    {
+                        if self.annotate.strokes.is_empty()
+                            && let Some((lx, ly)) = at
+                        {
+                            if let Some(index) = self.mark_at(lx, ly) {
+                                self.edit_ink(index, false);
+                            } else if let Some((on, ordinal)) = self.saved_mark_at(lx, ly) {
+                                self.edit_saved_ink(on, ordinal, false);
+                            }
+                        }
+                        if self.annotate.strokes_page == Some(page) {
+                            let tolerance = 6.0 / zoom + self.annotate.width / 2.0;
+                            self.annotate
+                                .strokes
+                                .retain(|line| !stroke_hit(line, p, tolerance));
+                        }
+                    }
+                    return true;
+                }
                 let a = &mut self.annotate;
                 if response.drag_started_by(egui::PointerButton::Primary)
                     && let Some((page, p)) = user
@@ -562,8 +1005,10 @@ impl Viewer {
         o.session.add_annot(page, annot);
         self.annotate.tool = Tool::Select;
         self.rebuild(&HashSet::from([page]), false);
-        self.notice =
-            Some("Ink signature added. This is not certificate-backed. Ctrl+Z to undo.".into());
+        self.notice = Some("Ink signature added. Certificate backing applies only after exporting a signed copy. Ctrl+Z to undo.".into());
+        if self.settings.certify_ink {
+            self.open_security(true);
+        }
     }
 
     /// Draws the lines being drawn, and the signature under the pointer
@@ -645,7 +1090,21 @@ impl Viewer {
                         ui.label("Comment: click where it goes.");
                     }
                     Tool::Draw => {
-                        ui.label("Draw: drag on a page.");
+                        ui.selectable_value(&mut a.erasing, false, "Draw");
+                        ui.selectable_value(&mut a.erasing, true, "Erase strokes");
+                        if ui
+                            .add_enabled(
+                                !a.strokes.is_empty(),
+                                egui::Button::new("Erase last stroke"),
+                            )
+                            .clicked()
+                        {
+                            a.strokes.pop();
+                        }
+                        if ui.button("Clear drawing").clicked() {
+                            a.strokes.clear();
+                            a.drawing = None;
+                        }
                         swatches(ui, &INKS, &mut a.ink);
                         ui.add(
                             egui::Slider::new(&mut a.width, 0.5..=8.0)
@@ -725,6 +1184,10 @@ impl Viewer {
             .clicked()
         {
             self.set_tool(Tool::Sign);
+            ui.close();
+        }
+        if ui.button("Back ink with a certificate…").clicked() {
+            self.open_security(true);
             ui.close();
         }
         ui.separator();
@@ -1013,6 +1476,16 @@ mod tests {
         assert_eq!(back.len(), 2);
         assert!((back[0][1].y - 0.2).abs() < 1e-3);
         assert!(parse_signature("1,nan\n\n").is_empty());
+    }
+
+    #[test]
+    fn eraser_hits_segments_without_erasing_distant_strokes() {
+        let line = [Point::new(0.0, 0.0), Point::new(100.0, 0.0)];
+        assert!(stroke_hit(&line, Point::new(50.0, 2.0), 3.0));
+        assert!(!stroke_hit(&line, Point::new(50.0, 8.0), 3.0));
+        assert!(!stroke_hit(&line, Point::new(120.0, 0.0), 3.0));
+        assert!(stroke_hit(&line[..1], Point::new(1.0, 0.0), 3.0));
+        assert!(!stroke_hit(&[], Point::new(0.0, 0.0), 3.0));
     }
 
     #[test]
