@@ -17,6 +17,10 @@ pub(super) enum MenuTarget {
     Field((usize, usize)),
     /// A mark added since the file was opened or saved.
     Mark(usize),
+    SavedMark {
+        page: usize,
+        ordinal: usize,
+    },
 }
 
 /// The clipboard's text, read when Paste is picked from a menu (egui only
@@ -43,8 +47,13 @@ impl Viewer {
     /// A right click on the page: picks what the menu is for. Text under
     /// the pointer is selected first unless it is already in the selection.
     pub(super) fn menu_target_at(&mut self, lx: f64, ly: f64) {
+        self.commit_ink();
         if let Some(i) = self.mark_at(lx, ly) {
             self.menu = Some(MenuTarget::Mark(i));
+            return;
+        }
+        if let Some((page, ordinal)) = self.saved_mark_at(lx, ly) {
+            self.menu = Some(MenuTarget::SavedMark { page, ordinal });
             return;
         }
         if let Some(at) = self.widget_at(lx, ly) {
@@ -81,6 +90,26 @@ impl Viewer {
         match self.menu {
             Some(MenuTarget::Text { page, at }) => self.text_menu(ui, page, at),
             Some(MenuTarget::Field(at)) => self.field_menu(ui, at),
+            Some(MenuTarget::SavedMark { page, ordinal }) => {
+                if ui.button("Edit comment…").clicked() {
+                    self.edit_saved_comment(page, ordinal);
+                    ui.close();
+                }
+                if self.saved_ink(page, ordinal).is_some() {
+                    if ui.button("Edit drawing…").clicked() {
+                        self.edit_saved_ink(page, ordinal, false);
+                        ui.close();
+                    }
+                    if ui.button("Redraw…").clicked() {
+                        self.edit_saved_ink(page, ordinal, true);
+                        ui.close();
+                    }
+                }
+                if ui.button("Remove this annotation").clicked() {
+                    self.remove_saved_mark(page, ordinal);
+                    ui.close();
+                }
+            }
             Some(MenuTarget::Mark(i)) => {
                 let mark = self.open.as_ref().and_then(|o| {
                     o.session
@@ -89,7 +118,22 @@ impl Viewer {
                         .map(|(page, annot)| (*page, (*annot).clone()))
                 });
                 if let Some((page, annot)) = mark {
+                    if matches!(annot.markup, atelier_form::Markup::Ink { .. }) {
+                        if ui.button("Edit drawing…").clicked() {
+                            self.edit_ink(i, false);
+                            ui.close();
+                        }
+                        if ui.button("Redraw…").clicked() {
+                            self.edit_ink(i, true);
+                            ui.close();
+                        }
+                        ui.separator();
+                    }
                     if let Some(review) = annot.review() {
+                        if ui.button("Edit comment…").clicked() {
+                            self.edit_added_comment(i);
+                            ui.close();
+                        }
                         ui.strong(&review.author);
                         ui.weak(super::annotate::display_date(&review.created));
                         if ui.button("Copy comment text").clicked() {

@@ -42,8 +42,17 @@ pub struct Session {
     /// Annotations added, oldest first, with their page.
     annots: Vec<(PageSlot, NewAnnot)>,
     review_edits: BTreeMap<(PageSlot, usize), crate::Review>,
+    removed_annots: BTreeSet<(PageSlot, usize)>,
+    annot_history: Vec<AnnotSnapshot>,
     /// Fields shown (false) or hidden (true) by form scripts, by index.
     hidden: BTreeMap<usize, bool>,
+}
+
+struct AnnotSnapshot {
+    page: PageSlot,
+    annots: Vec<(PageSlot, NewAnnot)>,
+    reviews: BTreeMap<(PageSlot, usize), crate::Review>,
+    removed: BTreeSet<(PageSlot, usize)>,
 }
 
 /// The pages of a document as opened, in their own order.
@@ -68,6 +77,8 @@ impl Session {
             layers: BTreeMap::new(),
             annots: Vec::new(),
             review_edits: BTreeMap::new(),
+            removed_annots: BTreeSet::new(),
+            annot_history: Vec::new(),
             hidden: BTreeMap::new(),
         }
     }
@@ -99,7 +110,25 @@ impl Session {
     /// Adds an annotation (a highlight, comment or ink) to a page.
     pub fn add_annot(&mut self, page: usize, annot: NewAnnot) {
         if let Some(&slot) = self.order.get(page) {
+            self.remember_annots(slot);
             self.annots.push((slot, annot));
+        }
+    }
+
+    /// Maps a visible saved-annotation ordinal back to the original array.
+    pub fn original_annot_ordinal(&self, page: usize, visible: usize) -> Option<usize> {
+        let slot = *self.order.get(page)?;
+        (0..)
+            .filter(|n| !self.removed_annots.contains(&(slot, *n)))
+            .nth(visible)
+    }
+
+    /// Removes an original annotation, preserving ordinals for other edits.
+    pub fn remove_saved_annot(&mut self, page: usize, ordinal: usize) {
+        if let Some(&slot) = self.order.get(page) {
+            self.remember_annots(slot);
+            self.removed_annots.insert((slot, ordinal));
+            self.review_edits.remove(&(slot, ordinal));
         }
     }
 
@@ -107,20 +136,40 @@ impl Session {
     /// The page slot follows reordering and imported pages through copying.
     pub fn set_review(&mut self, page: usize, ordinal: usize, review: crate::Review) {
         if let Some(&slot) = self.order.get(page) {
+            self.remember_annots(slot);
             self.review_edits.insert((slot, ordinal), review);
         }
     }
 
     pub fn set_added_review(&mut self, index: usize, review: crate::Review) -> bool {
+        if let Some((slot, _)) = self.annots.get(index) {
+            self.remember_annots(*slot);
+        }
         self.annots
             .get_mut(index)
             .is_some_and(|(_, annot)| annot.set_review(review))
     }
 
-    /// Takes back the newest annotation added; returns its page.
+    fn remember_annots(&mut self, page: PageSlot) {
+        self.annot_history.push(AnnotSnapshot {
+            page,
+            annots: self.annots.clone(),
+            reviews: self.review_edits.clone(),
+            removed: self.removed_annots.clone(),
+        });
+        // Bound history memory for long review sessions.
+        if self.annot_history.len() > 100 {
+            self.annot_history.remove(0);
+        }
+    }
+
+    /// Undoes the most recent annotation addition, removal or review edit.
     pub fn undo_annot(&mut self) -> Option<usize> {
-        let (slot, _) = self.annots.pop()?;
-        self.order.iter().position(|s| *s == slot)
+        let old = self.annot_history.pop()?;
+        self.annots = old.annots;
+        self.review_edits = old.reviews;
+        self.removed_annots = old.removed;
+        self.order.iter().position(|s| *s == old.page)
     }
 
     /// Removes an added annotation, by its place in [`Session::added_annots`].
@@ -128,6 +177,7 @@ impl Session {
         if index >= self.annots.len() {
             return None;
         }
+        self.remember_annots(self.annots[index].0);
         let (slot, _) = self.annots.remove(index);
         self.order.iter().position(|s| *s == slot)
     }
@@ -269,6 +319,7 @@ impl Session {
         self.layers.retain(|s, _| kept.contains(s));
         self.annots.retain(|(s, _)| kept.contains(s));
         self.review_edits.retain(|(slot, _), _| kept.contains(slot));
+        self.removed_annots.retain(|(slot, _)| kept.contains(slot));
         Some(old)
     }
 
@@ -298,6 +349,7 @@ impl Session {
             || self.pages_changed()
             || !self.annots.is_empty()
             || !self.review_edits.is_empty()
+            || !self.removed_annots.is_empty()
             || !self.hidden.is_empty()
     }
 
@@ -311,6 +363,8 @@ impl Session {
         self.layers.clear();
         self.annots.clear();
         self.review_edits.clear();
+        self.removed_annots.clear();
+        self.annot_history.clear();
         self.hidden.clear();
     }
 
@@ -325,6 +379,7 @@ impl Session {
             && self.layers.is_empty()
             && self.annots.is_empty()
             && self.review_edits.is_empty()
+            && self.removed_annots.is_empty()
             && self.hidden.is_empty()
             && !redraw
             && !reorder
@@ -412,6 +467,31 @@ impl Session {
                 list[*ordinal] = Object::Dict(annot);
                 page.insert("Annots", Object::Array(list));
                 update.set(page_ref, Object::Dict(page));
+            }
+        }
+        for (slot, &page_ref) in &refs {
+            let removed: BTreeSet<_> = self
+                .removed_annots
+                .iter()
+                .filter(|(s, _)| s == slot)
+                .map(|(_, n)| *n)
+                .collect();
+            if removed.is_empty() {
+                continue;
+            }
+            if let Object::Dict(mut page) = update.get(page_ref)? {
+                if let Some(list) = page.get(b"Annots") {
+                    if let Object::Array(list) = update.resolve(list)? {
+                        let list = list
+                            .into_iter()
+                            .enumerate()
+                            .filter(|(i, _)| !removed.contains(i))
+                            .map(|(_, a)| a)
+                            .collect();
+                        page.insert("Annots", Object::Array(list));
+                        update.set(page_ref, Object::Dict(page));
+                    }
+                }
             }
         }
         for (n, (slot, a)) in self.annots.iter().enumerate() {
@@ -604,6 +684,8 @@ impl Session {
         self.layers.clear();
         self.annots.clear();
         self.review_edits.clear();
+        self.removed_annots.clear();
+        self.annot_history.clear();
         self.hidden.clear();
     }
 

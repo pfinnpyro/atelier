@@ -6,7 +6,7 @@ use atelier_crypto::{
     Aes, Md5, aes_cbc_decrypt, aes_cbc_encrypt, md5, rc4, sha256, sha384, sha512,
 };
 
-use crate::{Dict, Document, Error, ObjRef, Object, Result};
+use crate::{Dict, Document, Error, Name, ObjRef, Object, PdfString, Result};
 
 /// The 32-byte padding string passwords are extended with.
 const PAD: [u8; 32] = [
@@ -134,23 +134,16 @@ impl Security {
         }
     }
 
-    fn encrypt(&self, r: ObjRef, method: Method, data: &[u8]) -> Vec<u8> {
-        match method {
+    fn encrypt(&self, r: ObjRef, method: Method, data: &[u8]) -> Result<Vec<u8>> {
+        Ok(match method {
             Method::Identity => data.to_vec(),
             Method::Rc4 => rc4(&self.object_key(r, method), data),
             Method::Aes128 | Method::Aes256 => {
                 let key = self.object_key(r, method);
-                let Some(aes) = Aes::new(&key) else {
-                    return data.to_vec();
-                };
-                // A fresh IV per object and content, without a random
-                // source: the hash of the key, the object and the data.
-                let mut seed = key.clone();
-                seed.extend_from_slice(&r.num.to_le_bytes());
-                seed.extend_from_slice(&r.generation.to_le_bytes());
-                seed.extend_from_slice(data);
+                let aes =
+                    Aes::new(&key).ok_or_else(|| Error::Structure("invalid AES key".into()))?;
                 let mut iv = [0u8; 16];
-                iv.copy_from_slice(&sha256(&seed)[..16]);
+                random(&mut iv)?;
                 let pad = 16 - data.len() % 16;
                 let mut padded = data.to_vec();
                 padded.extend(std::iter::repeat_n(pad as u8, pad));
@@ -158,38 +151,142 @@ impl Security {
                 out.extend(aes_cbc_encrypt(&aes, &iv, &padded));
                 out
             }
-        }
+        })
     }
 
     /// Encrypts every string inside `obj` and, for a stream, its data, to
     /// be written as object `r`. The inverse of reading.
-    pub fn encrypt_object(&self, r: ObjRef, obj: &mut Object) {
+    pub fn encrypt_object(&self, r: ObjRef, obj: &mut Object) -> Result<()> {
         if self.dict_ref == Some(r) {
-            return;
+            return Ok(());
         }
-        self.encrypt_strings(r, obj);
+        self.encrypt_strings(r, obj)?;
         if let Object::Stream(stream) = obj {
             let skip = stream.dict.is_type(b"XRef")
                 || (stream.dict.is_type(b"Metadata") && !self.encrypt_metadata)
                 || crate::document::has_identity_crypt_filter(&stream.dict);
             if !skip {
-                stream.data = self.encrypt(r, self.streams, &stream.data).into();
+                stream.data = self.encrypt(r, self.streams, &stream.data)?.into();
             }
         }
+        Ok(())
     }
 
-    fn encrypt_strings(&self, r: ObjRef, obj: &mut Object) {
+    fn encrypt_strings(&self, r: ObjRef, obj: &mut Object) -> Result<()> {
         match obj {
-            Object::String(s) => s.bytes = self.encrypt(r, self.strings, &s.bytes),
-            Object::Array(a) => a.iter_mut().for_each(|o| self.encrypt_strings(r, o)),
-            Object::Dict(d) => d.0.iter_mut().for_each(|(_, o)| self.encrypt_strings(r, o)),
-            Object::Stream(s) => s
-                .dict
-                .0
-                .iter_mut()
-                .for_each(|(_, o)| self.encrypt_strings(r, o)),
+            Object::String(s) => s.bytes = self.encrypt(r, self.strings, &s.bytes)?,
+            Object::Array(a) => {
+                for o in a {
+                    self.encrypt_strings(r, o)?;
+                }
+            }
+            Object::Dict(d) => {
+                for (_, o) in &mut d.0 {
+                    self.encrypt_strings(r, o)?;
+                }
+            }
+            Object::Stream(s) => {
+                for (_, o) in &mut s.dict.0 {
+                    self.encrypt_strings(r, o)?;
+                }
+            }
             _ => {}
         }
+        Ok(())
+    }
+
+    /// Creates the revision 6 standard security handler (algorithms 8–10).
+    pub fn create(user: &str, owner: &str, dict_ref: ObjRef) -> Result<(Self, Dict)> {
+        if user.is_empty() || owner.is_empty() || user.len() > 127 || owner.len() > 127 {
+            return Err(Error::Unsupported(
+                "use nonempty passwords of at most 127 UTF-8 bytes".into(),
+            ));
+        }
+        // ASCII avoids silently applying an incomplete SASLprep implementation.
+        if !user.bytes().all(|b| (32..=126).contains(&b))
+            || !owner.bytes().all(|b| (32..=126).contains(&b))
+        {
+            return Err(Error::Unsupported(
+                "new encryption currently requires ASCII passwords".into(),
+            ));
+        }
+        let mut key = vec![0; 32];
+        random(&mut key)?;
+        let params = Params {
+            revision: 6,
+            key_len: 32,
+            o: vec![],
+            u: vec![],
+            oe: vec![],
+            ue: vec![],
+            p: -4,
+            id: vec![],
+            encrypt_metadata: true,
+            strings: Method::Aes256,
+            streams: Method::Aes256,
+        };
+        let make_entry = |password: &[u8], u: &[u8]| -> Result<(Vec<u8>, Vec<u8>)> {
+            let mut salts = [0; 16];
+            random(&mut salts)?;
+            let mut value = params.hash(password, &salts[..8], u).to_vec();
+            value.extend_from_slice(&salts);
+            let wrapping = params.hash(password, &salts[8..], u);
+            let aes = Aes::new(&wrapping).expect("32-byte key");
+            Ok((value, aes_cbc_encrypt(&aes, &[0; 16], &key)))
+        };
+        let (u, ue) = make_entry(user.as_bytes(), &[])?;
+        let (o, oe) = make_entry(owner.as_bytes(), &u)?;
+        let mut perms = [0; 16];
+        random(&mut perms)?;
+        perms[..4].copy_from_slice(&(-4i32).to_le_bytes());
+        perms[4..8].fill(0xff);
+        perms[8..12].copy_from_slice(b"Tadb");
+        Aes::new(&key)
+            .expect("32-byte key")
+            .encrypt_block(&mut perms);
+        let mut dict = Dict::new();
+        dict.insert("Filter", Object::Name(Name::new("Standard")));
+        for (k, v) in [("V", 5), ("R", 6), ("Length", 256), ("P", -4)] {
+            dict.insert(k, Object::Integer(v));
+        }
+        for (k, v) in [
+            ("U", u),
+            ("UE", ue),
+            ("O", o),
+            ("OE", oe),
+            ("Perms", perms.to_vec()),
+        ] {
+            dict.insert(
+                k,
+                Object::String(PdfString {
+                    bytes: v,
+                    hex: true,
+                }),
+            );
+        }
+        dict.insert("EncryptMetadata", Object::Bool(true));
+        let mut filter = Dict::new();
+        filter.insert("CFM", Object::Name(Name::new("AESV3")));
+        filter.insert("AuthEvent", Object::Name(Name::new("DocOpen")));
+        filter.insert("Length", Object::Integer(32));
+        let mut cf = Dict::new();
+        cf.insert("StdCF", Object::Dict(filter));
+        dict.insert("CF", Object::Dict(cf));
+        for k in ["StmF", "StrF"] {
+            dict.insert(k, Object::Name(Name::new("StdCF")));
+        }
+        Ok((
+            Self {
+                key,
+                strings: Method::Aes256,
+                streams: Method::Aes256,
+                encrypt_metadata: true,
+                dict_ref: Some(dict_ref),
+                access: Access::Owner,
+                permissions: -4,
+            },
+            dict,
+        ))
     }
 
     pub fn decrypt_string(&self, r: ObjRef, data: &[u8]) -> Vec<u8> {
@@ -455,4 +552,9 @@ impl Params {
         out.copy_from_slice(&k[..32]);
         out
     }
+}
+
+fn random(bytes: &mut [u8]) -> Result<()> {
+    getrandom::fill(bytes)
+        .map_err(|e| Error::Structure(format!("system randomness unavailable: {e}")))
 }

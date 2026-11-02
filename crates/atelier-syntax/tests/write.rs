@@ -241,3 +241,247 @@ fn text_strings_round_trip() {
         "ok"
     );
 }
+
+#[test]
+fn aes256_export_requires_password_and_randomizes_output() {
+    let doc = Document::open(classic()).unwrap();
+    let first = doc
+        .update()
+        .to_encrypted_bytes("read-password", "owner-password")
+        .unwrap();
+    let second = doc
+        .update()
+        .to_encrypted_bytes("read-password", "owner-password")
+        .unwrap();
+    assert_ne!(first, second);
+    assert!(!first.windows(b"Before".len()).any(|w| w == b"Before"));
+    assert!(matches!(
+        Document::open(first.clone()),
+        Err(atelier_syntax::Error::Password)
+    ));
+    assert!(matches!(
+        Document::open_with_password(first.clone(), b"wrong"),
+        Err(atelier_syntax::Error::Password)
+    ));
+    let user = Document::open_with_password(first.clone(), b"read-password").unwrap();
+    assert_eq!(user.access(), Some(atelier_syntax::Access::User));
+    assert_eq!(title(&user), b"Before");
+    assert_eq!(user.pages().unwrap().len(), 1);
+    let owner = Document::open_with_password(first, b"owner-password").unwrap();
+    assert_eq!(owner.access(), Some(atelier_syntax::Access::Owner));
+    assert_eq!(title(&owner), b"Before");
+    assert!(doc.update().to_encrypted_bytes("", "owner").is_err());
+    assert!(
+        doc.update()
+            .to_encrypted_bytes("nonascii-é", "owner")
+            .is_err()
+    );
+}
+
+#[test]
+fn signature_byte_ranges_survive_embedding_and_reopening() {
+    let doc = Document::open(classic()).unwrap();
+    let prepared = doc.prepare_signature("Ada", 1024).unwrap();
+    let signing = prepared.signing_bytes();
+    let bytes = prepared.finish(&[0x30, 0x01, 0x00]).unwrap();
+    let saved = Document::open(bytes.clone()).unwrap();
+    let form = saved
+        .resolve_dict(saved.catalog().unwrap().get(b"AcroForm").unwrap())
+        .unwrap();
+    let fields = saved.resolve(form.get(b"Fields").unwrap()).unwrap();
+    let field = saved.resolve_dict(&fields.as_array().unwrap()[0]).unwrap();
+    let signature = saved.resolve_dict(field.get(b"V").unwrap()).unwrap();
+    let range = signature.get(b"ByteRange").unwrap().as_array().unwrap();
+    let r: Vec<_> = range.iter().map(|n| n.as_i64().unwrap() as usize).collect();
+    assert_eq!(r[0], 0);
+    assert_eq!(r[2] + r[3], bytes.len());
+    assert_eq!([&bytes[..r[1]], &bytes[r[2]..]].concat(), signing);
+    assert_eq!(bytes[r[1]], b'<');
+    assert_eq!(bytes[r[2] - 1], b'>');
+    assert!(
+        doc.prepare_signature("Ada", 1024)
+            .unwrap()
+            .finish(&vec![0; 1025])
+            .is_err()
+    );
+    assert!(saved.update().to_encrypted_bytes("read", "owner").is_err());
+}
+
+#[test]
+fn detached_pdf_signature_verifies_with_openssl() {
+    use std::process::{Command, Stdio};
+    if Command::new("openssl").arg("version").output().is_err() {
+        eprintln!("OpenSSL unavailable; external CMS verification skipped");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!(
+        "atelier-cms-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir(&dir).unwrap();
+    struct Cleanup(std::path::PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(dir.clone());
+    let key = dir.join("key.pem");
+    let cert = dir.join("cert.pem");
+    let generated = Command::new("openssl")
+        .args([
+            "req",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-x509",
+            "-subj",
+            "/CN=Atelier test",
+            "-days",
+            "1",
+            "-keyout",
+        ])
+        .arg(&key)
+        .arg("-out")
+        .arg(&cert)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap();
+    assert!(
+        generated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&generated.stderr)
+    );
+    let doc = Document::open(classic()).unwrap();
+    let prepared = doc.prepare_signature("Atelier test", 32768).unwrap();
+    let content = dir.join("content.bin");
+    let cms = dir.join("signature.der");
+    std::fs::write(&content, prepared.signing_bytes()).unwrap();
+    let signed = Command::new("openssl")
+        .args([
+            "cms",
+            "-sign",
+            "-binary",
+            "-outform",
+            "DER",
+            "-md",
+            "sha256",
+            "-nosmimecap",
+            "-signer",
+        ])
+        .arg(&cert)
+        .arg("-inkey")
+        .arg(&key)
+        .arg("-in")
+        .arg(&content)
+        .arg("-out")
+        .arg(&cms)
+        .output()
+        .unwrap();
+    assert!(
+        signed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&signed.stderr)
+    );
+    let bytes = prepared.finish(&std::fs::read(&cms).unwrap()).unwrap();
+    let saved = Document::open(bytes.clone()).unwrap();
+    let form = saved
+        .resolve_dict(saved.catalog().unwrap().get(b"AcroForm").unwrap())
+        .unwrap();
+    let fields = saved.resolve(form.get(b"Fields").unwrap()).unwrap();
+    let field = saved.resolve_dict(&fields.as_array().unwrap()[0]).unwrap();
+    let sig = saved.resolve_dict(field.get(b"V").unwrap()).unwrap();
+    let r: Vec<_> = sig
+        .get(b"ByteRange")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_i64().unwrap() as usize)
+        .collect();
+    std::fs::write(&content, [&bytes[..r[1]], &bytes[r[2]..]].concat()).unwrap();
+    // CMS bytes are read back from the PDF, including its permitted zero padding.
+    std::fs::write(
+        &cms,
+        &sig.get(b"Contents").unwrap().as_string().unwrap().bytes,
+    )
+    .unwrap();
+    let verify = || {
+        Command::new("openssl")
+            .args([
+                "cms",
+                "-verify",
+                "-binary",
+                "-inform",
+                "DER",
+                "-noverify",
+                "-in",
+            ])
+            .arg(&cms)
+            .arg("-content")
+            .arg(&content)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .output()
+            .unwrap()
+    };
+    let result = verify();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let mut tampered = std::fs::read(&content).unwrap();
+    tampered[10] ^= 1;
+    std::fs::write(&content, tampered).unwrap();
+    assert!(
+        !verify().status.success(),
+        "tampering must fail verification"
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn encrypted_export_opens_in_apple_pdfkit() {
+    use std::process::Command;
+    let path = std::env::temp_dir().join(format!(
+        "atelier-encrypted-{}-{}.pdf",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let doc = Document::open(classic()).unwrap();
+    std::fs::write(
+        &path,
+        doc.update()
+            .to_encrypted_bytes("read-password", "owner-password")
+            .unwrap(),
+    )
+    .unwrap();
+    let result = Command::new("/usr/bin/osascript").args(["-l", "JavaScript", "-e", r#"
+        ObjC.import('PDFKit');
+        function run(args) {
+            let doc = $.PDFDocument.alloc.initWithURL($.NSURL.fileURLWithPath(args[0]));
+            if (!doc || !doc.isLocked) throw Error('PDF must start locked');
+            if (doc.unlockWithPassword('wrong')) throw Error('wrong password accepted');
+            if (!doc.unlockWithPassword('read-password')) throw Error('correct password rejected');
+            if (Number(doc.pageCount) !== 1) throw Error('page count changed');
+            if (ObjC.unwrap(doc.documentAttributes.objectForKey('Title')) !== 'Before') throw Error('encrypted metadata changed');
+            return 'verified';
+        }
+    "#]).arg(&path).output().unwrap();
+    let _ = std::fs::remove_file(&path);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&result.stdout).trim(), "verified");
+}
