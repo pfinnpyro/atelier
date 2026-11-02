@@ -27,6 +27,31 @@ impl Viewer {
                 }
             }
         }
+        let active = self
+            .open
+            .as_ref()
+            .is_some_and(|o| o.session.revision_session_active());
+        if ui
+            .add_enabled(
+                enabled,
+                egui::Button::new(if active {
+                    "Finish editing session"
+                } else {
+                    "Start editing session"
+                }),
+            )
+            .on_hover_text("Group edits into one revision for review.")
+            .clicked()
+        {
+            self.finish_editing(true);
+            if let Some(o) = &mut self.open {
+                if active {
+                    o.session.end_revision_session();
+                } else {
+                    o.session.begin_revision_session();
+                }
+            }
+        }
         let Some(o) = &self.open else { return };
         if let Some(problem) = o.session.tracking_problem() {
             ui.colored_label(ui.visuals().warn_fg_color, problem);
@@ -110,7 +135,16 @@ impl Viewer {
                     }
                     ui.weak(super::annotate::display_date(&revision.created));
                     for change in &revision.changes {
-                        ui.strong(change.target.split(" (").next().unwrap_or(&change.target));
+                        let title = if let Some((name, identity)) = change.target.split_once(" (") {
+                            if let Some((_, property)) = identity.split_once(") / ") {
+                                format!("{name} / {property}")
+                            } else {
+                                name.to_owned()
+                            }
+                        } else {
+                            change.target.clone()
+                        };
+                        ui.strong(title);
                         ui.label(format!(
                             "Before: {}",
                             if change.before.is_empty() {

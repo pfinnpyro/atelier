@@ -4,7 +4,21 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="bd812176-28fb-44c7-a454-691165a4c82f" name="Changes" comment="Ignored .idea file" />
+    <list default="true" id="bd812176-28fb-44c7-a454-691165a4c82f" name="Changes" comment="Ignored .idea file">
+      <change afterPath="$PROJECT_DIR$/crates/atelier-app/src/app/split_button.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.run/Atelier Local.run.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.run/Atelier Local.run.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.run/Build Windows x64.run.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.run/Build Windows x64.run.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-app/src/app.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-app/src/app.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-app/src/app/inspect.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-app/src/app/inspect.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-app/src/app/revisions.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-app/src/app/revisions.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-form/src/appearance.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-form/src/appearance.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-form/src/da.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-form/src/da.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-form/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-form/src/lib.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-form/src/revisions.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-form/src/revisions.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-form/src/session.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-form/src/session.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/crates/atelier-form/tests/revisions.rs" beforeDir="false" afterPath="$PROJECT_DIR$/crates/atelier-form/tests/revisions.rs" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -19,15 +33,22 @@
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GithubDefaultAccount">
-    <option name="defaultAccountId" value="215218ec-6652-4650-889b-07967c3a61ba" />
-  </component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/pfinnpyro/atelier.git",
-    "accountId": "215218ec-6652-4650-889b-07967c3a61ba"
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "history": [
+    {
+      "state": "OPEN"
+    }
+  ],
+  "lastFilter": {
+    "state": "OPEN"
   }
 }]]></component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/pfinnpyro/atelier.git&quot;,
+    &quot;accountId&quot;: &quot;e3b39c76-3e24-4fc3-8e17-b568cc36d397&quot;
+  }
+}</component>
   <component name="MacroExpansionManager">
     <option name="directoryName" value="r7QDRT6H" />
   </component>
@@ -35,16 +56,113 @@
     <commands />
     <urls />
   </component>
+  <component name="NextEditCompletionFeaturesState">
+    <decayedCancelled>
+      <entry key="MS100" value="1.0001656057431811" />
+      <entry key="MS500" value="1.211887626625662" />
+      <entry key="S2" value="2.905532272855904" />
+      <entry key="S5" value="4.673929470655655" />
+      <entry key="S10" value="5.670392372358033" />
+      <entry key="S30" value="6.615506227295797" />
+      <entry key="S60" value="9.766559308194886" />
+      <entry key="M2" value="27.251322621779824" />
+      <entry key="M5" value="79.05702824421795" />
+      <entry key="M10" value="119.52784015399693" />
+      <entry key="M15" value="137.92173883421674" />
+      <entry key="M30" value="159.5439393033246" />
+      <entry key="H1" value="171.75045653159373" />
+      <entry key="H2" value="178.23913532113505" />
+      <entry key="H4" value="181.5848012934405" />
+      <entry key="D1" value="184.42590709013493" />
+      <entry key="W1" value="184.91786604540098" />
+    </decayedCancelled>
+    <decayedSelected>
+      <entry key="MS100" value="0.0" />
+      <entry key="MS500" value="7.401381921591683E-281" />
+      <entry key="S2" value="9.27530509210133E-71" />
+      <entry key="S5" value="9.703564154109185E-29" />
+      <entry key="S10" value="9.850667060716818E-15" />
+      <entry key="S30" value="2.1436565909834828E-5" />
+      <entry key="S60" value="0.004629963921007903" />
+      <entry key="M2" value="0.06804383822954038" />
+      <entry key="M5" value="0.3412836802429082" />
+      <entry key="M10" value="0.5841948991928195" />
+      <entry key="M15" value="0.6988304826693131" />
+      <entry key="M30" value="0.8359608140752255" />
+      <entry key="H1" value="0.914308927045574" />
+      <entry key="H2" value="0.9561950256331446" />
+      <entry key="H4" value="0.9778522514332817" />
+      <entry key="D1" value="0.9962741760849144" />
+      <entry key="W1" value="0.9994668875712955" />
+    </decayedSelected>
+    <decayedShown>
+      <entry key="MS100" value="0.9594240838980074" />
+      <entry key="MS500" value="1.2020977264026638" />
+      <entry key="S2" value="2.899678610038813" />
+      <entry key="S5" value="4.670056181247416" />
+      <entry key="S10" value="5.668012326060108" />
+      <entry key="S30" value="6.614593795020773" />
+      <entry key="S60" value="9.77049194921641" />
+      <entry key="M2" value="27.318294324932513" />
+      <entry key="M5" value="79.39687333243806" />
+      <entry key="M10" value="120.11087330346872" />
+      <entry key="M15" value="138.61965378539333" />
+      <entry key="M30" value="160.37935704415406" />
+      <entry key="H1" value="172.66446930863668" />
+      <entry key="H2" value="179.19517565556453" />
+      <entry key="H4" value="182.56257448376462" />
+      <entry key="D1" value="185.4221678457107" />
+      <entry key="W1" value="185.91733100971803" />
+    </decayedShown>
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 7,
+  &quot;fromUser&quot;: false
+}</component>
+  <component name="ProjectId" id="3LY9uqrSciPzfidENjQHULkxSpF" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "Cargo.Atelier Local.executor": "Run",
+    "Cargo.Build Windows x64.executor": "Run",
+    "CidrDebugProfileConversion": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.rust.reset.selective.auto.import": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "SHARE_PROJECT_CONFIGURATION_FILES": "true",
-    "git-widget-placeholder": "main",
-    "settings.editor.selected.configurable": "org.jetbrains.plugins.github.ui.GithubSettingsConfigurable"
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "git-widget-placeholder": "prerelease",
+    "ignore.virus.scanning.warn.message": "true",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon": "",
+    "settings.editor.selected.configurable": "language.rust"
   }
 }]]></component>
+  <component name="RunManager" selected="Cargo.Atelier Local" />
+  <component name="RustProjectSettings">
+    <option name="toolchainHomeDirectory" value="$USER_HOME$/.cargo/bin" />
+  </component>
   <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="bd812176-28fb-44c7-a454-691165a4c82f" name="Changes" comment="Ignored .idea file" />
+      <created>1793620363059</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1793620363059</updated>
+    </task>
     <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Ignored .idea file" />

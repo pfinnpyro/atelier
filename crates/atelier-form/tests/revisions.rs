@@ -17,6 +17,30 @@ fn decide(s: &mut Session, doc: &mut Arc<Document>, id: u64, state: State) {
     *doc = s.build().unwrap().doc;
 }
 #[test]
+fn editing_sessions_group_changes_and_preserve_original_values() {
+    let mut doc = document();
+    let mut s = Session::new(doc.clone());
+    s.set_tracking(true, "Ada").unwrap();
+    s.begin_revision_session();
+    s.set(0, Value::Text("first".into()));
+    commit(&mut s, &mut doc);
+    s.set(0, Value::Text("second".into()));
+    commit(&mut s, &mut doc);
+    s.rotate(0, 90);
+    commit(&mut s, &mut doc);
+    assert_eq!(s.revisions().len(), 1);
+    assert_eq!(s.revisions()[0].changes[0].before, "original");
+    assert_eq!(s.revisions()[0].changes[0].after, "second");
+    s.end_revision_session();
+    let reopened = Arc::new(Document::open(doc.data().to_vec()).unwrap());
+    s = Session::new(reopened.clone());
+    doc = reopened;
+    assert!(!s.revision_session_active());
+    decide(&mut s, &mut doc, 1, State::Rejected);
+    assert_eq!(value(&doc), "original");
+    assert_eq!(doc.pages().unwrap()[0].rotate, 0);
+}
+#[test]
 fn text_revisions_reopen_and_reject_without_erasing_dependent_edits() {
     let mut doc = document();
     let mut s = Session::new(doc.clone());
@@ -260,4 +284,167 @@ fn author_only_comment_edits_are_tracked_and_page_extracts_start_new_history() {
             .is_none()
     );
     assert_eq!(extracted.pages().unwrap().len(), 1);
+}
+
+fn field_appearance(doc: &Document) -> String {
+    let form = Form::load(doc).unwrap().unwrap();
+    let Object::Dict(widget) = doc.get(form.fields[0].widgets[0].obj).unwrap() else {
+        panic!()
+    };
+    let ap = doc.resolve_dict(widget.get(b"AP").unwrap()).unwrap();
+    let Object::Stream(stream) = doc.resolve(ap.get(b"N").unwrap()).unwrap() else {
+        panic!()
+    };
+    String::from_utf8(doc.decode_stream(&stream).unwrap().data).unwrap()
+}
+
+#[test]
+fn formatting_spacing_and_bounds_survive_reopen_and_reject_as_one_session() {
+    let mut doc = document();
+    let mut s = Session::new(doc.clone());
+    s.set_tracking(true, "Ada").unwrap();
+    s.begin_revision_session();
+    let mut style = s.field_style(0).unwrap();
+    style.appearance.size = 18.0;
+    style.appearance.color = "0 0 1 rg".into();
+    style.appearance.character_spacing = 2.0;
+    style.appearance.word_spacing = 4.0;
+    style.appearance.leading = 25.0;
+    style.alignment = 2;
+    s.set_field_style(0, style.clone()).unwrap();
+    commit(&mut s, &mut doc);
+    let mut rect = s.widget_bounds(0, 0).unwrap();
+    rect.x0 = 20.0;
+    rect.x1 = 190.0;
+    rect.y1 = 160.0;
+    s.set_widget_bounds(0, 0, rect).unwrap();
+    commit(&mut s, &mut doc);
+    style.appearance.size = 20.0;
+    s.set_field_style(0, style.clone()).unwrap();
+    commit(&mut s, &mut doc);
+    assert_eq!(s.revisions().len(), 1);
+    let size = s.revisions()[0]
+        .changes
+        .iter()
+        .find(|c| c.target.ends_with(" / font-size"))
+        .unwrap();
+    assert_eq!(size.before, "12");
+    assert_eq!(size.after, "20");
+    assert!(
+        s.revisions()[0]
+            .changes
+            .iter()
+            .any(|c| c.target.ends_with(" / height"))
+    );
+    let appearance = field_appearance(&doc);
+    assert!(appearance.contains("20 Tf"));
+    assert!(appearance.contains("2 Tc 4 Tw"));
+    assert!(appearance.contains("0 0 1 rg"));
+    let reopened = Arc::new(Document::open(doc.data().to_vec()).unwrap());
+    s = Session::new(reopened.clone());
+    doc = reopened;
+    assert_eq!(s.field_style(0).unwrap(), style);
+    assert_eq!(s.widget_bounds(0, 0).unwrap(), rect);
+    assert_eq!(value(&doc), "original");
+    decide(&mut s, &mut doc, 1, State::Rejected);
+    assert_eq!(s.field_style(0).unwrap().appearance.size, 12.0);
+    assert_eq!(s.widget_bounds(0, 0).unwrap().y1, 130.0);
+    decide(&mut s, &mut doc, 1, State::Accepted);
+    assert_eq!(s.field_style(0).unwrap(), style);
+    assert_eq!(s.widget_bounds(0, 0).unwrap(), rect);
+}
+
+#[test]
+fn invalid_style_and_bounds_are_atomic_and_identical_edits_are_clean() {
+    let doc = document();
+    let mut s = Session::new(doc);
+    let original = s.field_style(0).unwrap();
+    s.set_field_style(0, original.clone()).unwrap();
+    s.set_widget_bounds(0, 0, s.widget_bounds(0, 0).unwrap())
+        .unwrap();
+    assert!(!s.is_dirty());
+    for value in [f64::NAN, f64::INFINITY, -1.0] {
+        let mut style = original.clone();
+        style.appearance.size = value;
+        assert!(s.set_field_style(0, style).is_err());
+    }
+    let mut style = original.clone();
+    style.appearance.color = "0 g 0 0 m".into();
+    assert!(s.set_field_style(0, style).is_err());
+    let mut style = original.clone();
+    style.appearance.font = Some(b"MissingFont".to_vec());
+    assert!(s.set_field_style(0, style).is_err());
+    let mut rect = s.widget_bounds(0, 0).unwrap();
+    rect.x1 = rect.x0;
+    assert!(s.set_widget_bounds(0, 0, rect).is_err());
+    assert!(!s.is_dirty());
+    assert_eq!(s.field_style(0).unwrap(), original);
+}
+
+#[test]
+fn multiline_spacing_changes_baselines_and_character_spacing_changes_wrap() {
+    let source = String::from_utf8(document().data().to_vec())
+        .unwrap()
+        .replace("/FT /Tx", "/FT /Tx /Ff 4096");
+    let mut doc = Arc::new(Document::open(source.into_bytes()).unwrap());
+    let mut s = Session::new(doc.clone());
+    s.set(0, Value::Text("hello world hello world".into()));
+    let mut style = s.field_style(0).unwrap();
+    style.appearance.size = 12.0;
+    style.appearance.leading = 20.0;
+    s.set_field_style(0, style.clone()).unwrap();
+    commit(&mut s, &mut doc);
+    let normal = field_appearance(&doc);
+    let lines = |ap: &str| ap.lines().filter(|l| l.contains(" Tm ")).count();
+    style.appearance.character_spacing = 8.0;
+    s.set_field_style(0, style).unwrap();
+    commit(&mut s, &mut doc);
+    let spaced = field_appearance(&doc);
+    assert!(lines(&spaced) > lines(&normal));
+    let ys: Vec<f64> = spaced
+        .lines()
+        .filter(|l| l.contains(" Tm "))
+        .map(|l| l.split_whitespace().nth(5).unwrap().parse().unwrap())
+        .collect();
+    assert!((ys[0] - ys[1] - 20.0).abs() < 0.001);
+}
+
+#[test]
+fn styled_resized_widget_renders_color_in_its_new_bounds() {
+    let mut doc = document();
+    let mut s = Session::new(doc.clone());
+    let mut style = s.field_style(0).unwrap();
+    style.appearance.size = 20.0;
+    style.appearance.color = "0 0 1 rg".into();
+    s.set_field_style(0, style).unwrap();
+    let mut bounds = s.widget_bounds(0, 0).unwrap();
+    bounds.y0 = 30.0;
+    bounds.y1 = 65.0;
+    s.set_widget_bounds(0, 0, bounds).unwrap();
+    commit(&mut s, &mut doc);
+    let image = atelier_render::render_page(
+        &doc,
+        &doc.pages().unwrap()[0],
+        &atelier_render::RenderOptions {
+            scale: 1.0,
+            ..Default::default()
+        },
+    )
+    .unwrap()
+    .pixmap;
+    let mut blue = 0;
+    let mut old_ink = 0;
+    for y in 0..200 {
+        for x in 0..200 {
+            let px = image.pixel(x, 199 - y);
+            if px[2] > 150 && px[0] < 100 && (30..65).contains(&y) {
+                blue += 1;
+            }
+            if px[0] < 100 && (100..130).contains(&y) {
+                old_ink += 1;
+            }
+        }
+    }
+    assert!(blue > 50, "expected blue text in relocated widget");
+    assert_eq!(old_ink, 0, "old widget location must be empty");
 }

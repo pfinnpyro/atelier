@@ -1708,6 +1708,18 @@ impl Viewer {
     }
 
     fn pointer(&mut self, ui: &egui::Ui, response: &egui::Response, origin: Pos2) {
+        // Navigation takes priority over annotation and selection tools.
+        if response.dragged_by(egui::PointerButton::Middle) {
+            self.scroll_to = Some(self.offset - ui.input(|i| i.pointer.delta()));
+            ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+            ui.ctx().request_repaint();
+            return;
+        }
+        if response.drag_started_by(egui::PointerButton::Middle)
+            || response.drag_stopped_by(egui::PointerButton::Middle)
+        {
+            return;
+        }
         let shift = self.centre_shift();
         let to_layout = |p: Pos2| (f64::from(p.x - origin.x) - shift, f64::from(p.y - origin.y));
 

@@ -11,6 +11,10 @@ pub struct DefaultAppearance {
     pub size: f64,
     /// Fill colour operator and operands, such as `0 g` or `1 0 0 rg`.
     pub color: String,
+    pub character_spacing: f64,
+    pub word_spacing: f64,
+    /// Baseline distance in points; zero uses the default 1.15 font sizes.
+    pub leading: f64,
 }
 
 impl Default for DefaultAppearance {
@@ -19,6 +23,9 @@ impl Default for DefaultAppearance {
             font: None,
             size: 0.0,
             color: "0 g".to_string(),
+            character_spacing: 0.0,
+            word_spacing: 0.0,
+            leading: 0.0,
         }
     }
 }
@@ -36,6 +43,9 @@ impl DefaultAppearance {
                         out.size = size.as_f64().unwrap_or(0.0).abs();
                     }
                 }
+                b"Tc" if nums.len() == 1 => out.character_spacing = nums[0],
+                b"Tw" if nums.len() == 1 => out.word_spacing = nums[0],
+                b"TL" if nums.len() == 1 => out.leading = nums[0].max(0.0),
                 b"g" if nums.len() == 1 => out.color = format!("{} g", num(nums[0])),
                 b"rg" if nums.len() == 3 => {
                     out.color = format!("{} {} {} rg", num(nums[0]), num(nums[1]), num(nums[2]));

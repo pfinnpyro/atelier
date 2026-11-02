@@ -46,6 +46,8 @@ pub struct Session {
     review_edits: BTreeMap<(PageSlot, usize), crate::Review>,
     /// Fields shown (false) or hidden (true) by form scripts, by index.
     hidden: BTreeMap<usize, bool>,
+    pub(crate) styles: BTreeMap<usize, crate::FieldStyle>,
+    pub(crate) bounds: BTreeMap<(usize, usize), atelier_syntax::Rect>,
 }
 
 /// The pages of a document as opened, in their own order.
@@ -55,6 +57,9 @@ fn own_order(doc: &Document) -> Vec<PageSlot> {
 }
 
 impl Session {
+    pub(crate) fn base_document(&self) -> &Document {
+        &self.base
+    }
     /// A session for a document. A form that cannot be read is left out
     /// rather than stopping the document from opening.
     pub fn new(base: Arc<Document>) -> Self {
@@ -73,9 +78,23 @@ impl Session {
             annots: Vec::new(),
             review_edits: BTreeMap::new(),
             hidden: BTreeMap::new(),
+            styles: BTreeMap::new(),
+            bounds: BTreeMap::new(),
         }
     }
 
+    /// Group subsequent edits into one reviewable revision. Reopening ends the group.
+    pub fn begin_revision_session(&mut self) {
+        self.history.grouping = true;
+        self.history.group_id = None;
+    }
+    pub fn end_revision_session(&mut self) {
+        self.history.grouping = false;
+        self.history.group_id = None;
+    }
+    pub fn revision_session_active(&self) -> bool {
+        self.history.grouping
+    }
     pub fn tracking_enabled(&self) -> bool {
         self.history.enabled
     }
@@ -89,6 +108,7 @@ impl Session {
         if let Some(problem) = &self.history.problem {
             return Err(atelier_syntax::Error::Structure(problem.clone()));
         }
+        self.end_revision_session();
         self.history.enabled = enabled;
         self.history.author = if author.trim().is_empty() {
             "Reviewer".into()
@@ -168,7 +188,13 @@ impl Session {
         self.history = history;
         Ok(())
     }
-    fn touch(&mut self, target: String, before: String, after: String, page: Option<usize>) {
+    pub(crate) fn touch(
+        &mut self,
+        target: String,
+        before: String,
+        after: String,
+        page: Option<usize>,
+    ) {
         self.history.touch(target, before, after, page);
     }
     fn review_summary(review: &crate::Review) -> String {
@@ -532,6 +558,8 @@ impl Session {
             || !self.annots.is_empty()
             || !self.review_edits.is_empty()
             || !self.hidden.is_empty()
+            || !self.styles.is_empty()
+            || !self.bounds.is_empty()
             || self.history.dirty
     }
 
@@ -558,6 +586,8 @@ impl Session {
             && self.annots.is_empty()
             && self.review_edits.is_empty()
             && self.hidden.is_empty()
+            && self.styles.is_empty()
+            && self.bounds.is_empty()
             && !redraw
             && !reorder
         {
@@ -570,6 +600,7 @@ impl Session {
         let mut update = self.base.update();
         let mut warnings = Vec::new();
         if let Some(form) = &mut form {
+            self.apply_styles(form, &mut update, &mut warnings)?;
             if form.need_appearances {
                 for i in 0..form.fields.len() {
                     // Redrawing fields the viewer cannot fill would only
@@ -840,6 +871,8 @@ impl Session {
         self.annots.clear();
         self.review_edits.clear();
         self.hidden.clear();
+        self.styles.clear();
+        self.bounds.clear();
     }
 
     /// Pages whose widgets show `field`, as the pages are now ordered.

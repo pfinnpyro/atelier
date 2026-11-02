@@ -67,6 +67,8 @@ pub struct Revision {
 #[derive(Clone, Default)]
 pub(crate) struct History {
     pub enabled: bool,
+    pub grouping: bool,
+    pub group_id: Option<u64>,
     pub author: String,
     pub revisions: Vec<Revision>,
     pub pending: Vec<RevisionChange>,
@@ -249,6 +251,42 @@ impl History {
         if !self.enabled || self.pending.is_empty() {
             return Ok(false);
         }
+        if self.grouping
+            && let Some(id) = self.group_id
+            && let Some(last) = self.revisions.last()
+            && last.id == id
+            && last.state == RevisionState::Pending
+            && last.author == self.author
+            && equivalent(before, &snapshot(before)?, &last.after)?
+        {
+            let after_bytes = snapshot(after)?;
+            let total: usize = self
+                .revisions
+                .iter()
+                .map(|r| r.before.len() + r.after.len())
+                .sum();
+            if total
+                .saturating_sub(last.after.len())
+                .saturating_add(after_bytes.len())
+                > MAX_HISTORY
+            {
+                return Err(Error::Unsupported(
+                    "Revision history exceeds 256 MiB.".into(),
+                ));
+            }
+            let last = self.revisions.last_mut().unwrap();
+            for change in std::mem::take(&mut self.pending) {
+                if let Some(existing) = last.changes.iter_mut().find(|c| c.target == change.target)
+                {
+                    existing.after = change.after;
+                } else {
+                    last.changes.push(change);
+                }
+            }
+            last.after = after_bytes;
+            self.dirty = true;
+            return Ok(true);
+        }
         if self.revisions.len() >= MAX_REVISIONS {
             return Err(Error::Unsupported(
                 "Revision history has 512 entries. Disable tracking to continue editing.".into(),
@@ -300,6 +338,7 @@ impl History {
             before: before_bytes,
             after: after_bytes,
         });
+        self.group_id = self.grouping.then_some(id);
         self.dirty = true;
         Ok(true)
     }
@@ -389,6 +428,7 @@ impl History {
         state: RevisionState,
         author: &str,
     ) -> Result<Option<Arc<Document>>> {
+        self.group_id = None;
         if state == RevisionState::Superseded {
             return Err(Error::Structure(
                 "Superseded is an internal history state.".into(),
