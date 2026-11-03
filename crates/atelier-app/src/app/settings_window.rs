@@ -244,16 +244,18 @@ impl Viewer {
                 "Apple's default-app guide",
                 "https://support.apple.com/guide/mac-help/mh35597/mac",
             );
-            if ui.button("Show a PDF in Finder…").clicked() {
+            if ui.button("Open PDF default-app controls…").clicked() {
                 let path = self.open.as_ref().and_then(|o| o.path.clone()).or_else(|| {
                     rfd::FileDialog::new()
                         .add_filter("PDF documents", &["pdf"])
                         .pick_file()
                 });
-                if let Some(path) = path
-                    && let Err(e) = default_app::reveal_pdf(&path)
+                if let Some(ref path) = path
+                    && let Err(e) = default_app::reveal_pdf(path)
                 {
                     self.error = Some(e);
+                } else if path.is_some() {
+                    self.notice = Some("In Get Info, expand Open with, choose Atelier, then click Change All… and Continue.".into());
                 }
             }
         }
