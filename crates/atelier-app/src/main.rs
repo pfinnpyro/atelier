@@ -5,6 +5,7 @@
 mod app;
 mod chrome;
 mod default_app;
+mod icons;
 mod recent;
 mod settings;
 mod update;

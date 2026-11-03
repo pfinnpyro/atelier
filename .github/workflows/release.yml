@@ -96,8 +96,9 @@ jobs:
         run: |
           flags=(--draft --verify-tag --title "Atelier $RELEASE_TAG")
           if [[ "$RELEASE_TAG" == *-* ]]; then flags+=(--prerelease); fi
-          if [[ "$RELEASE_TAG" == v1.0.0 ]]; then
-            flags+=(--notes-file docs/release-notes-1.0.0.md)
+          notes="docs/release-notes-${RELEASE_TAG#v}.md"
+          if [[ -f "$notes" ]]; then
+            flags+=(--notes-file "$notes")
           else
             flags+=(--generate-notes)
           fi

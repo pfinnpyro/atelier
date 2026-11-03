@@ -167,6 +167,36 @@ impl Viewer {
                 "The file asks viewers to redraw its fields; Atelier did.",
             );
         }
+        let property_rows: Vec<_> = self
+            .open
+            .as_ref()
+            .map(|o| {
+                form.fields
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, f)| {
+                        o.session.field_style(i).map(|style| {
+                            let bounds: Vec<_> = (0..f.widgets.len())
+                                .filter_map(|w| o.session.widget_bounds(i, w).map(|r| (w, r)))
+                                .collect();
+                            (i, f.clone(), style, bounds)
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let fonts: Vec<_> = self
+            .open
+            .as_ref()
+            .and_then(|o| {
+                form.resources
+                    .get(b"Font")
+                    .and_then(|v| o.doc.resolve_dict(v).ok())
+            })
+            .map(|d| d.iter().map(|(n, _)| n.0.clone()).collect())
+            .unwrap_or_default();
+        let mut style_edit = None;
+        let mut bounds_edit = None;
         let mut picked = None;
         let mut set = None;
         let draft = &mut self.inspector.draft;
@@ -198,7 +228,61 @@ impl Viewer {
                             ui.end_row();
                         }
                     });
+                ui.separator();
+                ui.weak("Text formatting and bounds (PDF points). Enable tracking and start a session in Changes to review edits together.");
+                for (index, field, style, bounds) in &property_rows {
+                    if !matches!(field.kind, FieldKind::Text | FieldKind::ComboBox | FieldKind::ListBox) || field.is_read_only() { continue; }
+                    ui.push_id(("style", index), |ui| {
+                        ui.collapsing(format!("Format {}", field.name), |ui| {
+                            let mut style = style.clone();
+                            if field_style_controls(ui, &mut style, &fonts) {
+                                style_edit = Some((*index, style));
+                            }
+                            for (widget, rect) in bounds {
+                                let mut r = *rect;
+                                ui.label(format!("Widget {}", widget + 1));
+                                let mut x = r.x0;
+                                let mut y = r.y0;
+                                let mut width = r.x1 - r.x0;
+                                let mut height = r.y1 - r.y0;
+                                let mut changed = false;
+                                ui.horizontal_wrapped(|ui| {
+                                    changed |= ui.add(egui::DragValue::new(&mut x).prefix("X ").speed(0.5)).changed();
+                                    changed |= ui.add(egui::DragValue::new(&mut y).prefix("Y ").speed(0.5)).changed();
+                                    changed |= ui.add(egui::DragValue::new(&mut width).prefix("W ").range(0.1..=10000.0).speed(0.5)).changed();
+                                    changed |= ui.add(egui::DragValue::new(&mut height).prefix("H ").range(0.1..=10000.0).speed(0.5)).changed();
+                                });
+                                if changed {
+                                    r.x0 = x; r.y0 = y; r.x1 = x + width; r.y1 = y + height;
+                                    bounds_edit = Some((*index, *widget, r));
+                                }
+                            }
+                        });
+                    });
+                }
             });
+        if style_edit.is_some() || bounds_edit.is_some() {
+            self.finish_editing(true);
+            if let Some(o) = &mut self.open {
+                let field = style_edit
+                    .as_ref()
+                    .map(|(field, _)| *field)
+                    .or_else(|| bounds_edit.as_ref().map(|(field, _, _)| *field))
+                    .unwrap();
+                let pages = o.session.pages_of(field).into_iter().collect();
+                let result = if let Some((field, style)) = style_edit {
+                    o.session.set_field_style(field, style)
+                } else if let Some((field, widget, rect)) = bounds_edit {
+                    o.session.set_widget_bounds(field, widget, rect)
+                } else {
+                    Ok(())
+                };
+                match result {
+                    Ok(()) => self.rebuild(&pages, false),
+                    Err(e) => self.error = Some(e.to_string()),
+                }
+            }
+        }
         if let Some((field, value)) = set {
             self.commit(field, value);
         }
@@ -737,4 +821,89 @@ impl Viewer {
             p.rect_stroke(r, 0.0, Stroke::new(2.0, RISKY), StrokeKind::Outside);
         }
     }
+}
+
+/// Edits standard PDF text appearance properties; zero size/leading means automatic.
+fn field_style_controls(
+    ui: &mut egui::Ui,
+    style: &mut atelier_form::FieldStyle,
+    fonts: &[Vec<u8>],
+) -> bool {
+    let before = style.clone();
+    let da = &mut style.appearance;
+    egui::ComboBox::from_id_salt("font-resource")
+        .selected_text(
+            da.font
+                .as_ref()
+                .map(|f| String::from_utf8_lossy(f).into_owned())
+                .unwrap_or_else(|| "Automatic font".into()),
+        )
+        .show_ui(ui, |ui| {
+            for font in fonts {
+                ui.selectable_value(
+                    &mut da.font,
+                    Some(font.clone()),
+                    String::from_utf8_lossy(font),
+                );
+            }
+        });
+    ui.horizontal_wrapped(|ui| {
+        ui.add(
+            egui::DragValue::new(&mut da.size)
+                .prefix("Font size ")
+                .range(0.0..=1000.0)
+                .speed(0.25),
+        );
+        ui.add(
+            egui::DragValue::new(&mut da.leading)
+                .prefix("Line spacing ")
+                .range(0.0..=10000.0)
+                .speed(0.25),
+        );
+    });
+    ui.horizontal_wrapped(|ui| {
+        ui.add(
+            egui::DragValue::new(&mut da.character_spacing)
+                .prefix("Character spacing ")
+                .range(-1000.0..=1000.0)
+                .speed(0.1),
+        );
+        ui.add(
+            egui::DragValue::new(&mut da.word_spacing)
+                .prefix("Word spacing ")
+                .range(-1000.0..=1000.0)
+                .speed(0.1),
+        );
+    });
+    ui.weak(
+        "Size 0: fit text. Line spacing 0: automatic. Coordinates use the PDF bottom-left origin.",
+    );
+    ui.horizontal(|ui| {
+        ui.selectable_value(&mut style.alignment, 0, "Left");
+        ui.selectable_value(&mut style.alignment, 1, "Center");
+        ui.selectable_value(&mut style.alignment, 2, "Right");
+    });
+    // Preserve authored gray/CMYK values until a color is explicitly edited.
+    let numbers: Vec<f32> = da
+        .color
+        .split_whitespace()
+        .filter_map(|n| n.parse().ok())
+        .collect();
+    let mut rgb = match numbers.as_slice() {
+        [g] => [*g; 3],
+        [r, g, b] => [*r, *g, *b],
+        [c, m, y, k] => [
+            (1.0 - c) * (1.0 - k),
+            (1.0 - m) * (1.0 - k),
+            (1.0 - y) * (1.0 - k),
+        ],
+        _ => [0.0; 3],
+    };
+    ui.horizontal(|ui| {
+        ui.label("Text color");
+        if ui.color_edit_button_rgb(&mut rgb).changed() {
+            da.color = format!("{} {} {} rg", rgb[0], rgb[1], rgb[2]);
+        }
+    });
+    *style != before
 }

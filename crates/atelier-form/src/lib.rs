@@ -9,8 +9,10 @@ mod appearance;
 mod da;
 mod fill;
 mod pages;
+mod revisions;
 mod scripts;
 mod session;
+mod style;
 mod text_layer;
 mod traits;
 mod xfa;
@@ -24,10 +26,12 @@ pub use annots::{Markup, NOTE_SIZE, NewAnnot, Review, annotation_date, line_quad
 pub use da::DefaultAppearance;
 pub use fill::FillWarning;
 pub use pages::PageSlot;
+pub use revisions::{Revision, RevisionChange, RevisionEvent, RevisionState};
 pub use scripts::{
     Action, FieldScripts, FormScripts, Hotspot, document_actions, form_scripts, hotspots,
 };
 pub use session::{Built, Session};
+pub use style::FieldStyle;
 pub use traits::{ScriptTrait, script_traits};
 pub use xfa::{Xfa, XfaScript, xfa};
 

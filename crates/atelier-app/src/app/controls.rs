@@ -306,12 +306,13 @@ pub(super) fn document_tab(
         ui.painter()
             .rect_filled(close_rect, 4.0, ui.visuals().widgets.hovered.weak_bg_fill);
     }
-    let c = close_rect.center();
-    let stroke = Stroke::new(1.4, ui.visuals().weak_text_color());
-    ui.painter()
-        .line_segment([c - Vec2::splat(3.0), c + Vec2::splat(3.0)], stroke);
-    ui.painter()
-        .line_segment([c + Vec2::new(-3.0, 3.0), c + Vec2::new(3.0, -3.0)], stroke);
+    crate::icons::Icon::Close
+        .image()
+        .tint(ui.style().interact(&close).text_color())
+        .paint_at(
+            ui,
+            egui::Rect::from_center_size(close_rect.center(), Vec2::splat(12.0)),
+        );
     (tab, close.on_hover_text("Close tab (Ctrl+W)"))
 }
 

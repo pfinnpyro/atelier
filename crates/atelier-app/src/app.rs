@@ -30,6 +30,7 @@ mod menu;
 mod organize;
 mod pages;
 mod print;
+mod revisions;
 mod safety;
 mod scripts;
 mod security;
@@ -166,6 +167,7 @@ pub struct Viewer {
     /// Closing was confirmed; let the window go.
     closing: bool,
     inspector: Inspector,
+    review_ui: revisions::ReviewUi,
     /// What the right-click menu is for.
     menu: Option<MenuTarget>,
     settings: Settings,
@@ -216,6 +218,7 @@ impl Viewer {
 
     fn initialize(cc: &eframe::CreationContext<'_>, settings: Settings) -> Self {
         let ctx = cc.egui_ctx.clone();
+        egui_extras::install_image_loaders(&ctx);
         // Ctrl +/- zoom the document, not the interface.
         ctx.options_mut(|o| o.zoom_with_keyboard = false);
         controls::style(&ctx);
@@ -244,6 +247,7 @@ impl Viewer {
             confirm: None,
             closing: false,
             inspector: Inspector::default(),
+            review_ui: revisions::ReviewUi::default(),
             menu: None,
             settings,
             window: None,
@@ -537,7 +541,12 @@ impl Viewer {
     /// than the view.
     fn centre_shift(&self) -> f64 {
         let Some(o) = &self.open else { return 0.0 };
-        ((f64::from(self.view_size.x) - o.layout.size().0) / 2.0).max(0.0)
+        let spare = (f64::from(self.view_size.x) - o.layout.size().0).max(0.0);
+        if self.annotate.comments_open {
+            spare
+        } else {
+            spare / 2.0
+        }
     }
 
     /// Changes the zoom, keeping the document point under `anchor` (a
@@ -997,70 +1006,88 @@ impl Viewer {
         ui.spacing_mut().interact_size.y = controls::HEIGHT;
         ui.horizontal_wrapped(|ui| {
             ui.set_row_height(controls::HEIGHT);
-            ui.menu_button("☰", |ui| {
-                if ui
-                    .add_enabled(
-                        self.open.is_some(),
-                        egui::Button::new("Find in document…").shortcut_text("Ctrl+F"),
-                    )
-                    .clicked()
-                {
-                    self.request_find();
-                    ui.close();
-                }
-                if ui.button("Print…").clicked() {
-                    self.open_print();
-                    ui.close();
-                }
-                ui.add_enabled_ui(self.open.is_some(), |ui| {
-                    ui.menu_button("Mark", |ui| self.mark_menu(ui));
-                });
-                ui.separator();
-                if let Some(fv) = self.open.as_ref().and_then(|o| o.form.as_ref())
-                    && ui.selectable_label(fv.highlight, "Fields").clicked()
-                {
-                    self.toggle_highlight();
-                    ui.close();
-                }
-                if ui
-                    .selectable_label(self.inspector.open, "Inspect")
-                    .clicked()
-                {
-                    self.inspector.open = !self.inspector.open;
-                    ui.close();
-                }
-                if ui.selectable_label(self.colors.open, "Colours").clicked() {
-                    self.toggle_colors();
-                    ui.close();
-                }
-                if ui.button("Rotate pages left").clicked() {
-                    self.rotate_pages(-1);
-                    ui.close();
-                }
-                if ui.button("Rotate pages right").clicked() {
-                    self.rotate_pages(1);
-                    ui.close();
-                }
-                let orienting = self.open.as_ref().is_some_and(|o| o.orienting.is_some());
-                if ui
-                    .add_enabled(!orienting, egui::Button::new("Auto-orient pages"))
-                    .clicked()
-                {
-                    self.auto_orient();
-                    ui.close();
-                }
-                ui.separator();
-                if ui.button("Settings…").clicked() {
-                    self.window = Some(Window::Settings);
-                    ui.close();
-                }
-                if ui.button("About Atelier").clicked() {
-                    self.window = Some(Window::About);
-                    ui.close();
-                }
-            });
+            ui.menu_button(
+                crate::icons::Icon::Menu
+                    .image()
+                    .tint(ui.visuals().text_color()),
+                |ui| {
+                    if ui
+                        .add_enabled(
+                            self.open.is_some(),
+                            egui::Button::new("Find in document…").shortcut_text("Ctrl+F"),
+                        )
+                        .clicked()
+                    {
+                        self.request_find();
+                        ui.close();
+                    }
+                    if ui.button("Print…").clicked() {
+                        self.open_print();
+                        ui.close();
+                    }
+                    ui.add_enabled_ui(self.open.is_some(), |ui| {
+                        ui.menu_button("Mark", |ui| self.mark_menu(ui));
+                    });
+                    ui.separator();
+                    if let Some(fv) = self.open.as_ref().and_then(|o| o.form.as_ref())
+                        && ui.selectable_label(fv.highlight, "Fields").clicked()
+                    {
+                        self.toggle_highlight();
+                        ui.close();
+                    }
+                    if ui
+                        .selectable_label(self.inspector.open, "Inspect")
+                        .clicked()
+                    {
+                        self.inspector.open = !self.inspector.open;
+                        ui.close();
+                    }
+                    if ui.selectable_label(self.colors.open, "Colours").clicked() {
+                        self.toggle_colors();
+                        ui.close();
+                    }
+                    if ui.button("Rotate pages left").clicked() {
+                        self.rotate_pages(-1);
+                        ui.close();
+                    }
+                    if ui.button("Rotate pages right").clicked() {
+                        self.rotate_pages(1);
+                        ui.close();
+                    }
+                    let orienting = self.open.as_ref().is_some_and(|o| o.orienting.is_some());
+                    if ui
+                        .add_enabled(!orienting, egui::Button::new("Auto-orient pages"))
+                        .clicked()
+                    {
+                        self.auto_orient();
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui
+                        .add(
+                            egui::Button::image_and_text(
+                                crate::icons::Icon::Settings.image(),
+                                "Settings…",
+                            )
+                            .image_tint_follows_text_color(true),
+                        )
+                        .clicked()
+                    {
+                        self.window = Some(Window::Settings);
+                        ui.close();
+                    }
+                    if ui.button("About Atelier").clicked() {
+                        self.window = Some(Window::About);
+                        ui.close();
+                    }
+                },
+            );
             if ui
-                .add(egui::Button::selectable(self.settings.sidebar, "◧"))
+                .add(
+                    crate::icons::Icon::Sidebar
+                        .button()
+                        .selected(self.settings.sidebar),
+                )
                 .on_hover_text("Page pictures and outline (F4)")
                 .clicked()
             {
@@ -1126,7 +1153,10 @@ impl Viewer {
             let enabled = self.open.is_some();
             ui.add_enabled_ui(enabled, |ui| {
                 let centre = self.view_size / 2.0;
-                if ui.button("−").on_hover_text("Zoom out (Ctrl+−)").clicked() {
+                if crate::icons::button(ui, crate::icons::Icon::Minus, "Zoom out")
+                    .on_hover_text("Zoom out (Ctrl+−)")
+                    .clicked()
+                {
                     self.zoom_by(0.8, centre);
                 }
                 let zoom = ui
@@ -1150,7 +1180,10 @@ impl Viewer {
                 } else if !zoom.has_focus() {
                     self.zoom_input = format!("{:.0}%", self.zoom() * 100.0);
                 }
-                if ui.button("+").on_hover_text("Zoom in (Ctrl+=)").clicked() {
+                if crate::icons::button(ui, crate::icons::Icon::Plus, "Zoom in")
+                    .on_hover_text("Zoom in (Ctrl+=)")
+                    .clicked()
+                {
                     self.zoom_by(1.25, centre);
                 }
                 if controls::toolbar_button(
@@ -1221,11 +1254,26 @@ impl Viewer {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 crate::chrome::window_buttons(ui);
                 if ui
-                    .add(egui::Button::selectable(self.inspector.open, "◨"))
+                    .add(
+                        crate::icons::Icon::SidebarRight
+                            .button()
+                            .selected(self.inspector.open),
+                    )
                     .on_hover_text("Toggle inspector sidebar")
                     .clicked()
                 {
                     self.inspector.open = !self.inspector.open;
+                }
+                if ui
+                    .add(
+                        crate::icons::Icon::Comments
+                            .button()
+                            .selected(self.annotate.comments_open),
+                    )
+                    .on_hover_text("Toggle comments pane")
+                    .clicked()
+                {
+                    self.annotate.toggle_comments();
                 }
                 crate::chrome::drag_space(ui);
                 if let Some(o) = &self.open
@@ -1361,6 +1409,7 @@ impl Viewer {
             self.draw_pick(ui, rect.min);
             self.draw_marks(ui, rect.min);
             self.pointer(ui, &response, rect.min);
+            self.draw_comment_link(ui, rect.min);
             self.draw_editor(ui, rect.min);
             let ctx = ui.ctx().clone();
             self.combo_popup(&ctx, rect.min);
@@ -1672,6 +1721,18 @@ impl Viewer {
     }
 
     fn pointer(&mut self, ui: &egui::Ui, response: &egui::Response, origin: Pos2) {
+        // Navigation takes priority over annotation and selection tools.
+        if response.dragged_by(egui::PointerButton::Middle) {
+            self.scroll_to = Some(self.offset - ui.input(|i| i.pointer.delta()));
+            ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+            ui.ctx().request_repaint();
+            return;
+        }
+        if response.drag_started_by(egui::PointerButton::Middle)
+            || response.drag_stopped_by(egui::PointerButton::Middle)
+        {
+            return;
+        }
         let shift = self.centre_shift();
         let to_layout = |p: Pos2| (f64::from(p.x - origin.x) - shift, f64::from(p.y - origin.y));
 
@@ -1847,6 +1908,7 @@ impl eframe::App for Viewer {
         if self.inspector.open {
             self.inspector_panel(ui);
         }
+        self.comments_panel(ui);
         egui::CentralPanel::no_frame().show(ui, |ui| {
             if self.organize.grid {
                 egui::Frame::new()
@@ -1865,7 +1927,6 @@ impl eframe::App for Viewer {
         self.colors_window(&ctx);
         self.print_window(&ctx);
         self.download_progress(&ctx);
-        self.note_window(&ctx);
         self.pad_window(&ctx);
         self.confirm_window(&ctx);
         self.security_window(&ctx);

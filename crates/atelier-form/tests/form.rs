@@ -675,6 +675,7 @@ fn saved_comment_edits_and_script_visibility_changes_survive_together() {
         subject: "Review".into(),
         created: "D:20261101120000Z".into(),
         modified: "D:20261101120000Z".into(),
+        state: None,
     };
     session.add_annot(
         0,

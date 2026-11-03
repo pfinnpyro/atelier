@@ -25,6 +25,7 @@ atelier-ocr.workspace = true
 atelier-print.workspace = true
 atelier-view.workspace = true
 eframe = "0.37"
+egui_extras = { version = "0.37", default-features = false, features = ["svg"] }
 rfd = "0.17"
 # Already part of eframe; used directly to read the clipboard for Paste.
 arboard = { version = "3.6", default-features = false }

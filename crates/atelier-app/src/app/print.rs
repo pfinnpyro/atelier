@@ -375,7 +375,7 @@ impl Viewer {
                         }
                         if cfg!(windows)
                             && ui
-                                .small_button("⚙")
+                                .add(crate::icons::Icon::Settings.button().small())
                                 .on_hover_text("The printer's own settings")
                                 .clicked()
                             && let Some(p) = d.printers.get(d.printer)
