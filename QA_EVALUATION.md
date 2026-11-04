@@ -1,13 +1,11 @@
-# Atelier feature and quality evaluation
+# Historical QA evidence
 
-> Historical baseline, recorded before the branch integration. Current main
-> includes approved JavaScript execution in a constrained helper process, XFA
-> classification and fallback gating, embedded-file inspection, and the review
-> workspace described in `UI_REVIEW_CHANGES.md`. Statements below about scripts
-> never running describe the earlier baseline, not the merged application.
-> OS-enforced process sandboxing and certificate-backed signing remain future work.
+This file preserves past observations; it is not an implementation plan or a current
+capability assessment. All remaining work and current status live in the
+[roadmap](docs/roadmap.md). The active host is Windows and has no macOS environment.
+Earlier macOS results below must not be presented as verification of the current tree.
 
-Evaluated 2026-11-01 on macOS, Rust 1.99.1, using the current working tree.
+Evaluated 2026-11-01 on macOS, Rust 1.99.1, using the working tree at that time.
 Existing application, renderer, README and IDE edits were preserved. This change
 adds tests, a dependency-free smoke runner and this assessment; it does not add
 certificate signing, a JavaScript runtime, an OS sandbox or XFA rendering.
@@ -17,8 +15,8 @@ certificate signing, a JavaScript runtime, an OS sandbox or XFA rendering.
 Atelier has a substantial viewer/editor foundation. The tested paths are stable,
 including repair, form persistence and inactive action inspection. It is not yet
 validated as a high-fidelity, accessible, security-hardened document workstation.
-The most valuable next investment is reproducible compatibility and security
-coverage, followed by signing and carefully scoped form compatibility.
+That assessment motivated the compatibility/security work now consolidated in the
+[roadmap](docs/roadmap.md).
 
 ## Executed validation
 
@@ -56,181 +54,57 @@ signature fields. Existing tests also cover encrypted form round trips, widget
 hit testing/tab order, inherited fields, field cycles, annotations, page edits,
 malformed xrefs, encryption variants, mutation robustness, layout and tile caches.
 
-## Findings
+## Status of the original findings
 
-1. **High: XFA-only compatibility can be hidden.** `Form::load` computes
-   `has_xfa`, then returns `None` if there are no AcroForm fields. The inspector's
-   Fields tab returns early for `None`. An XFA-only form can therefore look like
-   a document with no fields instead of an unsupported form. Detect XFA at the
-   document level, independently of editable fields; show a persistent warning
-   with supported fallback behavior. This finding is from code inspection.
-2. **High: hybrid XFA edits can diverge.** The new tests confirm AcroForm values
-   change while XFA references survive. There is no XFA dataset synchronization.
-   Warn before saving such edits; do not promise consistent values in XFA-aware
-   viewers. Preservation of references is not validation of XFA semantics.
-3. **High: ink signing has no cryptographic assurance.** The existing Sign tool
-   writes ink annotations and stores reusable strokes in `signature.txt`. The
-   README explains this, but the placement notice says “Signed.” Use explicit
-   “Ink signature” wording in the UI and reserve certificate-valid status for a
-   verified digital signature. Offer deletion of saved strokes and consider
-   opt-in persistence and OS-protected storage.
-4. **Medium: sidebar controls are cramped.** At the tested 1100x800 window and
-   default sidebar width, Pages/Outline/Search/Spreads controls collide or become
-   hard to distinguish. Use wrapping or a separate view control row, then test
-   minimum window size, high DPI and keyboard navigation.
-5. **Medium: action inspection is bounded but incomplete as a security report.**
-   Cycles in `/Next` repeat until the depth limit. Name-tree traversal has a depth
-   bound and an entry check at function entry, but can collect a large leaf before
-   checking the cap again. Truncated traversal is not reported. Add a shared work
-   budget, visited-object tracking, decoded-source byte limits and a visible
-   “inspection incomplete” result. An empty action list is not a safety verdict.
+| Original finding | Current disposition |
+| --- | --- |
+| XFA-only warning missing | Document-level detection, classification and fallback messaging were subsequently implemented |
+| Hybrid XFA edits can diverge | Explicit save warnings exist; dataset synchronization remains unsupported |
+| Ink called signing without cryptographic assurance | UI now distinguishes ink from CMS; file and Windows-store signing plus integrity/chain/date checks exist |
+| Sidebar controls cramped | Separate/wrapped navigation controls were implemented; narrow-window/DPI/accessibility validation remains open |
+| Action inspection limits incomplete | Bounded inspection exists; cumulative budgets, visited tracking and visible incomplete reports remain roadmap work |
 
-## Feature assessment
+The older capability table and duplicate signature/security/XFA delivery sequences have
+been merged into the roadmap. The evidence above retains its original scope; it does
+not prove current OCR/printing, hostile-input resistance, release/update, accessibility
+or certificate interoperability.
 
-| Area | Current capability and evidence | Next quality gate |
-| --- | --- | --- |
-| Viewing/navigation | Native tiles, thumbnails, fit modes, zoom, search, selection; UI smoke and view tests | Long documents, rapid tab switches, cancellation, mixed sizes, RTL/CJK search, high DPI |
-| Rendering | Broad paths/fonts/images/colour/transparency implementation; engine suite passes | Independent visual corpus for blending, masks, knockout/isolation, overprint, ICC, patterns, font fallback |
-| Forms | AcroForm text/choice/button fields, appearances, encrypted saves; integration coverage | Real-world orphan widgets, duplicate names, multiline/Unicode, focus order and screen readers |
-| Markup | Highlight/comment/ink, undo and saved appearances; annotation tests | GUI create/save/reopen in multiple viewers; rotated/cropped-page placement |
-| Page organization | Rotate/reorder/merge/extract/delete; page integration tests | GUI drag/drop and multi-selection; resource/form/bookmark preservation audits |
-| Saving | Incremental edits and full rewrite for deletion; persistence tests | Interrupted writes, disk full, permissions, signed revisions, atomic replacement and recovery |
-| Security | Password encryption, inert actions, recursion/field limits | Decode/allocation/time budgets and OS process isolation; continuous fuzzing |
-| Signatures | Ink appearance and recognition of signature fields | Certificate-backed signing and independent validation; no current trust verdict |
-| XFA | Presence detection for hybrid forms; AcroForm fallback | XFA-only warning first, then static data binding and explicitly scoped rendering |
-| OCR/printing | Implemented with supporting tests | End-to-end printer/OCR engine availability, cancellation, language packs, output comparisons |
-| Accessibility | Native control accessibility is observable | Tagged PDF reading order, keyboard-only workflows, screen-reader and contrast audits |
-| Distribution | Windows installer/updater infrastructure exists | Windows clean-machine install/update/rollback, signed packages and authenticated release metadata |
+## Later historical UI and review reports
 
-These are capability assessments from implementation and existing tests, not a
-claim that every feature was manually exercised. Physical printing, live OCR,
-update/install, GUI save/discard flows, Windows behavior, screen readers and
-certificate interoperability were not tested in this pass.
+Prior review records reported 319 passing workspace tests and workspace lint/format
+checks after the review/XFA changes. These are historical counts, not a new run.
+Reported Mac smoke coverage included rendered pages/thumbnails, connected controls,
+sidebar/Find behavior, typed 125% zoom, rearrange `2,1`, split/CLI extraction, saved
+comments with author/time, merge, toolbar alignment, integrated tab close, Settings
+separators/scrolling and Set all. A later native titlebar pass superseded the earlier
+transparent-titlebar/control-reservation implementation; macOS currently uses native
+decorations. Windows and Linux were unavailable for that earlier UI review, not for
+all subsequent development.
 
-## Certificate-backed signatures with an ink appearance
+Native automation did not successfully demonstrate grid drag/drop. A headless egui
+pointer-event regression covered press/drag/drop, checked-group preservation and the
+resulting PDF order. Other regression coverage included comment metadata/appearances,
+saved/unsaved edits, reordered-page review, mixed-height facing rows, right-page
+transforms, split-control hover geometry across display modes, settings round trips,
+insertion boundaries, safety/script-index refresh and dynamic-XFA organization gates.
+These checks do not replace native platform interaction testing.
 
-Keep the pen drawing as the visible appearance of a real signature widget.
-The cryptographic signature must cover document bytes, including the final
-appearance, rather than merely an exported image of the strokes.
+Branch integration retained XFA fallback, attachment/action inspection and the
+approved-script helper. New inserted script source is not automatically approved.
+Review edits and script-driven visibility changes retain clean saved state. Personal
+IDE workspace changes were excluded, with the IDE version backed up locally.
 
-Recommended sequence:
+The completed 1.1.0-beta.1 review pass added the persistent revision journal, Changes
+tab, tracked form/script/visibility/page/annotation/comment changes, snapshots,
+authorship/time, navigation, dependency-safe decisions and persisted undo/redo.
+Standard comment review states are distinct from document revision decisions. Current
+storage behavior is documented in [editing history](docs/editing-history.md) and the
+[release snapshot](docs/release-notes-1.1.0-beta.1.md).
 
-1. Build a read-only signature panel first: enumerate signed revisions and
-   signature fields; validate ByteRange structure, CMS digest/signature,
-   certificate chain, usage, timestamps, and subsequent modifications. Separate
-   integrity, identity trust, revocation status and allowed-edit status. Unknown
-   or offline validation must never display as trusted.
-2. Add a signing transaction: select a certificate/key through the OS provider
-   (Windows first), draw or reuse ink, preview position on rotated/cropped pages,
-   show signer/reason, then explicitly sign. Private keys stay with the provider;
-   password/PIN values must not enter logs or settings. A self-signed test
-   certificate must remain visibly untrusted unless deliberately trusted.
-3. Freeze edits, generate `/FT /Sig`, appearance and signature dictionary, reserve
-   `/Contents`, finalize `/ByteRange`, hash exact byte ranges, obtain detached
-   CMS and fill the reservation without shifting offsets. Save atomically and
-   independently verify before reporting success. Handle oversized CMS responses
-   by rebuilding and re-signing, never by truncating.
-4. Support multiple signatures through incremental revisions. Honor DocMDP and
-   FieldMDP restrictions; warn before edits, rewrites, page extraction or
-   sanitization that would invalidate or discard signatures. Preserve original
-   signed files and explain later changes per revision.
-5. Target PAdES B-B first, then trusted timestamps (B-T), validation material
-   (B-LT) and archival timestamps (B-LTA). Verify these claims with an independent
-   validator and a cross-viewer corpus before advertising conformance.
+## Historical limitations and reproduction
 
-Acceptance corpus: visible/invisible signatures, detached CMS, RSA/ECDSA,
-expired/untrusted/revoked certificates, offline revocation, timestamp failure,
-tampered bytes/appearance, malformed or overlapping byte ranges, unexpected
-unsigned gaps, post-signing permitted/forbidden edits, two signers, encrypted
-documents, cancelled key prompts, wrong PIN, disk failure and reservation overflow.
-
-PAdES is defined by [ETSI EN 319 142-1](https://www.etsi.org/deliver/etsi_en/319100_319199/31914201/01.02.00_20/en_31914201v010200a.pdf).
-Adobe's [signature API reference](https://developer.adobe.com/acrobat-pdfl-sdk/guides/jsapiref/security-signature-apis)
-also distinguishes certificate trust, signature data and appearance. This roadmap
-is a proposed implementation, not a current conformance or legal assurance claim.
-
-## JavaScript isolation and blocking
-
-Preserve today's default: document scripts do not execute. Action inspection is
-useful transparency, but isolation must also cover parsing, fonts, image codecs
-and rendering, which process untrusted bytes even with scripts disabled.
-
-- Move document processing into a restricted worker process with a narrow,
-  validated IPC protocol. On Windows evaluate restricted tokens/AppContainer
-  and Job Objects; use OS-specific restrictions for other platforms. Background
-  threads provide responsiveness but are not a security boundary.
-- Give workers no general network, file-write, shell, clipboard, printing or
-  certificate-key access. The UI broker owns user-authorized operations. Restrict
-  handles and file access to the document and explicit resources.
-- Enforce cumulative limits on decompression, images, fonts, object traversal,
-  script-source extraction, memory, IPC message size and execution time. Support
-  cancellation and worker restart; a deep graph bound alone does not cap total
-  work or decoded bytes.
-- If calculations later need scripting, use an optional runtime in a separate
-  restricted process with per-document state, a minimal capability-based API,
-  instruction/time/memory quotas and forced termination. Reject dynamic module
-  loading, host FFI, network, process creation and unrestricted filesystem APIs.
-  Do not pass signing privileges to document scripts or infer script trust from
-  a valid document signature. Disable unsupported privileged APIs explicitly.
-- Centralize policy for JavaScript, Launch, URI, SubmitForm, ImportData, remote
-  GoTo, embedded files and XFA actions. Require deliberate broker-mediated user
-  action for external effects; enumerate allowed URI schemes and block dangerous
-  schemes and local/remote filesystem launches by default.
-- Treat “block execution” and “remove active content” as separate operations.
-  Incremental saves retain original bytes. Sanitization needs a full reachable
-  graph rewrite, explicit signature impact, and inspection after reopening.
-
-Adobe documents separate [JavaScript controls](https://www.adobe.com/devnet-docs/acrobatetk/tools/AppSec/javascript.html)
-and [OS sandbox protections](https://www.adobe.com/devnet-docs/acrobatetk/tools/AppSec/sandboxprotections.html).
-The architecture above is a recommendation for Atelier, not a claim that these
-protections currently exist.
-
-## XFA extensions
-
-Start with accurate detection and safe fallback, then expand in stages:
-
-1. Detect XFA stream and packet-array encodings even with absent/empty Fields.
-   Distinguish hybrid fallback from XFA-only documents and clearly state that
-   scripts, calculations and dynamic layout are unsupported.
-2. Parse XML with external entities, DTD fetching, XInclude and network resource
-   resolution disabled. Bound XML depth/nodes/text, packet bytes, expansions and
-   layout work. Preserve unknown packets without interpreting them as authority.
-3. Add read-only packet inspection and static template/dataset binding, with
-   explicit conflict reporting when AcroForm and XFA values disagree. Decide and
-   document how edits synchronize datasets before allowing hybrid save claims.
-4. Add static XFA layout/appearance fidelity. Defer dynamic pagination/repeating
-   subforms until deterministic resource and layout budgets are established.
-5. Treat both JavaScript and FormCalc as active content. Route any future
-   supported calculations through the same isolated capability policy. Block
-   connection sets, submissions, external resources and privileged operations
-   by default; do not silently flatten interactive or signed forms.
-
-Adobe's [XFA specification](https://pdfa.org/norm-refs/XFA-3_3.pdf) describes
-template/data/layout and scripting behavior; the W3C-hosted
-[FormCalc specification](https://www.w3.org/1999/05/XFA/xfa-formcalc.html)
-documents its separate language. Supporting XFA is more than enabling JavaScript.
-
-Acceptance corpus should include hybrid and XFA-only forms, single stream and
-packet arrays, malformed/missing packets, stale datasets, duplicate bindings,
-repeating subforms, namespace variants, Unicode, external-entity attempts,
-recursive XML, JavaScript/FormCalc loops and submission attempts.
-
-## Delivery priorities
-
-1. **Immediate quality:** resolve the XFA-only warning and hybrid-save risks;
-   label ink signing accurately; repair sidebar layout; run this smoke corpus in
-   CI and establish independent renderer comparisons.
-2. **Reliability/security:** cumulative decode budgets, fuzz targets, worker
-   isolation, crash recovery, atomic-save failure tests, and Windows GUI smoke.
-3. **Signing:** validation panel, OS-backed keys, ink appearance plus PAdES B-B,
-   independent verification, then timestamps and long-term validation.
-4. **Forms/accessibility:** safe static XFA support and tagged-PDF reading order,
-   with real-world compatibility tests before dynamic XFA or scripting.
-
-## Limitations and reproduction
-
-`pdftoppm` is not installed; no independent Poppler visual comparison was possible.
-`tools/make_samples.py` failed because Python `fontTools` is missing. The new CLI
+At the time, `pdftoppm` was not installed; no independent Poppler visual comparison was possible.
+`tools/make_samples.py` failed because Python `fontTools` was missing. The new CLI
 runner needs only Python's standard library. macOS build/test output included
 SDK/xcrun environment warnings but completed successfully. Tiny synthetic files
 do not establish performance or resistance to hostile large files.

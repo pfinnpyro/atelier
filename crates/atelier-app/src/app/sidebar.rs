@@ -22,6 +22,7 @@ enum Tab {
     #[default]
     Pages,
     Outline,
+    Signatures,
     Search,
 }
 
@@ -290,6 +291,7 @@ impl Viewer {
                     let tab = &mut self.sidebar.tab;
                     ui.selectable_value(tab, Tab::Pages, "Pages");
                     ui.selectable_value(tab, Tab::Outline, "Outline");
+                    ui.selectable_value(tab, Tab::Signatures, "Signatures");
                     if self.sidebar.search_visible {
                         ui.selectable_value(tab, Tab::Search, "Results");
                     }
@@ -304,6 +306,7 @@ impl Viewer {
                 match self.sidebar.tab {
                     Tab::Pages => self.page_list(ui),
                     Tab::Outline => self.outline_list(ui),
+                    Tab::Signatures => self.signatures_panel(ui),
                     Tab::Search => {
                         if self.search.hits.is_empty() {
                             ui.label("Search the document text with the field above.");

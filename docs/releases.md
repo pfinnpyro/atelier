@@ -11,8 +11,8 @@ The release must be published with GitHub's prerelease flag.
 
 ## First official release: 1.0.0
 
-The workspace and lockfile identify this release as **1.0.0**. Previous 0.x
-versions are development releases. Release notes are in `release-notes-1.0.0.md`.
+The first stable release is **1.0.0**; the current workspace version is
+**1.1.0-beta.1**. Previous 0.x versions are development releases. Release notes are in `release-notes-1.0.0.md`.
 
 Shared RustRover configurations live in `.run/`:
 
@@ -86,7 +86,7 @@ with a stable-looking version. Ship an urgent repair as a higher patch version;
 withdraw a bad release from discovery and publish a higher fixed version rather
 than overwriting assets or moving tags.
 
-## Current updater and implementation plan
+## Current updater
 
 The existing app checks the latest 30 GitHub releases at startup when enabled,
 compares versions, and presents release notes. On Windows it downloads the setup
@@ -95,30 +95,12 @@ EXE for installed copies or the viewer EXE for portable copies, verifies it with
 macOS offers the release download page; it does not replace its own app bundle.
 Checksums detect corruption but are not an independent authenticity guarantee.
 
-Next development work, in order:
+Implementation priorities for release discovery, authenticated manifests, staging,
+rollback and channel operations live in the [roadmap](roadmap.md#release-and-updater-work).
+This guide documents operations, not a second development plan.
 
-1. **Harden release discovery.** Respect GitHub's prerelease flag in addition to
-   semantic tags, validate version syntax, paginate results, and select only
-   releases containing assets for this platform and a checksum manifest. Handle
-   rate limits, offline startup and timeouts without interrupting document work.
-   Test stable/preview transitions, malformed releases and missing assets.
-2. **Authenticate updates.** Sign executables with platform credentials and add
-   a signed manifest containing version, channel, target, size and SHA-256. Embed
-   the verification public key in the app. Restrict downloads to expected HTTPS
-   GitHub asset hosts and validate before executing anything. Document key rotation.
-3. **Install safely.** On Windows, stage in unique temporary paths, synchronize
-   concurrent requests, retain rollback state, and test installer/portable restart
-   and failure recovery. Define whether CLI updates ship with the viewer (the
-   current portable updater replaces only the viewer). On macOS, use a signed,
-   notarized bundle and a maintained updater such as Sparkle after evaluating its
-   integration; stage and verify the full app, then replace it after exit with
-   rollback and permission handling. Keep manual download until this is ready.
-4. **Operate channels.** Add an explicit signed channel manifest if release
-   volume outgrows the GitHub API feed. Keep immutable versioned assets behind
-   channel pointers. Test updates end-to-end from the previous stable and preview
-   builds before each publication, including interrupted download, checksum/signature
-   failure, unwritable install location, unsaved files and rollback. Document
-   emergency withdrawal and key compromise handling before unattended installs.
+The current host cannot run macOS. Mac package/signing/notarization/updater checks must
+run on a Mac or native CI; Windows results do not satisfy those release gates.
 
 GitHub runner reference:
 https://docs.github.com/en/actions/reference/runners/github-hosted-runners

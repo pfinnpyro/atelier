@@ -29,4 +29,4 @@ pub use parser::Parser;
 pub use write::{Update, serialize};
 pub use xref::XrefEntry;
 
-pub use signature::PreparedSignature;
+pub use signature::{PreparedSignature, SignatureInspection};

@@ -25,6 +25,7 @@ mod annotate;
 mod colors;
 mod controls;
 mod form;
+mod identity;
 mod inspect;
 mod menu;
 mod organize;
@@ -34,10 +35,14 @@ mod revisions;
 mod safety;
 mod scripts;
 mod security;
+mod security_provider;
 mod settings_window;
 mod sidebar;
+mod signatures;
 mod tabs;
 mod updates;
+#[cfg(windows)]
+mod windows_identity;
 
 use form::FormView;
 use inspect::Inspector;
@@ -75,6 +80,7 @@ enum ZoomMode {
 
 /// An open file and everything known about it.
 struct Open {
+    signatures: signatures::Signatures,
     doc: Arc<Document>,
     name: String,
     generation: u64,
@@ -343,6 +349,7 @@ impl Viewer {
         let warnings = doc.warnings().into_iter().collect();
         let doc = Arc::new(doc);
         let mut open = Open {
+            signatures: Default::default(),
             safety: safety::Safety::new(doc.clone()),
             session: Session::new(doc.clone()),
             opened: self.generation,
@@ -1929,6 +1936,7 @@ impl eframe::App for Viewer {
         self.download_progress(&ctx);
         self.pad_window(&ctx);
         self.confirm_window(&ctx);
+        self.poll_signatures(&ctx);
         self.security_window(&ctx);
     }
 }

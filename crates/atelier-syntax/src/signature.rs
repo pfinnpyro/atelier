@@ -131,3 +131,167 @@ impl PreparedSignature {
         Ok(self.bytes)
     }
 }
+
+/// A detached signature's untrusted metadata and validated byte coverage.
+/// This is NOT a certificate trust or cryptographic verification result.
+#[derive(Debug, Clone)]
+pub struct SignatureInspection {
+    pub object: crate::ObjRef,
+    pub signer: Option<String>,
+    pub subfilter: Option<String>,
+    pub signed_revision_len: usize,
+    pub has_subsequent_bytes: bool,
+    pub cms: Vec<u8>,
+    pub signed_bytes: Vec<u8>,
+}
+
+impl Document {
+    /// Inspect signature dictionaries in the current object graph. Each candidate
+    /// has its own result so a malformed signature cannot hide other signatures.
+    /// Historical dictionaries replaced in later revisions are not enumerated.
+    pub fn inspect_signatures(&self) -> Result<Vec<Result<SignatureInspection>>> {
+        if self.is_encrypted() {
+            return Err(Error::Unsupported(
+                "inspection of encrypted signatures".into(),
+            ));
+        }
+        let mut signatures = Vec::new();
+        for number in self.object_numbers() {
+            let generation = match self.xref_entry(number) {
+                Some(crate::XrefEntry::Offset { generation, .. }) => generation,
+                _ => 0,
+            };
+            let reference = crate::ObjRef::new(number, generation);
+            let object = self.get(reference)?;
+            let Some(dict) = object.as_dict() else {
+                continue;
+            };
+            if dict
+                .get(b"Type")
+                .and_then(Object::as_name)
+                .is_some_and(|n| n.as_bytes() == b"Sig")
+                || (dict.get(b"ByteRange").is_some() && dict.get(b"Contents").is_some())
+            {
+                signatures.push(inspect(self.data(), reference, dict));
+            }
+        }
+        Ok(signatures)
+    }
+}
+
+fn inspect(data: &[u8], object: crate::ObjRef, dict: &Dict) -> Result<SignatureInspection> {
+    let invalid = || Error::Structure("invalid signature byte coverage".into());
+    let range = dict
+        .get(b"ByteRange")
+        .and_then(Object::as_array)
+        .ok_or_else(invalid)?;
+    if range.len() != 4 {
+        return Err(invalid());
+    }
+    let values = range
+        .iter()
+        .map(|o| {
+            o.as_i64()
+                .and_then(|n| usize::try_from(n).ok())
+                .ok_or_else(invalid)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let (start, first_len, second, second_len) = (values[0], values[1], values[2], values[3]);
+    let end = second.checked_add(second_len).ok_or_else(invalid)?;
+    if start != 0 || first_len >= second || second > data.len() || end > data.len() {
+        return Err(invalid());
+    }
+    // Require the entire excluded gap to be precisely the hex Contents string,
+    // not an arbitrary unsigned region containing additional PDF objects.
+    let gap = &data[first_len..second];
+    if gap.first() != Some(&b'<') || gap.last() != Some(&b'>') {
+        return Err(invalid());
+    }
+    let mut decoded = Vec::new();
+    let mut high = None;
+    for &byte in &gap[1..gap.len() - 1] {
+        if matches!(byte, 0 | 9 | 10 | 12 | 13 | 32) {
+            continue;
+        }
+        let digit = (byte as char).to_digit(16).ok_or_else(invalid)? as u8;
+        if let Some(h) = high.take() {
+            decoded.push(h * 16 + digit);
+        } else {
+            high = Some(digit);
+        }
+    }
+    if let Some(h) = high {
+        decoded.push(h * 16);
+    }
+    let contents = dict
+        .get(b"Contents")
+        .and_then(Object::as_string)
+        .ok_or_else(invalid)?;
+    if decoded != contents.bytes || decoded.is_empty() {
+        return Err(invalid());
+    }
+    Ok(SignatureInspection {
+        object,
+        signer: dict
+            .get(b"Name")
+            .and_then(Object::as_string)
+            .map(|s| crate::text_from_bytes(&s.bytes)),
+        subfilter: dict
+            .get(b"SubFilter")
+            .and_then(Object::as_name)
+            .map(|n| n.as_str_lossy().into_owned()),
+        signed_revision_len: end,
+        has_subsequent_bytes: end < data.len(),
+        cms: decoded,
+        signed_bytes: [&data[..first_len], &data[second..end]].concat(),
+    })
+}
+
+#[cfg(test)]
+mod inspection_tests {
+    use super::*;
+    fn dictionary(range: [i64; 4]) -> Dict {
+        let mut dict = Dict::new();
+        dict.insert(
+            "ByteRange",
+            Object::Array(range.into_iter().map(Object::Integer).collect()),
+        );
+        dict.insert(
+            "Contents",
+            Object::String(PdfString {
+                bytes: vec![0x30, 0],
+                hex: true,
+            }),
+        );
+        dict
+    }
+    #[test]
+    fn rejects_invalid_coverage() {
+        let data = b"abc<3000>tail";
+        for range in [
+            [1, 3, 9, 4],
+            [0, -1, 9, 4],
+            [0, 10, 9, 4],
+            [0, 3, 99, 4],
+            [0, 3, 9, i64::MAX],
+            [0, 2, 9, 4],
+            [0, 3, 10, 3],
+        ] {
+            assert!(
+                inspect(data, crate::ObjRef::new(1, 0), &dictionary(range)).is_err(),
+                "{range:?}"
+            );
+        }
+        let mut dict = dictionary([0, 3, 9, 4]);
+        dict.insert("Contents", Object::String(PdfString::literal(vec![1, 2])));
+        assert!(inspect(data, crate::ObjRef::new(1, 0), &dict).is_err());
+    }
+    #[test]
+    fn later_bytes_are_explicit_and_not_part_of_signed_content() {
+        let dict = dictionary([0, 3, 9, 4]);
+        let inspection = inspect(b"abc<3000>tailLATER", crate::ObjRef::new(1, 0), &dict).unwrap();
+        assert_eq!(inspection.signed_bytes, b"abctail");
+        assert_eq!(inspection.signed_revision_len, 13);
+        assert!(inspection.has_subsequent_bytes);
+    }
+}

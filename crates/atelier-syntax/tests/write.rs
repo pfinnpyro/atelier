@@ -332,9 +332,13 @@ fn detached_pdf_signature_verifies_with_openssl() {
     let _cleanup = Cleanup(dir.clone());
     let key = dir.join("key.pem");
     let cert = dir.join("cert.pem");
+    let config = dir.join("openssl.cnf");
+    std::fs::write(&config, "[req]\ndistinguished_name=dn\n[dn]\n").unwrap();
     let generated = Command::new("openssl")
+        .arg("req")
+        .arg("-config")
+        .arg(&config)
         .args([
-            "req",
             "-newkey",
             "rsa:2048",
             "-nodes",
@@ -390,27 +394,11 @@ fn detached_pdf_signature_verifies_with_openssl() {
     );
     let bytes = prepared.finish(&std::fs::read(&cms).unwrap()).unwrap();
     let saved = Document::open(bytes.clone()).unwrap();
-    let form = saved
-        .resolve_dict(saved.catalog().unwrap().get(b"AcroForm").unwrap())
-        .unwrap();
-    let fields = saved.resolve(form.get(b"Fields").unwrap()).unwrap();
-    let field = saved.resolve_dict(&fields.as_array().unwrap()[0]).unwrap();
-    let sig = saved.resolve_dict(field.get(b"V").unwrap()).unwrap();
-    let r: Vec<_> = sig
-        .get(b"ByteRange")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_i64().unwrap() as usize)
-        .collect();
-    std::fs::write(&content, [&bytes[..r[1]], &bytes[r[2]..]].concat()).unwrap();
-    // CMS bytes are read back from the PDF, including its permitted zero padding.
-    std::fs::write(
-        &cms,
-        &sig.get(b"Contents").unwrap().as_string().unwrap().bytes,
-    )
-    .unwrap();
+    let inspection = saved.inspect_signatures().unwrap().remove(0).unwrap();
+    assert!(!inspection.has_subsequent_bytes);
+    std::fs::write(&content, &inspection.signed_bytes).unwrap();
+    // Verify CMS read from the PDF, including its permitted zero padding.
+    std::fs::write(&cms, &inspection.cms).unwrap();
     let verify = || {
         Command::new("openssl")
             .args([
@@ -484,4 +472,28 @@ fn encrypted_export_opens_in_apple_pdfkit() {
         String::from_utf8_lossy(&result.stderr)
     );
     assert_eq!(String::from_utf8_lossy(&result.stdout).trim(), "verified");
+}
+
+#[test]
+fn signature_inspection_survives_incremental_edits() {
+    let doc = Document::open(classic()).unwrap();
+    assert!(doc.inspect_signatures().unwrap().is_empty());
+    let prepared = doc.prepare_signature("Ada", 1024).unwrap();
+    let signed_bytes = prepared.signing_bytes();
+    let bytes = prepared.finish(&[0x30, 1, 0]).unwrap();
+    let saved = Document::open(bytes.clone()).unwrap();
+    let inspection = saved.inspect_signatures().unwrap().remove(0).unwrap();
+    assert_eq!(inspection.signed_bytes, signed_bytes);
+    assert_eq!(inspection.signer.as_deref(), Some("Ada"));
+    assert_eq!(inspection.subfilter.as_deref(), Some("adbe.pkcs7.detached"));
+    assert!(!inspection.has_subsequent_bytes);
+    let mut update = saved.update();
+    let mut info = Dict::new();
+    info.insert("Title", Object::String(PdfString::from_text("After")));
+    update.set(ObjRef::new(4, 0), Object::Dict(info));
+    let changed = Document::open(update.to_bytes().unwrap()).unwrap();
+    let inspection = changed.inspect_signatures().unwrap().remove(0).unwrap();
+    assert!(inspection.has_subsequent_bytes);
+    assert_eq!(inspection.signed_revision_len, bytes.len());
+    assert_eq!(inspection.signed_bytes, signed_bytes);
 }
