@@ -168,13 +168,26 @@ impl Viewer {
                         ui.group(|ui| {
                             ui.label(&report.label);
                             match &report.integrity {
-                                Ok(true) => { ui.label("Signed-byte integrity: valid"); }
-                                Ok(false) => { ui.label("Signed-byte integrity: verification failed"); }
-                                Err(e) => { ui.label(format!("Signed-byte integrity: not verified ({e})")); }
+                                Ok(true) => {
+                                    ui.label("Signed-byte integrity: valid");
+                                }
+                                Ok(false) => {
+                                    ui.label("Signed-byte integrity: verification failed");
+                                }
+                                Err(e) => {
+                                    ui.label(format!("Signed-byte integrity: not verified ({e})"));
+                                }
                             }
                             if report.revision > 0 {
-                                ui.label(format!("Signed coverage ends at byte {}", report.revision));
-                                ui.label(if report.later { "Later bytes exist outside this signature's coverage." } else { "Coverage reaches the current file end." });
+                                ui.label(format!(
+                                    "Signed coverage ends at byte {}",
+                                    report.revision
+                                ));
+                                ui.label(if report.later {
+                                    "Later bytes exist outside this signature's coverage."
+                                } else {
+                                    "Coverage reaches the current file end."
+                                });
                             }
                             if let Some(changes) = &report.changes {
                                 show_revision_changes(ui, changes.as_ref(), report.later);
@@ -185,9 +198,18 @@ impl Viewer {
                             }
                             for (index, certificate) in report.certificates.iter().enumerate() {
                                 ui.collapsing(format!("Verifying signer {}", index + 1), |ui| {
-                                    ui.label(format!("Chain trust (dates excluded): {}", certificate.chain.label()));
-                                    ui.label(format!("Chain validation with dates: {}", certificate.chain_with_dates.label()));
-                                    ui.label(format!("Signer validity at verification time: {}", certificate.validity.label()));
+                                    ui.label(format!(
+                                        "Chain trust (dates excluded): {}",
+                                        certificate.chain.label()
+                                    ));
+                                    ui.label(format!(
+                                        "Chain validation with dates: {}",
+                                        certificate.chain_with_dates.label()
+                                    ));
+                                    ui.label(format!(
+                                        "Signer validity at verification time: {}",
+                                        certificate.validity.label()
+                                    ));
                                     ui.label(&certificate.details);
                                 });
                             }
@@ -215,7 +237,9 @@ fn show_revision_changes(
         ui.label("Additional trailing bytes are not fully accounted for by parsed revisions.");
     }
     if later && changes.revisions.is_empty() {
-        ui.label("No subsequent cross-reference revision was found. Later bytes remain unclassified.");
+        ui.label(
+            "No subsequent cross-reference revision was found. Later bytes remain unclassified.",
+        );
     }
     for (index, revision) in changes.revisions.iter().enumerate() {
         ui.collapsing(
@@ -252,15 +276,34 @@ fn show_revision_changes(
 fn reference_contexts(impact: &atelier_syntax::ReferenceImpact) -> String {
     fn abbreviated(values: impl IntoIterator<Item = String>, count: usize) -> String {
         let mut result = values.into_iter().take(8).collect::<Vec<_>>().join(", ");
-        if count > 8 { result.push_str(&format!(", ... ({} total)", count)); }
-        if result.is_empty() { result.push_str("none mapped"); }
+        if count > 8 {
+            result.push_str(&format!(", ... ({} total)", count));
+        }
+        if result.is_empty() {
+            result.push_str("none mapped");
+        }
         result
     }
-    format!("pages [{}]; fields [{}]; direct referrers [{}]{}",
-        abbreviated(impact.page_contexts.iter().map(ToString::to_string), impact.page_contexts.len()),
-        abbreviated(impact.field_contexts.iter().cloned(), impact.field_contexts.len()),
-        abbreviated(impact.direct_referrers.iter().map(ToString::to_string), impact.direct_referrers.len()),
-        if impact.trailer_reference { "; referenced by trailer" } else { "" })
+    format!(
+        "pages [{}]; fields [{}]; direct referrers [{}]{}",
+        abbreviated(
+            impact.page_contexts.iter().map(ToString::to_string),
+            impact.page_contexts.len()
+        ),
+        abbreviated(
+            impact.field_contexts.iter().cloned(),
+            impact.field_contexts.len()
+        ),
+        abbreviated(
+            impact.direct_referrers.iter().map(ToString::to_string),
+            impact.direct_referrers.len()
+        ),
+        if impact.trailer_reference {
+            "; referenced by trailer"
+        } else {
+            ""
+        }
+    )
 }
 
 fn inspect_document(
@@ -517,7 +560,9 @@ mod tests {
         let mut viewer = Viewer::initialize(
             &eframe::CreationContext::_new_kittest(ctx),
             crate::settings::Settings {
-                check_updates: false, ocr: false, orient_on_open: false,
+                check_updates: false,
+                ocr: false,
+                orient_on_open: false,
                 ..Default::default()
             },
         );
@@ -648,7 +693,12 @@ mod tests {
         let changes = reports[0].changes.as_ref().unwrap();
         let changes = changes.as_ref().as_ref().unwrap();
         assert_eq!(changes.revisions.len(), 1);
-        assert!(changes.revisions[0].objects.iter().any(|c| c.kind == atelier_syntax::ChangeKind::Added));
+        assert!(
+            changes.revisions[0]
+                .objects
+                .iter()
+                .any(|c| c.kind == atelier_syntax::ChangeKind::Added)
+        );
     }
 
     #[test]
