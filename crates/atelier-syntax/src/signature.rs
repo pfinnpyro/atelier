@@ -157,9 +157,10 @@ impl Document {
             ));
         }
         let mut signatures = Vec::new();
+        let mut budget = SIGNED_BYTES_BUDGET;
         let errors = self.visit_signature_history(true, &mut |doc, reference, dict| {
             if is_signature(dict) {
-                signatures.push(inspect(doc.data(), reference, dict));
+                signatures.push(inspect(doc.data(), reference, dict, &mut budget));
             }
         });
         signatures.extend(errors.into_iter().map(Err));
@@ -252,11 +253,20 @@ impl Document {
     }
 }
 
+/// Total signed-content copies held by one inspection. Each candidate copies its
+/// covered bytes, so many dictionaries in a large file could otherwise exhaust memory.
+const SIGNED_BYTES_BUDGET: usize = 512 * 1024 * 1024;
+
 pub(crate) fn is_signature(dict: &Dict) -> bool {
     dict.is_type(b"Sig") || (dict.get(b"ByteRange").is_some() && dict.get(b"Contents").is_some())
 }
 
-fn inspect(data: &[u8], object: crate::ObjRef, dict: &Dict) -> Result<SignatureInspection> {
+fn inspect(
+    data: &[u8],
+    object: crate::ObjRef,
+    dict: &Dict,
+    budget: &mut usize,
+) -> Result<SignatureInspection> {
     let invalid = || Error::Structure("invalid signature byte coverage".into());
     let range = dict
         .get(b"ByteRange")
@@ -307,6 +317,10 @@ fn inspect(data: &[u8], object: crate::ObjRef, dict: &Dict) -> Result<SignatureI
     if decoded != contents.bytes || decoded.is_empty() {
         return Err(invalid());
     }
+    let signed_len = first_len + (end - second);
+    *budget = budget
+        .checked_sub(signed_len)
+        .ok_or_else(|| Error::Unsupported("signature inspection memory limit reached".into()))?;
     Ok(SignatureInspection {
         object,
         signer: dict
@@ -355,20 +369,40 @@ mod inspection_tests {
             [0, 3, 10, 3],
         ] {
             assert!(
-                inspect(data, crate::ObjRef::new(1, 0), &dictionary(range)).is_err(),
+                inspect(data, crate::ObjRef::new(1, 0), &dictionary(range), &mut {
+                    usize::MAX
+                })
+                .is_err(),
                 "{range:?}"
             );
         }
         let mut dict = dictionary([0, 3, 9, 4]);
         dict.insert("Contents", Object::String(PdfString::literal(vec![1, 2])));
-        assert!(inspect(data, crate::ObjRef::new(1, 0), &dict).is_err());
+        assert!(inspect(data, crate::ObjRef::new(1, 0), &dict, &mut { usize::MAX }).is_err());
     }
     #[test]
     fn later_bytes_are_explicit_and_not_part_of_signed_content() {
         let dict = dictionary([0, 3, 9, 4]);
-        let inspection = inspect(b"abc<3000>tailLATER", crate::ObjRef::new(1, 0), &dict).unwrap();
+        let inspection = inspect(
+            b"abc<3000>tailLATER",
+            crate::ObjRef::new(1, 0),
+            &dict,
+            &mut { usize::MAX },
+        )
+        .unwrap();
         assert_eq!(inspection.signed_bytes, b"abctail");
         assert_eq!(inspection.signed_revision_len, 13);
         assert!(inspection.has_subsequent_bytes);
+    }
+    #[test]
+    fn signed_copies_share_one_memory_budget() {
+        let dict = dictionary([0, 3, 9, 4]);
+        let data = b"abc<3000>tail";
+        let mut budget = 10;
+        assert!(inspect(data, crate::ObjRef::new(1, 0), &dict, &mut budget).is_ok());
+        assert_eq!(budget, 3);
+        let error = inspect(data, crate::ObjRef::new(2, 0), &dict, &mut budget).unwrap_err();
+        assert!(error.to_string().contains("memory limit"), "{error}");
+        assert_eq!(budget, 3);
     }
 }

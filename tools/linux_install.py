@@ -117,7 +117,19 @@ def install(source, root):
             previous["previous_default"] = original
     entry = version + "-" + target
     destination = root / "releases" / entry
-    if destination.exists(): raise ValueError("Version already installed; use --rollback or another version")
+    if destination.exists():
+        # A release kept after rollback can be reactivated, but only when its
+        # files are identical to the package being installed.
+        retained = managed and entry in previous["versions"] and entry != previous.get("current")
+        if not retained or destination.is_symlink() or any(
+                not (destination / name).is_file() or (destination / name).is_symlink()
+                or hashlib.sha256((destination / name).read_bytes()).digest()
+                != hashlib.sha256((source / name).read_bytes()).digest() for name in FILES):
+            raise ValueError("Version already installed; use --rollback or another version")
+        activate(root, previous, entry)
+        with contextlib.suppress(OSError, subprocess.SubprocessError): refresh()
+        print("Activated retained", entry, "at", root / "current")
+        return
     # Do not overwrite another app's metadata, even when its file name collides.
     for path in paths.values():
         if (path.exists() or path.is_symlink()) and str(path) not in previous.get("integration", {}):
@@ -162,19 +174,24 @@ def install(source, root):
     print("Installed", entry, "at", root / "current")
 
 
+def activate(root, info, entry):
+    """Make a retained release current, keeping the current one for rollback."""
+    switch(root, entry)
+    icon = layout(root)["icon"]
+    shutil.copyfile(root / "releases" / entry / "atelier.png", icon)
+    info["integration"][str(icon)] = hashlib.sha256(icon.read_bytes()).hexdigest()
+    metainfo = layout(root)["metainfo"]
+    shutil.copyfile(root / "releases" / entry / "org.atelier.Viewer.metainfo.xml", metainfo)
+    info["integration"][str(metainfo)] = hashlib.sha256(metainfo.read_bytes()).hexdigest()
+    info["previous"], info["current"] = info["current"], entry
+    atomic_text(root / "managed.json", json.dumps(info, indent=2))
+
+
 def rollback(root):
     info = state(root)
     old = info.get("previous")
     if old not in info["versions"]: raise ValueError("No previous version available")
-    switch(root, old)
-    icon = layout(root)["icon"]
-    shutil.copyfile(root / "releases" / old / "atelier.png", icon)
-    info["integration"][str(icon)] = hashlib.sha256(icon.read_bytes()).hexdigest()
-    metainfo = layout(root)["metainfo"]
-    shutil.copyfile(root / "releases" / old / "org.atelier.Viewer.metainfo.xml", metainfo)
-    info["integration"][str(metainfo)] = hashlib.sha256(metainfo.read_bytes()).hexdigest()
-    info["previous"], info["current"] = info["current"], old
-    atomic_text(root / "managed.json", json.dumps(info, indent=2))
+    activate(root, info, old)
 
 
 def remove_pdf_association():

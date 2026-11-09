@@ -56,6 +56,23 @@ class LinuxInstallTests(unittest.TestCase):
         self.assertEqual(document.read_bytes(), b"user PDF")
         self.assertTrue((models / "user-model").exists())
 
+    def test_update_after_rollback_reactivates_retained_release(self):
+        installer.install(self.source("1.2.3"), self.root)
+        newer = self.source("1.2.4")
+        installer.install(newer, self.root)
+        installer.rollback(self.root)
+        installer.install(newer, self.root)
+        info = installer.state(self.root)
+        self.assertEqual(info["current"], "1.2.4-" + self.target)
+        self.assertEqual(info["previous"], "1.2.3-" + self.target)
+        self.assertEqual((self.root / "current/atelier-viewer").read_bytes(), b"1.2.4atelier-viewer")
+        with self.assertRaises(ValueError):
+            installer.install(newer, self.root)
+        (newer / "atelier-viewer").write_bytes(b"different build")
+        installer.rollback(self.root)
+        with self.assertRaises(ValueError):
+            installer.install(newer, self.root)
+
     def test_failed_activation_restores_executable_metadata_and_state(self):
         installer.install(self.source("1.2.3"), self.root)
         previous = installer.state(self.root)
