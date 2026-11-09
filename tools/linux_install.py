@@ -175,16 +175,28 @@ def install(source, root):
 
 
 def activate(root, info, entry):
-    """Make a retained release current, keeping the current one for rollback."""
-    switch(root, entry)
-    icon = layout(root)["icon"]
-    shutil.copyfile(root / "releases" / entry / "atelier.png", icon)
-    info["integration"][str(icon)] = hashlib.sha256(icon.read_bytes()).hexdigest()
-    metainfo = layout(root)["metainfo"]
-    shutil.copyfile(root / "releases" / entry / "org.atelier.Viewer.metainfo.xml", metainfo)
-    info["integration"][str(metainfo)] = hashlib.sha256(metainfo.read_bytes()).hexdigest()
-    info["previous"], info["current"] = info["current"], entry
-    atomic_text(root / "managed.json", json.dumps(info, indent=2))
+    """Make a retained release current, keeping the current one for rollback.
+    On failure, the executable link, metadata and state are restored."""
+    original = json.loads(json.dumps(info))
+    def place(version):
+        icon, metainfo = layout(root)["icon"], layout(root)["metainfo"]
+        shutil.copyfile(root / "releases" / version / "atelier.png", icon)
+        shutil.copyfile(root / "releases" / version / "org.atelier.Viewer.metainfo.xml", metainfo)
+        return icon, metainfo
+    try:
+        switch(root, entry)
+        icon, metainfo = place(entry)
+        updated = dict(info, integration=dict(info["integration"]),
+                       previous=info["current"], current=entry)
+        updated["integration"][str(icon)] = hashlib.sha256(icon.read_bytes()).hexdigest()
+        updated["integration"][str(metainfo)] = hashlib.sha256(metainfo.read_bytes()).hexdigest()
+        atomic_text(root / "managed.json", json.dumps(updated, indent=2))
+    except Exception:
+        if original.get("current"):
+            switch(root, original["current"])
+            place(original["current"])
+        atomic_text(root / "managed.json", json.dumps(original, indent=2))
+        raise
 
 
 def rollback(root):

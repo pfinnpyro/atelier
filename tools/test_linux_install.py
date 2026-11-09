@@ -73,6 +73,23 @@ class LinuxInstallTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             installer.install(newer, self.root)
 
+    def test_failed_retained_activation_restores_previous_release(self):
+        installer.install(self.source("1.2.3"), self.root)
+        newer = self.source("1.2.4")
+        installer.install(newer, self.root)
+        installer.rollback(self.root)
+        before = installer.state(self.root)
+        real = installer.atomic_text
+        def failing(path, text):
+            if path.name == "managed.json" and '"current": "1.2.4' in text:
+                raise OSError("disk full")
+            return real(path, text)
+        with patch.object(installer, "atomic_text", failing), self.assertRaises(OSError):
+            installer.install(newer, self.root)
+        self.assertEqual(installer.state(self.root), before)
+        self.assertEqual((self.root / "current/atelier-viewer").read_bytes(), b"1.2.3atelier-viewer")
+        self.assertEqual(installer.layout(self.root)["icon"].read_bytes(), b"1.2.3atelier.png")
+
     def test_failed_activation_restores_executable_metadata_and_state(self):
         installer.install(self.source("1.2.3"), self.root)
         previous = installer.state(self.root)
