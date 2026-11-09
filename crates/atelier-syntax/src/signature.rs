@@ -146,9 +146,10 @@ pub struct SignatureInspection {
 }
 
 impl Document {
-    /// Inspect signature dictionaries in the current object graph. Each candidate
-    /// has its own result so a malformed signature cannot hide other signatures.
-    /// Historical dictionaries replaced in later revisions are not enumerated.
+    /// Inspect current and historical indirect signature dictionaries through /Prev.
+    /// Unchanged object versions are listed once. Each malformed candidate or
+    /// incomplete historical traversal is returned as a separate error.
+    /// Byte coverage is measured against the complete, unchanged source file.
     pub fn inspect_signatures(&self) -> Result<Vec<Result<SignatureInspection>>> {
         if self.is_encrypted() {
             return Err(Error::Unsupported(
@@ -156,27 +157,103 @@ impl Document {
             ));
         }
         let mut signatures = Vec::new();
-        for number in self.object_numbers() {
-            let generation = match self.xref_entry(number) {
+        let errors = self.visit_signature_history(true, &mut |doc, reference, dict| {
+            if is_signature(dict) {
+                signatures.push(inspect(doc.data(), reference, dict));
+            }
+        });
+        signatures.extend(errors.into_iter().map(Err));
+        Ok(signatures)
+    }
+
+    pub(crate) fn visit_signature_history(
+        &self,
+        deduplicate: bool,
+        visitor: &mut impl FnMut(&Document, crate::ObjRef, &Dict),
+    ) -> Vec<Error> {
+        let mut errors = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        let mut visited = std::collections::HashSet::new();
+        if let Some(offset) = self.startxref() {
+            visited.insert(offset);
+        }
+        self.inspect_graph(&mut seen, &mut errors, deduplicate, visitor);
+        let mut previous = self.trailer().get(b"Prev").cloned();
+        while let Some(value) = previous.take() {
+            let offset = value.as_i64().and_then(|n| usize::try_from(n).ok());
+            let Some(offset) = offset else {
+                errors.push(Error::Structure("invalid signature history /Prev".into()));
+                break;
+            };
+            if visited.len() >= 128 || !visited.insert(offset) {
+                errors.push(Error::Structure(
+                    "signature history cycle or revision limit reached".into(),
+                ));
+                break;
+            }
+            match self.at_xref(offset) {
+                Ok(revision) => {
+                    revision.inspect_graph(&mut seen, &mut errors, deduplicate, visitor);
+                    previous = revision.trailer().get(b"Prev").cloned();
+                }
+                Err(error) => {
+                    errors.push(error);
+                    break;
+                }
+            }
+        }
+        errors
+    }
+
+    fn inspect_graph(
+        &self,
+        seen: &mut std::collections::HashSet<(
+            crate::ObjRef,
+            crate::XrefEntry,
+            Option<crate::XrefEntry>,
+        )>,
+        errors: &mut Vec<Error>,
+        deduplicate: bool,
+        visitor: &mut impl FnMut(&Document, crate::ObjRef, &Dict),
+    ) {
+        let doc = self;
+        for number in doc.object_numbers() {
+            let generation = match doc.xref_entry(number) {
                 Some(crate::XrefEntry::Offset { generation, .. }) => generation,
                 _ => 0,
             };
             let reference = crate::ObjRef::new(number, generation);
-            let object = self.get(reference)?;
+            let Some(entry) = doc.xref_entry(number) else {
+                continue;
+            };
+            // A compressed object's identity also depends on the version of its
+            // containing stream, which a later revision can replace in place.
+            let container = match entry {
+                crate::XrefEntry::Compressed { stream, .. } => doc.xref_entry(stream),
+                _ => None,
+            };
+            if entry == crate::XrefEntry::Free
+                || (deduplicate && !seen.insert((reference, entry, container)))
+            {
+                continue;
+            }
+            let object = match doc.get(reference) {
+                Ok(object) => object,
+                Err(error) => {
+                    errors.push(error);
+                    continue;
+                }
+            };
             let Some(dict) = object.as_dict() else {
                 continue;
             };
-            if dict
-                .get(b"Type")
-                .and_then(Object::as_name)
-                .is_some_and(|n| n.as_bytes() == b"Sig")
-                || (dict.get(b"ByteRange").is_some() && dict.get(b"Contents").is_some())
-            {
-                signatures.push(inspect(self.data(), reference, dict));
-            }
+            visitor(self, reference, dict);
         }
-        Ok(signatures)
     }
+}
+
+pub(crate) fn is_signature(dict: &Dict) -> bool {
+    dict.is_type(b"Sig") || (dict.get(b"ByteRange").is_some() && dict.get(b"Contents").is_some())
 }
 
 fn inspect(data: &[u8], object: crate::ObjRef, dict: &Dict) -> Result<SignatureInspection> {

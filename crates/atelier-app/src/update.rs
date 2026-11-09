@@ -126,7 +126,7 @@ pub struct Release {
 }
 
 impl Release {
-    fn asset(&self, name: &str) -> Option<&(String, String, u64)> {
+    pub(crate) fn asset(&self, name: &str) -> Option<&(String, String, u64)> {
         self.assets.iter().find(|a| a.0 == name)
     }
 }
@@ -140,6 +140,21 @@ pub fn newest(releases: &[Release], preview: bool, than: &Version) -> Option<Rel
         .filter(|r| r.version > *than)
         .max_by(|a, b| a.version.cmp(&b.version))
         .cloned()
+}
+
+/// Linux releases must carry the matching architecture package and checksum manifest.
+pub fn newest_for_platform(releases: &[Release], preview: bool, than: &Version) -> Option<Release> {
+    if cfg!(target_os = "linux") {
+        let name = linux_asset_name()?;
+        let compatible: Vec<_> = releases
+            .iter()
+            .filter(|release| release.asset(name).is_some() && release.asset(SUMS_ASSET).is_some())
+            .cloned()
+            .collect();
+        newest(&compatible, preview, than)
+    } else {
+        newest(releases, preview, than)
+    }
 }
 
 /// Reads GitHub's release list.
@@ -199,11 +214,34 @@ pub enum Installed {
 
 /// Whether this copy can update itself here.
 pub fn supported() -> bool {
-    cfg!(windows)
+    cfg!(windows) || linux_managed_root().is_some()
 }
 
 /// Downloads and puts `release` in place, counting bytes in `progress`.
 pub fn install(release: &Release, progress: &AtomicU64) -> Result<Installed, String> {
+    if let Some(root) = linux_managed_root() {
+        let name = linux_asset_name().ok_or("Unsupported Linux architecture")?;
+        let asset = release
+            .asset(name)
+            .ok_or("This release has no package for this Linux architecture")?;
+        let output = Command::new("python3")
+            .arg(root.join("current/install.py"))
+            .arg("--root")
+            .arg(&root)
+            .arg("--update")
+            .arg(release.version.to_string())
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| format!("Could not start the Linux updater: {e}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "Linux update failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+        progress.store(asset.2, Ordering::SeqCst);
+        return Ok(Installed::Swapped);
+    }
     if !supported() {
         return Err("Updating from inside Atelier works on Windows only.".into());
     }
@@ -260,12 +298,41 @@ pub fn install(release: &Release, progress: &AtomicU64) -> Result<Installed, Str
     Ok(Installed::Swapped)
 }
 
+/// Managed Linux installs keep complete versions and atomically switch `current`.
+pub fn linux_managed_root() -> Option<PathBuf> {
+    if !cfg!(target_os = "linux") {
+        return None;
+    }
+    let exe = std::env::current_exe().ok()?;
+    let releases = exe.parent()?.parent()?;
+    if releases.file_name()? != "releases" {
+        return None;
+    }
+    let root = releases.parent()?;
+    if root.join("managed.json").is_file() && root.join("current/install.py").is_file() {
+        Some(root.to_path_buf())
+    } else {
+        None
+    }
+}
+
+pub fn linux_asset_name() -> Option<&'static str> {
+    match std::env::consts::ARCH {
+        "x86_64" => Some("atelier-linux-x64.tar.gz"),
+        "aarch64" => Some("atelier-linux-arm64.tar.gz"),
+        _ => None,
+    }
+}
+
 fn old_path(exe: &Path) -> PathBuf {
     exe.with_extension("exe.old")
 }
 
 /// Removes the version an update set aside, once it is no longer running.
 pub fn clean_up() {
+    if !cfg!(windows) {
+        return;
+    }
     if let Ok(exe) = std::env::current_exe() {
         let _ = fs::remove_file(old_path(&exe));
     }
@@ -273,7 +340,11 @@ pub fn clean_up() {
 
 /// Starts the program again, opening `file`, so this copy can quit.
 pub fn restart(file: Option<&Path>) -> Result<(), String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe = linux_managed_root()
+        .map(|root| root.join("current/atelier-viewer"))
+        .map(Ok)
+        .unwrap_or_else(std::env::current_exe)
+        .map_err(|e| e.to_string())?;
     let mut cmd = Command::new(exe);
     if let Some(f) = file {
         cmd.arg(f);
@@ -367,6 +438,39 @@ mod tests {
 
     fn v(s: &str) -> Version {
         Version::parse(s).unwrap()
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_discovery_requires_matching_package_and_manifest() {
+        let name = linux_asset_name().unwrap();
+        let release = |version, assets| Release {
+            version: v(version),
+            notes: String::new(),
+            page: String::new(),
+            assets,
+        };
+        let packages = vec![
+            release("2.0.0", vec![]),
+            release(
+                "1.5.0",
+                vec![
+                    (name.into(), "https://example/package".into(), 1),
+                    (SUMS_ASSET.into(), "https://example/sums".into(), 1),
+                ],
+            ),
+            release(
+                "1.8.0",
+                vec![(name.into(), "https://example/package".into(), 1)],
+            ),
+        ];
+        assert_eq!(
+            newest_for_platform(&packages, false, &v("1.0.0"))
+                .unwrap()
+                .version,
+            v("1.5.0")
+        );
+        assert!(newest_for_platform(&packages, false, &v("1.5.0")).is_none());
     }
 
     #[test]

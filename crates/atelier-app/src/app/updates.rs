@@ -58,7 +58,7 @@ impl Updater {
             .name("update-check".into())
             .spawn(move || {
                 let found = update::fetch_releases()
-                    .map(|rs| update::newest(&rs, preview, &update::current()));
+                    .map(|rs| update::newest_for_platform(&rs, preview, &update::current()));
                 let s = match found {
                     Ok(Some(r)) => Status::Available(r),
                     Ok(None) if quiet => Status::Idle,
@@ -89,6 +89,13 @@ impl Updater {
 }
 
 fn size_of(release: &Release) -> u64 {
+    if cfg!(target_os = "linux") {
+        return update::linux_asset_name()
+            .and_then(|name| release.asset(name))
+            .map(|asset| asset.2)
+            .unwrap_or(1)
+            .max(1);
+    }
     // The program and the installer are much the same size; either names
     // the download well enough for a progress bar.
     release
@@ -130,7 +137,7 @@ impl Viewer {
                     self.window = Some(super::settings_window::Window::About);
                 }
                 if update::supported() {
-                    let dirty = self.is_dirty();
+                    let dirty = self.update_has_unsaved_work();
                     if ui
                         .add_enabled(!dirty, egui::Button::new("Update now").small())
                         .on_disabled_hover_text("Save your changes first.")
@@ -190,7 +197,7 @@ impl Viewer {
                 notes(ui, &release);
                 ui.horizontal(|ui| {
                     if update::supported() {
-                        let dirty = self.is_dirty();
+                        let dirty = self.update_has_unsaved_work();
                         if ui
                             .add_enabled(!dirty, egui::Button::new("Download and install"))
                             .on_disabled_hover_text("Save your changes first.")
@@ -218,7 +225,7 @@ impl Viewer {
             }
             Status::Ready(Installed::Swapped) => {
                 ui.label("The new version is in place.");
-                let dirty = self.is_dirty();
+                let dirty = self.update_has_unsaved_work();
                 if ui
                     .add_enabled(!dirty, egui::Button::new("Restart Atelier"))
                     .on_disabled_hover_text("Save your changes first.")

@@ -4,7 +4,9 @@
 Usage: python3 tools/qa_pdf_edges.py /tmp/atelier-qa
 Writes disposable PDF/PNG fixtures and a JSON result log to the supplied folder.
 """
+import argparse
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -42,7 +44,11 @@ def fixture():
 
 def main():
     root = Path(__file__).resolve().parent.parent
-    destination = Path(sys.argv[1]).resolve()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("destination", type=Path)
+    parser.add_argument("--binary", type=Path, default=root / "target/debug" / ("atelier.exe" if os.name == "nt" else "atelier"))
+    options = parser.parse_args()
+    destination = options.destination.resolve()
     destination.mkdir(parents=True, exist_ok=True)
     base = fixture()
     # Preserve byte offsets in the wrong-length case to isolate stream repair.
@@ -64,7 +70,7 @@ def main():
         for args in (["info", str(path)], ["render", str(path), "all", "--dpi", "72", "-o", str(output)]):
             expected = 1 if name in ("empty", "not-pdf") else 0
             try:
-                run = subprocess.run([str(root / "target/debug/atelier"), *args], capture_output=True, text=True, timeout=15)
+                run = subprocess.run([str(options.binary.resolve()), *args], capture_output=True, text=True, timeout=15)
                 passed = run.returncode == expected
                 results.append(dict(case=name, command=args[0], exit=run.returncode, passed=passed, output=run.stdout + run.stderr))
             except subprocess.TimeoutExpired:

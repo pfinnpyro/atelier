@@ -23,6 +23,7 @@ struct Report {
     label: String,
     revision: usize,
     later: bool,
+    changes: Option<Arc<atelier_syntax::Result<atelier_syntax::SignedRevisionChanges>>>,
     integrity: Result<bool, String>,
     certificates: Vec<CertificateReport>,
 }
@@ -136,7 +137,20 @@ impl Viewer {
         }
         ui.label("Integrity, certificate chain trust and current certificate dates are checked separately. Revocation and timestamps are not checked.");
         ui.weak("Chain validation uses any certificate purpose; document-signing policy is not evaluated.");
-        ui.weak("Only signature dictionaries in the current document are listed. Earlier signatures removed or replaced by later revisions may be absent.");
+        ui.weak("Includes indirect signature dictionaries from earlier PDF revisions. Later revisions are compared structurally. Categories do not establish whether changes are permitted. Declared restrictions remain enforced conservatively.");
+        if open.signatures.result.is_some() {
+            let policy = open.doc.signature_write_policy();
+            for restriction in &policy.restrictions {
+                ui.label(format!("Declared restriction: {restriction}"));
+            }
+            if let Err(error) = policy.check(false) {
+                ui.colored_label(ui.visuals().warn_fg_color, error.to_string());
+                ui.weak("Saving an unchanged copy remains available. These declarations are not a cryptographic trust result.");
+            }
+            if policy.has_signatures {
+                ui.weak("Full rewrites, page extraction and encryption export are blocked to preserve signed bytes.");
+            }
+        }
         match &open.signatures.result {
             None => {
                 ui.spinner();
@@ -160,7 +174,10 @@ impl Viewer {
                             }
                             if report.revision > 0 {
                                 ui.label(format!("Signed coverage ends at byte {}", report.revision));
-                                ui.label(if report.later { "Later bytes exist; their changes are not classified or covered by this signature." } else { "Coverage reaches the current file end." });
+                                ui.label(if report.later { "Later bytes exist outside this signature's coverage." } else { "Coverage reaches the current file end." });
+                            }
+                            if let Some(changes) = &report.changes {
+                                show_revision_changes(ui, changes.as_ref(), report.later);
                             }
                             ui.label("Revocation: not checked");
                             if report.certificates.is_empty() {
@@ -182,19 +199,85 @@ impl Viewer {
     }
 }
 
+fn show_revision_changes(
+    ui: &mut egui::Ui,
+    changes: &atelier_syntax::Result<atelier_syntax::SignedRevisionChanges>,
+    later: bool,
+) {
+    let changes = match changes {
+        Ok(changes) => changes,
+        Err(error) => {
+            ui.label(format!("Later-change analysis: unknown ({error})"));
+            return;
+        }
+    };
+    if changes.unclassified_trailing_bytes {
+        ui.label("Additional trailing bytes are not fully accounted for by parsed revisions.");
+    }
+    if later && changes.revisions.is_empty() {
+        ui.label("No subsequent cross-reference revision was found. Later bytes remain unclassified.");
+    }
+    for (index, revision) in changes.revisions.iter().enumerate() {
+        ui.collapsing(
+            format!("Later revision {}: {} object changes", index + 1, revision.objects.len()),
+            |ui| {
+                ui.label(format!("Cross-reference offset: {}", revision.xref_offset));
+                if !revision.trailer_keys.is_empty() {
+                    ui.label(format!("Trailer keys: {}", revision.trailer_keys.join(", ")));
+                }
+                for change in revision.objects.iter().take(100) {
+                    let keys = if change.keys.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" ({})", change.keys.join(", "))
+                    };
+                    ui.label(format!("{}: {} - {}{keys}",
+                        change.object, change.kind.label(), change.category.label()));
+                    if change.references_before == change.references_after {
+                        ui.weak(format!("Reference contexts: {}", reference_contexts(&change.references_after)));
+                    } else {
+                        ui.weak(format!("Before: {}", reference_contexts(&change.references_before)));
+                        ui.weak(format!("After: {}", reference_contexts(&change.references_after)));
+                    }
+                }
+                if revision.objects.len() > 100 {
+                    ui.label("Only the first 100 object changes are displayed.");
+                }
+                ui.weak("Reference contexts show forward reachability and conservative field inheritance, excluding recognized page, field and annotation backlinks. They do not prove visual effects, exclusive ownership or edit permission. Reverted changes remain listed.");
+            },
+        );
+    }
+}
+
+fn reference_contexts(impact: &atelier_syntax::ReferenceImpact) -> String {
+    fn abbreviated(values: impl IntoIterator<Item = String>, count: usize) -> String {
+        let mut result = values.into_iter().take(8).collect::<Vec<_>>().join(", ");
+        if count > 8 { result.push_str(&format!(", ... ({} total)", count)); }
+        if result.is_empty() { result.push_str("none mapped"); }
+        result
+    }
+    format!("pages [{}]; fields [{}]; direct referrers [{}]{}",
+        abbreviated(impact.page_contexts.iter().map(ToString::to_string), impact.page_contexts.len()),
+        abbreviated(impact.field_contexts.iter().cloned(), impact.field_contexts.len()),
+        abbreviated(impact.direct_referrers.iter().map(ToString::to_string), impact.direct_referrers.len()),
+        if impact.trailer_reference { "; referenced by trailer" } else { "" })
+}
+
 fn inspect_document(
     doc: &Document,
     bundle: Option<&std::path::Path>,
 ) -> Result<Vec<Report>, String> {
+    let _policy = doc.signature_write_policy();
     Ok(doc
         .inspect_signatures()
         .map_err(|e| e.to_string())?
         .into_iter()
         .map(|candidate| match candidate {
             Err(e) => Report {
-                label: "Malformed signature".into(),
+                label: "Signature inspection incomplete".into(),
                 revision: 0,
                 later: false,
+                changes: None,
                 integrity: Err(e.to_string()),
                 certificates: Vec::new(),
             },
@@ -207,6 +290,7 @@ fn inspect_document(
                     ),
                     revision: signature.signed_revision_len,
                     later: signature.has_subsequent_bytes,
+                    changes: Some(doc.changes_since_signed_revision(signature.signed_revision_len)),
                     integrity: Err("not checked".into()),
                     certificates: Vec::new(),
                 };
@@ -428,6 +512,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn restricted_save_preserves_pending_work_before_opening_a_dialog() {
+        let ctx = egui::Context::default();
+        let mut viewer = Viewer::initialize(
+            &eframe::CreationContext::_new_kittest(ctx),
+            crate::settings::Settings {
+                check_updates: false, ocr: false, orient_on_open: false,
+                ..Default::default()
+            },
+        );
+        let bytes = b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >> endobj\n4 0 obj << /Type /Sig /Reference [<< /TransformMethod /DocMDP /TransformParams << /P 1 >> >>] >> endobj\n%%EOF".to_vec();
+        viewer.open_with_password(bytes, "restricted.pdf".into(), "", None);
+        let original = viewer.open.as_ref().unwrap().doc.clone();
+        viewer.open.as_mut().unwrap().layers_pending = true;
+        viewer.save(crate::app::SaveTo::Copy);
+        assert!(viewer.error.as_ref().is_some_and(|e| e.contains("DocMDP")));
+        let open = viewer.open.as_ref().unwrap();
+        assert!(open.layers_pending);
+        assert!(Arc::ptr_eq(&original, &open.doc));
+        assert!(open.path.is_none());
+    }
+
+    #[test]
     fn unsupported_format_never_reaches_openssl() {
         let signature = SignatureInspection {
             object: atelier_syntax::ObjRef::new(1, 0),
@@ -539,6 +645,10 @@ mod tests {
         let reports = inspect_document(&changed, None).unwrap();
         assert!(matches!(reports[0].integrity, Ok(true)));
         assert!(reports[0].later);
+        let changes = reports[0].changes.as_ref().unwrap();
+        let changes = changes.as_ref().as_ref().unwrap();
+        assert_eq!(changes.revisions.len(), 1);
+        assert!(changes.revisions[0].objects.iter().any(|c| c.kind == atelier_syntax::ChangeKind::Added));
     }
 
     #[test]

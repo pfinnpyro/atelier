@@ -22,12 +22,30 @@ jobs:
             target: windows-x64
             triple: x86_64-pc-windows-msvc
             options: '--installer'
+          - os: ubuntu-22.04
+            target: linux-x64
+            triple: x86_64-unknown-linux-gnu
+            options: ''
+          - os: ubuntu-22.04-arm
+            target: linux-arm64
+            triple: aarch64-unknown-linux-gnu
+            options: ''
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.1.0
         with:
           python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: sh tools/setup_linux.sh
+      - name: Packaging tests
+        run: python -m unittest discover -s tools -p "test_*.py"
       - name: Install Rust target
         run: rustup target add ${{ matrix.triple }}
       - name: Validate version and tag
@@ -47,10 +65,22 @@ jobs:
         run: choco install innosetup --no-progress -y
       - name: Build and package
         run: python tools/package_release.py ${{ matrix.target }} ${{ matrix.options }}
+      - name: Validate Linux package
+        if: runner.os == 'Linux'
+        run: |
+          docker build -f tools/Dockerfile.linux-runtime -t atelier-linux-runtime:qa tools
+          docker run --rm --mount type=bind,source=${{ github.workspace }},target=/workspace,readonly atelier-linux-runtime:qa python3 tools/qa_linux_package.py dist --target ${{ matrix.target }}
+      - name: Attest Linux release packages
+        if: runner.os == 'Linux' && startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/**/*.tar.gz
+          create-storage-record: false
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: atelier-${{ matrix.target }}
           path: |
+            dist/**/*.tar.gz
             dist/**/*.zip
             dist/**/*.exe
             dist/**/SHA256SUMS.txt
@@ -81,7 +111,8 @@ jobs:
                   assert not dest.exists(), 'Duplicate asset: ' + name
                   shutil.copy2(source, dest)
           expected = {'atelier-macos-arm64.zip', 'atelier-windows-x64.zip',
-              'atelier-windows-x64.exe', 'atelier-cli-windows-x64.exe', 'atelier-setup-windows-x64.exe'}
+              'atelier-windows-x64.exe', 'atelier-cli-windows-x64.exe', 'atelier-setup-windows-x64.exe',
+              'atelier-linux-x64.tar.gz', 'atelier-linux-arm64.tar.gz'}
           assert {p.name for p in pathlib.Path('release').iterdir()} == expected
           with open('release/SHA256SUMS.txt', 'w') as f:
               for p in sorted(pathlib.Path('release').iterdir()):

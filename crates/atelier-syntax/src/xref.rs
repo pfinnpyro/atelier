@@ -9,7 +9,7 @@ use crate::parser::{find, rfind};
 use crate::{Dict, Error, Lexer, ObjRef, Object, Parser, Result, Token};
 
 /// Where an object lives.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum XrefEntry {
     Free,
     /// A top-level object at a byte offset.
@@ -42,7 +42,10 @@ impl XrefTable {
 /// Reads the cross-reference chain starting at `startxref`.
 /// `shift` is added to every offset (bytes of junk before `%PDF-`).
 pub(crate) fn read(data: &[u8], shift: usize) -> Result<XrefTable> {
-    let start = find_startxref(data)?;
+    read_from(data, shift, find_startxref(data)?)
+}
+
+pub(crate) fn read_from(data: &[u8], shift: usize, start: usize) -> Result<XrefTable> {
     let mut table = XrefTable::default();
     let mut visited = HashSet::new();
     let mut next = Some(start);

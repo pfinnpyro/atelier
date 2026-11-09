@@ -125,6 +125,20 @@ fn files_with_xref_streams_get_an_xref_stream_update() {
     let again = Document::open(saved).unwrap();
     assert!(!again.was_repaired(), "{:?}", again.warnings());
     assert_eq!(title(&again), b"Streamed");
+    let changes = again.changes_since_signed_revision(data.len());
+    let changes = changes.as_ref().as_ref().unwrap();
+    assert!(
+        changes.revisions[0]
+            .objects
+            .iter()
+            .any(|d| d.category == atelier_syntax::ChangeCategory::CrossReference)
+    );
+    assert!(
+        changes.revisions[0]
+            .objects
+            .iter()
+            .any(|d| d.category == atelier_syntax::ChangeCategory::Metadata)
+    );
 }
 
 #[test]
@@ -496,4 +510,667 @@ fn signature_inspection_survives_incremental_edits() {
     assert!(inspection.has_subsequent_bytes);
     assert_eq!(inspection.signed_revision_len, bytes.len());
     assert_eq!(inspection.signed_bytes, signed_bytes);
+}
+
+#[test]
+fn historical_signatures_survive_replacement_and_removal() {
+    let doc = Document::open(classic()).unwrap();
+    let first = Document::open(
+        doc.prepare_signature("First", 1024)
+            .unwrap()
+            .finish(&[0x30, 1, 0])
+            .unwrap(),
+    )
+    .unwrap();
+    let original = first.inspect_signatures().unwrap().remove(0).unwrap();
+    let second = Document::open(
+        first
+            .prepare_signature("Second", 1024)
+            .unwrap()
+            .finish(&[0x30, 1, 1])
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(second.inspect_signatures().unwrap().len(), 2);
+    let mut replacement = second
+        .resolve_dict(&Object::Reference(original.object))
+        .unwrap();
+    replacement.insert("Name", Object::String(PdfString::from_text("Replacement")));
+    let mut update = second.update();
+    update.set(original.object, Object::Dict(replacement));
+    let replaced = Document::open(update.to_bytes().unwrap()).unwrap();
+    let reports = replaced
+        .inspect_signatures()
+        .unwrap()
+        .into_iter()
+        .collect::<atelier_syntax::Result<Vec<_>>>()
+        .unwrap();
+    assert_eq!(reports.len(), 3);
+    assert!(
+        reports
+            .iter()
+            .any(|s| s.signer.as_deref() == Some("Replacement"))
+    );
+    let mut update = replaced.update();
+    update.set(original.object, Object::Null);
+    let removed = Document::open(update.to_bytes().unwrap()).unwrap();
+    let reports = removed
+        .inspect_signatures()
+        .unwrap()
+        .into_iter()
+        .collect::<atelier_syntax::Result<Vec<_>>>()
+        .unwrap();
+    assert_eq!(reports.len(), 3);
+    let recovered = reports
+        .iter()
+        .find(|s| s.signer.as_deref() == Some("First"))
+        .unwrap();
+    assert_eq!(recovered.signed_bytes, original.signed_bytes);
+    assert_eq!(recovered.cms, original.cms);
+    assert!(recovered.has_subsequent_bytes);
+}
+
+#[test]
+fn signature_history_reports_cycles_without_losing_current_signatures() {
+    let doc = Document::open(classic()).unwrap();
+    let signed = Document::open(
+        doc.prepare_signature("Ada", 1024)
+            .unwrap()
+            .finish(&[0x30, 1, 0])
+            .unwrap(),
+    )
+    .unwrap();
+    let mut bytes = signed.data().to_vec();
+    let marker = b"/Prev ";
+    let pos = bytes
+        .windows(marker.len())
+        .rposition(|w| w == marker)
+        .unwrap()
+        + marker.len();
+    let end = pos
+        + bytes[pos..]
+            .iter()
+            .take_while(|b| b.is_ascii_digit())
+            .count();
+    let offset = signed.startxref().unwrap().to_string();
+    bytes.splice(pos..end, offset.bytes());
+    let cyclic = Document::open(bytes).unwrap();
+    let reports = cyclic.inspect_signatures().unwrap();
+    assert!(reports.iter().any(Result::is_ok));
+    assert!(reports.iter().any(Result::is_err));
+}
+
+// These fixtures declare restrictions without claiming cryptographic validity.
+fn declared_signature(reference: &str) -> Document {
+    let doc = Document::open(classic()).unwrap();
+    let mut update = doc.update();
+    let object =
+        atelier_syntax::Parser::new(format!("<< /Type /Sig /Reference {reference} >>").as_bytes())
+            .parse_object()
+            .unwrap();
+    update.add(object);
+    Document::open(update.to_bytes().unwrap()).unwrap()
+}
+
+#[test]
+fn docmdp_and_fieldmdp_block_unclassified_edits_and_rewrites() {
+    for reference in [
+        "[<< /TransformMethod /DocMDP /TransformParams << /P 1 >> >>]",
+        "[<< /TransformMethod /DocMDP /TransformParams << /P 2 >> >>]",
+        "[<< /TransformMethod /DocMDP /TransformParams << /P 3 >> >>]",
+        "[<< /TransformMethod /DocMDP >>]",
+        "[<< /TransformMethod /FieldMDP /TransformParams << /Action /All >> >>]",
+        "[<< /TransformMethod /FieldMDP /TransformParams << /Action /Include /Fields [(Person.Name)] >> >>]",
+        "[<< /TransformMethod /FieldMDP /TransformParams << /Action /Exclude /Fields [(Allowed)] >> >>]",
+    ] {
+        let doc = declared_signature(reference);
+        let policy = doc.signature_write_policy();
+        assert!(policy.incomplete.is_empty(), "{policy:?}");
+        assert!(!policy.restrictions.is_empty());
+        assert_eq!(doc.update().to_bytes().unwrap(), doc.data());
+        let mut update = doc.update();
+        update.set(ObjRef::new(4, 0), info_with_title(b"Forbidden"));
+        assert!(update.to_bytes().is_err(), "{reference}");
+        assert!(update.to_compact_bytes(&Default::default()).is_err());
+        assert!(doc.update().to_encrypted_bytes("open", "owner").is_err());
+    }
+}
+
+#[test]
+fn malformed_or_unknown_signature_policy_fails_closed() {
+    for reference in [
+        "42",
+        "[<< /TransformMethod /DocMDP /TransformParams << /P 0 >> >>]",
+        "[<< /TransformMethod /FieldMDP /TransformParams << /Action /Include >> >>]",
+        "[<< /TransformMethod /FieldMDP /TransformParams << /Action /Include /Fields [42] >> >>]",
+        "[<< /TransformMethod /FieldMDP /TransformParams << /Action /Unknown >> >>]",
+        "[<< /TransformMethod /Unknown >>]",
+    ] {
+        let doc = declared_signature(reference);
+        assert!(!doc.signature_write_policy().incomplete.is_empty());
+        let mut update = doc.update();
+        update.add(Object::Integer(123));
+        assert!(update.to_bytes().is_err());
+        assert_eq!(doc.update().to_bytes().unwrap(), doc.data());
+    }
+}
+
+#[test]
+fn approval_signature_allows_append_but_not_rewrite_or_extraction() {
+    let base = Document::open(classic()).unwrap();
+    let doc = Document::open(
+        base.prepare_signature("Ada", 1024)
+            .unwrap()
+            .finish(&[0x30, 1, 0])
+            .unwrap(),
+    )
+    .unwrap();
+    let mut update = doc.update();
+    update.set(ObjRef::new(4, 0), info_with_title(b"Later revision"));
+    let bytes = update.to_bytes().unwrap();
+    assert!(bytes.starts_with(doc.data()));
+    assert!(update.to_compact_bytes(&Default::default()).is_err());
+    assert!(doc.update().to_encrypted_bytes("open", "owner").is_err());
+}
+
+/// Simulate a third-party incremental writer, bypassing Atelier's write policy.
+fn external_revision(doc: &Document, number: u32, body: &str) -> Document {
+    let mut bytes = doc.data().to_vec();
+    let offset = bytes.len();
+    bytes.extend_from_slice(format!("{number} 0 obj\n{body}\nendobj\n").as_bytes());
+    let xref = bytes.len();
+    bytes.extend_from_slice(format!(
+        "xref\n{number} 1\n{offset:010} 00000 n\r\ntrailer\n<< /Size {} /Root 1 0 R /Info 4 0 R /Prev {} >>\nstartxref\n{xref}\n%%EOF\n",
+        doc.next_object_number().max(number + 1), doc.startxref().unwrap()
+    ).as_bytes());
+    Document::open(bytes).unwrap()
+}
+
+#[test]
+fn historical_restrictions_survive_indirect_parameter_replacement_and_removal() {
+    let base = Document::open(classic()).unwrap();
+    let mut update = base.update();
+    let params = update.add(
+        atelier_syntax::Parser::new(b"<< /P 1 >>")
+            .parse_object()
+            .unwrap(),
+    );
+    assert_eq!(params.num, 5);
+    update.add(
+        atelier_syntax::Parser::new(
+            b"<< /Type /Sig /Reference [<< /TransformMethod /DocMDP /TransformParams 5 0 R >>] >>",
+        )
+        .parse_object()
+        .unwrap(),
+    );
+    let doc = Document::open(update.to_bytes().unwrap()).unwrap();
+    let changed = external_revision(&doc, 5, "<< /P 3 >>");
+    let policy = changed.signature_write_policy();
+    assert!(policy.restrictions.iter().any(|r| r.contains("P=1")));
+    assert!(policy.restrictions.iter().any(|r| r.contains("P=3")));
+    let removed = external_revision(&changed, 6, "null");
+    assert!(removed.signature_write_policy().check(false).is_err());
+    assert!(removed.signature_write_policy().check(true).is_err());
+}
+
+#[test]
+fn direct_catalog_certification_is_not_silently_ignored() {
+    let base = Document::open(classic()).unwrap();
+    let mut update = base.update();
+    let mut catalog = base.catalog().unwrap();
+    catalog.insert("Perms", atelier_syntax::Parser::new(b"<< /DocMDP << /Type /Sig /Reference [<< /TransformMethod /DocMDP /TransformParams << /P 1 >> >>] >> >>").parse_object().unwrap());
+    update.set(ObjRef::new(1, 0), Object::Dict(catalog));
+    let doc = Document::open(update.to_bytes().unwrap()).unwrap();
+    assert!(doc.signature_write_policy().has_signatures);
+    assert!(doc.signature_write_policy().check(false).is_err());
+}
+
+#[test]
+fn direct_nested_field_signature_policy_is_enforced_without_type_marker() {
+    let base = Document::open(classic()).unwrap();
+    let mut update = base.update();
+    let mut catalog = base.catalog().unwrap();
+    catalog.insert("AcroForm", atelier_syntax::Parser::new(b"<< /Fields [<< /FT /Sig /T (Signature) /V << /Reference [<< /TransformMethod /FieldMDP /TransformParams << /Action /All >> >>] >> >>] >>").parse_object().unwrap());
+    update.set(ObjRef::new(1, 0), Object::Dict(catalog));
+    let doc = Document::open(update.to_bytes().unwrap()).unwrap();
+    let policy = doc.signature_write_policy();
+    assert!(policy.has_signatures);
+    assert!(policy.restrictions.iter().any(|r| r.contains("FieldMDP")));
+    assert!(policy.check(false).is_err());
+}
+
+fn analysis_fixture() -> Document {
+    let doc = Document::open(classic()).unwrap();
+    Document::open(
+        doc.prepare_signature("Ada", 1024)
+            .unwrap()
+            .finish(&[0x30, 1, 0])
+            .unwrap(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn signed_revision_analysis_reports_metadata_and_keeps_reverted_steps() {
+    use atelier_syntax::{ChangeCategory, ChangeKind};
+    let signed = analysis_fixture();
+    let end = signed.data().len();
+    let unchanged = signed.changes_since_signed_revision(end);
+    assert!(unchanged.as_ref().as_ref().unwrap().revisions.is_empty());
+    assert!(std::sync::Arc::ptr_eq(
+        &unchanged,
+        &signed.changes_since_signed_revision(end)
+    ));
+    let changed = external_revision(&signed, 4, "<< /Title (Changed) >>");
+    let reverted = external_revision(&changed, 4, "<< /Title (Before) >>");
+    let analysis = reverted.changes_since_signed_revision(end);
+    let analysis = analysis.as_ref().as_ref().unwrap();
+    assert_eq!(analysis.revisions.len(), 2);
+    for revision in &analysis.revisions {
+        assert_eq!(revision.objects.len(), 1);
+        let delta = &revision.objects[0];
+        assert_eq!(delta.object, ObjRef::new(4, 0));
+        assert_eq!(delta.kind, ChangeKind::Modified);
+        assert_eq!(delta.category, ChangeCategory::Metadata);
+        assert_eq!(delta.keys, ["/Title"]);
+    }
+    assert!(!analysis.unclassified_trailing_bytes);
+}
+
+#[test]
+fn signed_revision_analysis_distinguishes_form_appearance_page_and_signature_changes() {
+    use atelier_syntax::ChangeCategory;
+    let signed = analysis_fixture();
+    let mut doc = signed;
+    let cases = [
+        (
+            "<< /FT /Tx /T (Name) /V (Before) >>",
+            "<< /FT /Tx /T (Name) /V (After) >>",
+            ChangeCategory::FormValue,
+        ),
+        (
+            "<< /Type /Annot /Subtype /Widget /AS /Off >>",
+            "<< /Type /Annot /Subtype /Widget /AS /Yes >>",
+            ChangeCategory::FormAppearance,
+        ),
+        (
+            "<< /Type /Annot /Subtype /Text /Contents (Before) >>",
+            "<< /Type /Annot /Subtype /Text /Contents (After) >>",
+            ChangeCategory::Annotation,
+        ),
+        (
+            "<< /Type /Page /Contents 4 0 R >>",
+            "<< /Type /Page /Contents 5 0 R >>",
+            ChangeCategory::PageContent,
+        ),
+        (
+            "<< /Type /Page /Rotate 0 >>",
+            "<< /Type /Page /Rotate 90 >>",
+            ChangeCategory::PageStructure,
+        ),
+        (
+            "<< /Type /Sig /Name (Before) >>",
+            "<< /Type /Sig /Name (After) >>",
+            ChangeCategory::Signature,
+        ),
+    ];
+    for (before, after, category) in cases {
+        let number = doc.next_object_number();
+        let base = external_revision(&doc, number, before);
+        let changed = external_revision(&base, number, after);
+        let analysis = changed.changes_since_signed_revision(base.data().len());
+        let analysis = analysis.as_ref().as_ref().unwrap();
+        assert_eq!(analysis.revisions.len(), 1);
+        assert_eq!(analysis.revisions[0].objects[0].category, category);
+        doc = changed;
+    }
+}
+
+#[test]
+fn signed_revision_analysis_reports_added_removed_objects_and_unclassified_tail() {
+    use atelier_syntax::ChangeKind;
+    let signed = analysis_fixture();
+    let end = signed.data().len();
+    let added = external_revision(&signed, 99, "42");
+    let analysis = added.changes_since_signed_revision(end);
+    assert_eq!(
+        analysis.as_ref().as_ref().unwrap().revisions[0].objects[0].kind,
+        ChangeKind::Added
+    );
+    // Free the new object in a subsequent xref table.
+    let mut bytes = added.data().to_vec();
+    let xref = bytes.len();
+    bytes.extend_from_slice(format!("xref\n99 1\n0000000000 00001 f\r\ntrailer\n<< /Size 100 /Root 1 0 R /Info 4 0 R /Prev {} >>\nstartxref\n{xref}\n%%EOF\n", added.startxref().unwrap()).as_bytes());
+    let removed = Document::open(bytes).unwrap();
+    let analysis = removed.changes_since_signed_revision(end);
+    let analysis = analysis.as_ref().as_ref().unwrap();
+    assert_eq!(analysis.revisions[1].objects[0].kind, ChangeKind::Removed);
+    let mut bytes = signed.data().to_vec();
+    bytes.extend_from_slice(b"\nunsigned trailing bytes");
+    let tail = Document::open(bytes).unwrap();
+    assert!(
+        tail.changes_since_signed_revision(end)
+            .as_ref()
+            .as_ref()
+            .unwrap()
+            .unclassified_trailing_bytes
+    );
+}
+
+#[test]
+fn signed_revision_analysis_rejects_invalid_endpoints_and_foreign_chains() {
+    let signed = analysis_fixture();
+    let end = signed.data().len();
+    for invalid in [0, 10, end + 1] {
+        assert!(signed.changes_since_signed_revision(invalid).is_err());
+    }
+    let changed = external_revision(&signed, 4, "<< /Title (Changed) >>");
+    let mut bytes = changed.data().to_vec();
+    let marker = b"/Prev ";
+    let pos = bytes
+        .windows(marker.len())
+        .rposition(|w| w == marker)
+        .unwrap()
+        + marker.len();
+    let len = bytes[pos..]
+        .iter()
+        .take_while(|b| b.is_ascii_digit())
+        .count();
+    // Skip the signed revision in the chain.
+    bytes.splice(
+        pos..pos + len,
+        Document::open(classic())
+            .unwrap()
+            .startxref()
+            .unwrap()
+            .to_string()
+            .bytes(),
+    );
+    let foreign = Document::open(bytes).unwrap();
+    assert!(foreign.changes_since_signed_revision(end).is_err());
+}
+
+#[test]
+fn signed_revision_analysis_does_not_accept_an_arbitrary_trailing_eof_marker() {
+    let signed = analysis_fixture();
+    let end = signed.data().len();
+    let changed = external_revision(&signed, 4, "<< /Title (Changed) >>");
+    let mut bytes = changed.data().to_vec();
+    bytes.extend_from_slice(b"unsigned junk\n%%EOF\n");
+    let doc = Document::open(bytes).unwrap();
+    assert!(
+        doc.changes_since_signed_revision(end)
+            .as_ref()
+            .as_ref()
+            .unwrap()
+            .unclassified_trailing_bytes
+    );
+    assert!(doc.changes_since_signed_revision(doc.data().len()).is_err());
+}
+
+#[test]
+fn signed_revision_analysis_detects_compressed_objects_when_the_container_changes() {
+    use atelier_syntax::ChangeCategory;
+    fn object_stream(title: &str) -> String {
+        let bodies = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>".into(),
+            format!("<< /Title ({title}) >>"),
+        ];
+        let mut header = String::new();
+        let mut content = String::new();
+        for (i, body) in bodies.iter().enumerate() {
+            header.push_str(&format!("{} {} ", i + 1, content.len()));
+            content.push_str(body);
+            content.push(' ');
+        }
+        format!(
+            "<< /Type /ObjStm /N 4 /First {} /Length {} >>\nstream\n{header}{content}\nendstream",
+            header.len(),
+            header.len() + content.len()
+        )
+    }
+    let mut bytes = b"%PDF-1.7\n".to_vec();
+    let stream_at = bytes.len();
+    bytes.extend_from_slice(format!("5 0 obj\n{}\nendobj\n", object_stream("Before")).as_bytes());
+    let xref = bytes.len();
+    let mut rows = vec![0, 0, 0, 0, 0, 255, 255];
+    for index in 0..4u16 {
+        rows.push(2);
+        rows.extend_from_slice(&5u32.to_be_bytes());
+        rows.extend_from_slice(&index.to_be_bytes());
+    }
+    for offset in [stream_at, xref] {
+        rows.push(1);
+        rows.extend_from_slice(&(offset as u32).to_be_bytes());
+        rows.extend_from_slice(&[0, 0]);
+    }
+    bytes.extend_from_slice(format!("6 0 obj\n<< /Type /XRef /Size 7 /W [1 4 2] /Root 1 0 R /Info 4 0 R /Length {} >>\nstream\n", rows.len()).as_bytes());
+    bytes.extend_from_slice(&rows);
+    bytes.extend_from_slice(format!("\nendstream\nendobj\nstartxref\n{xref}\n%%EOF\n").as_bytes());
+    let base = Document::open(bytes).unwrap();
+    assert!(!base.was_repaired());
+    let signed = Document::open(
+        base.prepare_signature("Ada", 1024)
+            .unwrap()
+            .finish(&[0x30, 1, 0])
+            .unwrap(),
+    )
+    .unwrap();
+    let changed = external_revision(&signed, 5, &object_stream("After"));
+    assert_eq!(signed.xref_entry(4), changed.xref_entry(4));
+    let analysis = changed.changes_since_signed_revision(signed.data().len());
+    let changes = &analysis.as_ref().as_ref().unwrap().revisions[0].objects;
+    assert!(
+        changes
+            .iter()
+            .any(|c| c.object.num == 4 && c.category == ChangeCategory::Metadata)
+    );
+    assert!(
+        changes
+            .iter()
+            .any(|c| c.object.num == 5 && c.category == ChangeCategory::Stream)
+    );
+}
+
+#[test]
+fn signed_revision_analysis_bounds_history_and_rejects_repaired_input() {
+    let signed = analysis_fixture();
+    let end = signed.data().len();
+    let mut doc = signed;
+    for index in 0..129 {
+        doc = external_revision(&doc, 4, &format!("<< /Title (Step {index}) >>"));
+    }
+    let analysis = doc.changes_since_signed_revision(end);
+    assert!(
+        analysis
+            .as_ref()
+            .as_ref()
+            .unwrap_err()
+            .to_string()
+            .contains("limit")
+    );
+    let repaired = Document::open(b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [] /Count 0 >> endobj\n%%EOF".to_vec()).unwrap();
+    assert!(
+        repaired
+            .changes_since_signed_revision(repaired.data().len())
+            .is_err()
+    );
+}
+
+fn reference_fixture(objects: &[(u32, &str)]) -> Document {
+    let mut doc = analysis_fixture();
+    for (number, body) in objects {
+        doc = external_revision(&doc, *number, body);
+    }
+    doc
+}
+
+#[test]
+fn revision_reference_contexts_detect_shared_and_inherited_page_resources() {
+    let base = reference_fixture(&[
+        (20, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+        (21, "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>"),
+        (22, "<< /Font << /Shared 20 0 R >> >>"),
+        (
+            23,
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+        ),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Resources << /Font << /Shared 20 0 R /Private 21 0 R >> >> >>",
+        ),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R 23 0 R] /Count 2 /Resources 22 0 R /MediaBox [0 0 200 200] >>",
+        ),
+    ]);
+    for (number, pages) in [(20, vec![1, 2]), (21, vec![1])] {
+        let changed = external_revision(
+            &base,
+            number,
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>",
+        );
+        let result = changed.changes_since_signed_revision(base.data().len());
+        let delta = &result.as_ref().as_ref().unwrap().revisions[0].objects[0];
+        assert_eq!(delta.references_before.page_contexts, pages);
+        assert_eq!(delta.references_after.page_contexts, pages);
+        assert!(!delta.references_before.direct_referrers.is_empty());
+    }
+}
+
+#[test]
+fn revision_reference_contexts_keep_qualified_fields_and_before_after_owners() {
+    let base = reference_fixture(&[
+        (
+            20,
+            "<< /Type /XObject /Subtype /Form /Length 0 >>\nstream\n\nendstream",
+        ),
+        (21, "<< /T (Name) /FT /Tx /Parent 23 0 R /Kids [25 0 R] >>"),
+        (
+            22,
+            "<< /T (Other) /FT /Tx /Parent 23 0 R /AP << /N 20 0 R >> >>",
+        ),
+        (23, "<< /T (Person) /Kids [21 0 R 22 0 R] >>"),
+        (
+            25,
+            "<< /Type /Annot /Subtype /Widget /Parent 21 0 R /P 3 0 R /AP << /N 20 0 R >> >>",
+        ),
+        (24, "<< /Fields [23 0 R] >>"),
+        (1, "<< /Type /Catalog /Pages 2 0 R /AcroForm 24 0 R >>"),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Annots [25 0 R] >>",
+        ),
+    ]);
+    let changed = external_revision(
+        &base,
+        20,
+        "<< /Type /XObject /Subtype /Form /Length 1 >>\nstream\nx\nendstream",
+    );
+    let result = changed.changes_since_signed_revision(base.data().len());
+    let delta = &result.as_ref().as_ref().unwrap().revisions[0].objects[0];
+    assert_eq!(
+        delta.references_before.field_contexts,
+        ["Person.Name", "Person.Other"]
+    );
+    assert_eq!(delta.references_before.page_contexts, [1]);
+    assert_eq!(
+        delta.references_before.direct_referrers,
+        [ObjRef::new(22, 0), ObjRef::new(25, 0)]
+    );
+    let detached = external_revision(
+        &changed,
+        3,
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+    );
+    let changed_again = external_revision(
+        &detached,
+        20,
+        "<< /Type /XObject /Subtype /Form /Length 1 >>\nstream\ny\nendstream",
+    );
+    let result = changed_again.changes_since_signed_revision(changed.data().len());
+    let last = &result.as_ref().as_ref().unwrap().revisions[1].objects[0];
+    assert!(last.references_after.page_contexts.is_empty());
+    assert_eq!(
+        last.references_after.field_contexts,
+        ["Person.Name", "Person.Other"]
+    );
+}
+
+#[test]
+fn revision_reference_contexts_reject_cyclic_or_duplicate_field_ownership() {
+    for fields in ["[21 0 R 21 0 R]", "[23 0 R]"] {
+        let base = reference_fixture(&[
+            (21, "<< /FT /Tx /T (Name) >>"),
+            (23, "<< /T (Parent) /Kids [23 0 R] >>"),
+            (24, &format!("<< /Fields {fields} >>")),
+            (1, "<< /Type /Catalog /Pages 2 0 R /AcroForm 24 0 R >>"),
+        ]);
+        let changed = external_revision(&base, 4, "<< /Title (After) >>");
+        let result = changed.changes_since_signed_revision(base.data().len());
+        assert!(result.is_err());
+    }
+}
+
+#[test]
+fn revision_reference_contexts_follow_resource_names_that_resemble_backlinks() {
+    let base = reference_fixture(&[
+        (20, "<< /Flag true /Next 21 0 R >>"),
+        (21, "<< /Flag true /Next 20 0 R >>"),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Resources << /Properties << /P 20 0 R /Parent 21 0 R >> >> /MediaBox [0 0 200 200] >>",
+        ),
+    ]);
+    let changed = external_revision(&base, 20, "<< /Flag false /Next 21 0 R >>");
+    let result = changed.changes_since_signed_revision(base.data().len());
+    let delta = &result.as_ref().as_ref().unwrap().revisions[0].objects[0];
+    assert_eq!(delta.references_before.page_contexts, [1]);
+    assert_eq!(delta.references_after.page_contexts, [1]);
+    assert!(
+        delta
+            .references_before
+            .direct_referrers
+            .contains(&ObjRef::new(21, 0))
+    );
+}
+
+#[test]
+fn revision_reference_contexts_show_detachment_in_the_same_transaction() {
+    let base = reference_fixture(&[
+        (20, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 20 0 R >> >> /MediaBox [0 0 200 200] >>",
+        ),
+    ]);
+    let mut update = base.update();
+    update.set(
+        ObjRef::new(20, 0),
+        atelier_syntax::Parser::new(b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>")
+            .parse_object()
+            .unwrap(),
+    );
+    update.set(
+        ObjRef::new(3, 0),
+        atelier_syntax::Parser::new(b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>")
+            .parse_object()
+            .unwrap(),
+    );
+    let changed = Document::open(update.to_bytes().unwrap()).unwrap();
+    let result = changed.changes_since_signed_revision(base.data().len());
+    let delta = result.as_ref().as_ref().unwrap().revisions[0]
+        .objects
+        .iter()
+        .find(|d| d.object.num == 20)
+        .unwrap();
+    assert_eq!(delta.references_before.page_contexts, [1]);
+    assert!(delta.references_after.page_contexts.is_empty());
+    assert_eq!(
+        delta.references_before.direct_referrers,
+        [ObjRef::new(3, 0)]
+    );
+    assert!(delta.references_after.direct_referrers.is_empty());
 }

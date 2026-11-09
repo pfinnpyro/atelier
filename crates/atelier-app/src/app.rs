@@ -420,6 +420,16 @@ impl Viewer {
     /// to one the person picks. The file is written beside the target and
     /// then moved over it, so a failed write never leaves half a file.
     fn save(&mut self, to: SaveTo) {
+        // Reject pending restricted edits before consuming ink/editor buffers or
+        // presenting a save dialog. An unchanged copy is still safe to save.
+        if let Some(o) = &self.open {
+            let pending = self.is_dirty() || o.layers_pending
+                || o.form.as_ref().is_some_and(|f| f.is_editing());
+            if pending && let Err(error) = o.doc.signature_write_policy().check(false) {
+                self.error = Some(error.to_string());
+                return;
+            }
+        }
         self.commit_ink();
         self.finish_editing(true);
         // Text OCR read goes into the file too.

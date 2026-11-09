@@ -83,7 +83,11 @@ mod linux {
     const DESKTOP_ID: &str = "org.atelier.Viewer.desktop";
 
     pub fn offer() -> Result<&'static str, String> {
-        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let exe = crate::update::linux_managed_root()
+            .map(|root| root.join("current/atelier-viewer"))
+            .map(Ok)
+            .unwrap_or_else(std::env::current_exe)
+            .map_err(|e| e.to_string())?;
         let exe = exe
             .to_str()
             .ok_or("Atelier's installation path is not UTF-8.")?;
@@ -95,8 +99,15 @@ mod linux {
             .ok_or("Could not locate your applications directory.")?;
         let applications = data.join("applications");
         std::fs::create_dir_all(&applications).map_err(|e| e.to_string())?;
+        let icons = data.join("icons/hicolor/512x512/apps");
+        std::fs::create_dir_all(&icons).map_err(|e| e.to_string())?;
+        std::fs::write(
+            icons.join("org.atelier.Viewer.png"),
+            include_bytes!("../assets/atelier.png"),
+        )
+        .map_err(|e| format!("Could not install Atelier's icon: {e}"))?;
         std::fs::write(applications.join(DESKTOP_ID), format!(
-            "[Desktop Entry]\nType=Application\nName=Atelier\nComment=PDF viewer\nExec={exec} %f\nTerminal=false\nMimeType=application/pdf;\nCategories=Office;Viewer;\n"
+            "[Desktop Entry]\nType=Application\nName=Atelier\nComment=PDF viewer and editor\nExec={exec} %f\nIcon=org.atelier.Viewer\nTerminal=false\nMimeType=application/pdf;\nCategories=Office;Viewer;\nStartupWMClass=org.atelier.Viewer\n"
         )).map_err(|e| format!("Could not register Atelier: {e}"))?;
         // Some desktops use the MIME cache to populate their application chooser.
         let _ = Command::new("update-desktop-database")

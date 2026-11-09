@@ -32,8 +32,10 @@ fn main() -> eframe::Result {
         viewport: chrome::viewport(
             eframe::egui::ViewportBuilder::default()
                 .with_title("Atelier")
+                .with_app_id("org.atelier.Viewer")
                 .with_inner_size([1100.0, 800.0])
-                .with_min_inner_size([360.0, 240.0])
+                // Keep the viewer chrome usable, including at high display scaling.
+                .with_min_inner_size([800.0, 600.0])
                 .with_drag_and_drop(true)
                 .with_icon(Arc::new(icon)),
         ),

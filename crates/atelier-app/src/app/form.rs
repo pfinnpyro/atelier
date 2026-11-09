@@ -58,6 +58,10 @@ enum EditMenu {
 }
 
 impl FormView {
+    pub(super) fn is_editing(&self) -> bool {
+        self.editor.is_some()
+    }
+
     pub fn new(form: Form, doc: &atelier_syntax::Document) -> Self {
         let tab = form.tab_order(doc);
         Self {

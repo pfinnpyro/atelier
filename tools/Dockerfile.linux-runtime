@@ -1,0 +1,14 @@
+FROM ubuntu:22.04
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 curl openssl ca-certificates libgcc-s1 libstdc++6 \
+    libxkbcommon0 libxkbcommon-x11-0 libwayland-client0 libwayland-cursor0 libwayland-egl1 libudev1 \
+    libfontconfig1 libgl1 libegl1 libvulkan1 libgl1-mesa-dri mesa-vulkan-drivers \
+    libx11-6 libx11-xcb1 libxcursor1 libxi6 libxrandr2 libxcb1 libxcb-render0 \
+    libxcb-shape0 libxcb-xfixes0 libxfixes3 libxinerama1 libxrender1 libxext6 \
+    fonts-liberation fonts-dejavu-core fonts-noto-cjk \
+    cups-client xdg-utils desktop-file-utils xvfb xauth dbus-x11 x11-utils \
+    xdg-desktop-portal xdg-desktop-portal-gtk \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /workspace
+CMD ["python3", "tools/qa_linux_package.py", "dist", "--target", "linux-x64"]

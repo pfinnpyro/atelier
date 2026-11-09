@@ -26,6 +26,19 @@ pub(super) struct Parked {
 }
 
 impl Viewer {
+    /// Updating/restarting must preserve work in every tab, including live text
+    /// editors and OCR layers not yet handed to the saved document.
+    pub(super) fn update_has_unsaved_work(&self) -> bool {
+        let pending = |open: &Open| {
+            open.session.is_dirty()
+                || open.layers_pending
+                || open.form.as_ref().is_some_and(|form| form.is_editing())
+        };
+        self.is_dirty()
+            || self.open.as_ref().is_some_and(pending)
+            || self.tabs.iter().flatten().any(|tab| pending(&tab.open))
+    }
+
     /// The tab in front, when a file is open.
     pub(super) fn active_tab(&self) -> Option<usize> {
         self.tabs.iter().position(Option::is_none)
@@ -273,5 +286,34 @@ impl Viewer {
         } else if let Some(i) = go {
             self.switch_to(i);
         }
+    }
+}
+
+#[cfg(test)]
+mod update_guard_tests {
+    use super::*;
+
+    #[test]
+    fn updates_detect_pending_work_in_active_and_parked_tabs() {
+        let mut viewer = Viewer::initialize(
+            &eframe::CreationContext::_new_kittest(egui::Context::default()),
+            crate::settings::Settings {
+                check_updates: false,
+                ocr: false,
+                orient_on_open: false,
+                ..Default::default()
+            },
+        );
+        let pdf = b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >> endobj\n%%EOF".to_vec();
+        viewer.open_with_password(pdf, "pending.pdf".into(), "", None);
+        assert!(!viewer.update_has_unsaved_work());
+        viewer.open.as_mut().unwrap().layers_pending = true;
+        assert!(viewer.update_has_unsaved_work());
+        let parked = viewer.park().unwrap();
+        viewer.tabs.clear();
+        viewer.tabs.push(Some(parked));
+        assert!(viewer.update_has_unsaved_work());
+        viewer.tabs[0].as_mut().unwrap().open.layers_pending = false;
+        assert!(!viewer.update_has_unsaved_work());
     }
 }

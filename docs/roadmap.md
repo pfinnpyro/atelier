@@ -35,7 +35,7 @@ PDF reader. The repository contains working-tree changes beyond the published re
 | Encryption | Background AES-256 revision 6 copy export, system randomness, one open/owner password, unrestricted permissions | New passwords are printable ASCII up to 127 bytes; existing encryption cannot be changed/removed; signature fields are rejected |
 | File signing | Detached CMS over the current revision, including placed ink; PEM and password-protected/passwordless PKCS#12 (.p12/.pfx), with PKCS#12 CA-chain inclusion | Requires OpenSSL; exactly one signing identity; no legacy-provider fallback or encrypted-PDF signing |
 | Windows signing | Background discovery in CurrentUser/Personal; subject/issuer/expiry/thumbprint selection; native .NET detached SHA-256 CMS | Includes signer certificate only; no LocalMachine selection, native trust verdict or claimed hardware-token compatibility |
-| Signature inspection | Validated ByteRange/gap extraction, CMS and exact signed bytes, byte endpoint and later-byte detection, per-candidate errors | Current indirect dictionaries only; replaced/removed historical signatures may be absent; byte coverage does not classify edits |
+| Signature inspection | Validated ByteRange/gap extraction, CMS and exact signed bytes, byte endpoint and later-byte detection, per-candidate errors | Indirect dictionaries across the /Prev revision chain; unchanged object versions deduplicated; traversal errors/128-revision limit are visible; bounded per-revision structural differences are informational; reference effects and MDP permission are not classified |
 | Signature verification | Background OpenSSL CMS checks, per-document results, stale-result replacement, retry, all verifying signer certificates and SHA-256 fingerprints | Supported detached formats only; encrypted inspection is unsupported; no overall trusted-document or PAdES badge |
 | Certificate checks | Separate integrity, chain trust without dates, full chain with dates, and signer validity at verification time | OpenSSL CA store or selected per-tab PEM bundle, not native OS trust; purpose `any` does not evaluate document-signing policy; revocation and timestamps remain unchecked |
 | Compatibility and scripts | Document-level XFA detection/classification/fallback gate, hybrid-save warnings, embedded-file/action inspection, exact-source script approvals | XFA datasets are not synchronized; XFA/FormCalc execution is unsupported; approved AcroForm/click scripts use a constrained helper, not an OS-enforced sandbox |
@@ -58,7 +58,7 @@ Continue in the order below, with validation alongside each affected feature.
 macOS-specific tasks stay deferred rather than becoming the next Windows-host task.
 Security policy can move ahead if document access control becomes the immediate need.
 Renderer/security correctness regressions take precedence over feature expansion.
-The next actionable Windows-host feature is historical signature/revision analysis;
+The next actionable Windows-host feature is subsequent-change classification and signature permission policy;
 Mac-only work is deferred, not the next blocking step.
 
 | Priority | Deliverable | Reuse and dependency |
@@ -77,9 +77,28 @@ Mac-only work is deferred, not the next blocking step.
 Completed: byte-range foundation, background integrity verification, separate chain/date
 results, sidebar, PKCS#12 identities and Windows CurrentUser/Personal signing.
 
-- [ ] Enumerate signed historical revisions, including signatures replaced/removed later.
-- [ ] Classify subsequent changes and enforce DocMDP/FieldMDP before editing, rewriting,
-  extraction or sanitization. Preserve original signed files and explain signature loss.
+- [x] Enumerate indirect signature dictionaries across historical revisions, including
+  replaced/removed object versions; report malformed history and bounded traversal.
+  Direct signature dictionaries and repaired/missing revision chains remain unsupported.
+- [x] Add conservative write guards: inspect current/historical DocMDP and FieldMDP
+  declarations, block unclassified restricted edits and signature-destroying rewrites,
+  extraction and encryption export; keep unchanged byte copies available. Invalid or
+  unknown transforms and incomplete history block writes. Restrictions are declarations,
+  not cryptographic trust. Signed encrypted policy remains unsupported.
+- [x] Report per-revision structural differences after each signed endpoint: added,
+  modified and removed objects, changed dictionary/trailer keys and conservative
+  categories. Keep reverted steps visible; report unsigned trailing bytes and explicit
+  unknown results for broken/foreign chains, repaired/encrypted input or analysis limits.
+  This does not establish semantic change effects or MDP permission.
+- [x] Add bounded before/after reference contexts for changed objects: direct referrers,
+  page forward dependencies (including inherited resources), and qualified leaf-field
+  contexts from the AcroForm tree. Keep recognized structural backlinks separate and
+  report unresolved, ambiguous or over-budget ownership as unknown. Contexts are
+  conservative reachability, not exclusive ownership or a rendering/permission verdict.
+- [ ] Prove the complete reference effects of an edit and selectively allow DocMDP/FieldMDP-permitted
+  edits. P=2/P=3 and unlocked fields are currently blocked conservatively too. Add native
+  UI/independent-viewer acceptance checks; parser/write tests alone do not establish
+  permitted-edit interoperability.
 - [ ] Define document-signing certificate usage/policy and explicit unknown/offline results.
   Do not promote appearance metadata, self-reported signing time or CMS integrity into trust.
 - [ ] Add timestamp and revocation providers with bounded/offline/failure behavior, then

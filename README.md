@@ -6,9 +6,9 @@ A native PDF viewer and editor, written from the ground up in Rust. No webview:
 the PDF engine (parsing, decompression, fonts, rendering, saving) is our own code,
 and the app draws pages straight to the GPU.
 
-Packaged releases target Windows x64 and macOS on Apple Silicon.
-Linux can be built from source. The current development host is Windows; macOS
-runtime validation and Keychain work are deferred until a Mac or native CI is available.
+Release packaging supports Windows x64, macOS on Apple Silicon, and Linux x64/ARM64
+(GNU glibc 2.35+). Linux packages include a per-user installer and managed updates. The current development
+host is Windows; macOS runtime validation and Keychain work are deferred until a Mac or native CI is available.
 See the [single roadmap and current status](docs/roadmap.md) for all planned work.
 
 ### Status
@@ -71,14 +71,20 @@ configurations are in `.run/`. Build packages locally with:
 python3 tools/package_release.py macos-arm64
 # On Windows, with MSVC build tools and Inno Setup 6:
 python tools/package_release.py windows-x64 --installer
+# On Linux, with the corresponding target linker and libraries:
+python3 tools/package_release.py linux-x64
+python3 tools/package_release.py linux-arm64
+# Or build both Linux targets through Docker on any host:
+python tools/package_linux.py both
 ```
 
 Packages and checksums are written to `dist/<version>/<platform>/`. A matching
-`v<version>` tag builds both platforms and creates a complete draft GitHub release;
+`v<version>` tag builds all four platforms and creates a complete draft GitHub release;
 manual workflow runs produce downloadable build artifacts. Stable tags use
 `v1.0.0`; Preview tags use a suffix such as `v1.1.0-beta.1`.
 
-The existing updater supports Windows installation and macOS manual downloads.
+The updater supports Windows installation and verified updates/rollback for managed
+Linux installations. macOS and portable Linux copies use manual downloads.
 See [release operations](docs/releases.md) for
 prerequisites, publication steps and signing limitations. Development priorities
 are maintained in the [roadmap](docs/roadmap.md).
