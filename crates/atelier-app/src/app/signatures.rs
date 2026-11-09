@@ -423,6 +423,15 @@ fn check_certificate(
     now: u64,
 ) -> CertificateReport {
     let check_chain = |ignore_time: bool| {
+        if bundle.is_some() && super::security_provider::openssl_is_libressl() {
+            return (
+                Check::Unknown(
+                    "LibreSSL cannot limit trust to the selected CA bundle; install OpenSSL 3"
+                        .into(),
+                ),
+                String::new(),
+            );
+        }
         let mut command = openssl();
         command.args(["verify", "-show_chain", "-purpose", "any"]);
         if ignore_time {

@@ -49,6 +49,20 @@ pub(super) fn openssl() -> Command {
     command
 }
 
+/// LibreSSL (the macOS system `openssl`) cannot exclude its default CA store,
+/// so a check limited to a selected bundle is impossible with it.
+pub(super) fn openssl_is_libressl() -> bool {
+    static LIBRESSL: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *LIBRESSL.get_or_init(|| {
+        openssl()
+            .arg("version")
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).starts_with("LibreSSL"))
+            .unwrap_or(false)
+    })
+}
+
 pub(super) fn pem_certificates(pem: &str) -> Result<Vec<String>, String> {
     let mut certificates = Vec::new();
     let mut remaining = pem;
