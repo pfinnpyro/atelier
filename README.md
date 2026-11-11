@@ -181,6 +181,48 @@ Saving page deletion uses a full rewrite, but tracked history can still retain e
 page snapshots. Deleting a page is not secure erasure. Extracting pages into a new file
 omits source-level forms/bookmarks and begins a fresh history.
 
+## Finding tables and form fields
+
+**Find tables and form fields…** in the main menu (also on the inspector's Fields tab
+when a file has none) looks at every page of a printed form for ruled tables, boxes,
+lines to write on and check boxes, and suggests a field for each, named after the
+label printed beside it or, in a table, its row and column headings. Places that
+already have a field are left alone.
+
+Suggestions lie over the pages in green. Click one to pick it (Tab goes to the next),
+drag it to move it and its edges to resize it, and use the bar at the bottom to
+rename it, change its kind (one line of text, several lines, or a check box), add it
+(Enter, or a double click) or dismiss it (Delete). **Add all** takes every suggestion,
+and dragging on bare page draws a field by hand. Added fields fill in like any others
+and are saved with the file; until then they can still be renamed or removed, and any
+field that is not read-only can be moved and resized the same way. Tables are outlined
+in purple, and **Tables** in the bar copies one as tab-separated text for a spreadsheet.
+
+A blank labelled for a signature ("Signature", "Sign here") is suggested as an empty
+signature field, and one labelled for initials as a short text field set in the middle
+of its box; labels are read in English only. A short blank (up to an inch and a
+quarter) set against a statement to be agreed to, such as "____ I certify that…" or
+"____ We hereby acknowledge…", is taken as one for initials too, whether the statement
+follows the blank, ends just before it or stands over it; a misspelt or misread letter
+in the verb is allowed for. Clicking an empty signature field puts
+your saved ink signature in it, sized to fit, or opens the pad to draw one first.
+A file with a signature field cannot be exported with **Encrypt a copy**.
+
+Text in added fields is sized to fit its box, shrinking as more is typed, unless a
+size is set: pick one in the review bar, or right-click any text field and use
+**Text size**. A ticked check box shows a filled square by default. The mark (filled
+square, check, cross, dot, diamond or star) is a preference in Settings under
+**Forms**; **Check marks** in the review bar gives the open document a mark of its own,
+kept in the file, and can redraw every check box with it; and each check box can be
+given another from the bar or its right-click menu (**Mark when ticked**).
+
+Detection works from what the page draws, so it needs no network and no model. Scans
+are read from their picture instead: ruled boxes and tables are found, lines to write
+on once OCR has read the labels beside them, and small check boxes not at all. Radio buttons and drop-down lists are
+not suggested, and nothing can be added to an XFA form or to a
+signed file whose signature forbids changes. `atelier detect file.pdf [-o out.pdf]`
+does the same from the command line.
+
 ## Changes and history
 
 The review pane's **Changes** tab supports opt-in tracking, explicit editing sessions,

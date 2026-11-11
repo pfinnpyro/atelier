@@ -49,6 +49,12 @@ impl Viewer {
         self.finish_editing(true);
         self.commit_ink();
         let mut open = self.open.take()?;
+        // What a detection run finds while the file is parked is dropped,
+        // so it would never be seen to end.
+        if let Some(s) = &mut open.suggest {
+            s.running = false;
+            self.pool.stop_detect();
+        }
         self.pool.stop_search();
         self.pool.set_jobs(Vec::new());
         let rerun = open.orienting.take().map(|r| (r.quiet, r.turn));

@@ -433,6 +433,20 @@ impl Viewer {
                     painter.rect_filled(r, 0.0, FIELD_TINT);
                 }
             }
+            // Signature fields waiting to be signed take a click too.
+            for (i, f) in fv.form.fields.iter().enumerate() {
+                if f.kind != FieldKind::Signature || f.value != Value::None {
+                    continue;
+                }
+                for j in 0..f.widgets.len() {
+                    if let Some(r) = self
+                        .widget_rect((i, j), origin)
+                        .filter(|r| r.intersects(view) && !f.widgets[j].is_hidden())
+                    {
+                        painter.rect_filled(r, 0.0, FIELD_TINT);
+                    }
+                }
+            }
         }
         if let Some(r) = fv.focus.and_then(|at| self.widget_rect(at, origin)) {
             painter.rect_stroke(

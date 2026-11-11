@@ -17,6 +17,7 @@ use crate::colorspace::{self, ColorSpace};
 use crate::font::PdfFont;
 use crate::function::Functions;
 use crate::image;
+use crate::lines::PageGraphics;
 use crate::pattern::{Cell, Pattern, PatternKind};
 use crate::probe::{Paint, PaintKind, Probed};
 use crate::shading::Shading;
@@ -145,6 +146,18 @@ pub fn extract_text(doc: &Document, page: &Page) -> Result<PageText> {
     Ok(PageText {
         glyphs: interp.text.unwrap_or_default(),
     })
+}
+
+/// The straight lines, boxes and images a page draws, in default user
+/// space. Runs the page's content without drawing anything.
+pub fn extract_graphics(doc: &Document, page: &Page) -> Result<PageGraphics> {
+    let mut pixmap = Pixmap::filled(1, 1, Color::WHITE);
+    let content = page.contents(doc)?;
+    let mut interp = Interpreter::new(doc, &mut pixmap, Transform::IDENTITY);
+    interp.draw = false;
+    interp.graphics = Some(PageGraphics::default());
+    interp.run(&content, &page.resources, 0);
+    Ok(interp.graphics.unwrap_or_default())
 }
 
 #[derive(Clone)]
@@ -334,6 +347,8 @@ struct Interpreter<'a> {
     draw: bool,
     /// Collected glyphs, when extracting text.
     text: Option<Vec<TextGlyph>>,
+    /// Collected lines and boxes, when looking for tables and blanks.
+    graphics: Option<PageGraphics>,
     /// The default space of the content stream being run: the page's, or a
     /// form's. Patterns are placed relative to it.
     base_ctm: Transform,
@@ -374,6 +389,7 @@ impl<'a> Interpreter<'a> {
             fonts: HashMap::new(),
             draw: true,
             text: None,
+            graphics: None,
             base_ctm: ctm,
             pattern_depth: 0,
             soft_masks: HashMap::new(),
@@ -735,6 +751,16 @@ impl<'a> Interpreter<'a> {
     /// clip, and starts a new path.
     fn paint(&mut self, fill: Option<FillRule>, stroke: bool) {
         let path = self.path.finish();
+        if !path.is_empty() && self.graphics.is_some() {
+            let user = path.transform(&self.gs.ctm);
+            let fill_color = fill.and_then(|_| self.gs.fill_color());
+            let stroke_color = self.gs.stroke_paint().filter(|_| stroke);
+            let width = self.gs.stroke.width * self.gs.ctm.max_scale();
+            if let Some(g) = self.graphics.as_mut() {
+                g.fill(&user, fill_color);
+                g.stroke(&user, width, stroke_color);
+            }
+        }
         if !path.is_empty() && self.draw {
             if let Some(rule) = fill {
                 let device = path.transform(&self.gs.ctm);
@@ -1404,6 +1430,7 @@ impl<'a> Interpreter<'a> {
     }
 
     fn image_xobject(&mut self, stream: &Stream, resources: &Dict) {
+        self.record_image();
         if !self.draw {
             return;
         }
@@ -1419,6 +1446,7 @@ impl<'a> Interpreter<'a> {
     }
 
     fn inline_image(&mut self, dict: &Dict, data: &[u8], resources: &Dict) {
+        self.record_image();
         if !self.draw {
             return;
         }
@@ -1731,6 +1759,16 @@ impl<'a> Interpreter<'a> {
         self.tm = saved_tm;
         self.tlm = saved_tlm;
         self.text_clip = saved_clip;
+    }
+
+    /// Notes where an image goes: its unit square under the transform.
+    fn record_image(&mut self) {
+        let m = self.gs.ctm;
+        if let Some(g) = self.graphics.as_mut().filter(|g| g.images.len() < 4096) {
+            let p = |x: f64, y: f64| m.apply(Point::new(x, y));
+            g.images
+                .push([p(0.0, 0.0), p(1.0, 0.0), p(1.0, 1.0), p(0.0, 1.0)]);
+        }
     }
 
     fn record_glyph(

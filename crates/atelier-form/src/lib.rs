@@ -7,7 +7,9 @@
 mod annots;
 mod appearance;
 mod da;
+mod detect;
 mod fill;
+mod new_field;
 mod pages;
 mod revisions;
 mod scripts;
@@ -24,7 +26,11 @@ use atelier_syntax::{Dict, Document, ObjRef, Object, Rect, Result};
 
 pub use annots::{Markup, NOTE_SIZE, NewAnnot, Review, annotation_date, line_quads};
 pub use da::DefaultAppearance;
+pub use detect::{
+    Detected, PageInput, Source, Suggestion, Table, TableCell, detect, detect_page, lines_in_pixmap,
+};
 pub use fill::FillWarning;
+pub use new_field::{CheckMark, NewField, NewFieldKind};
 pub use pages::PageSlot;
 pub use revisions::{Revision, RevisionChange, RevisionEvent, RevisionState};
 pub use scripts::{

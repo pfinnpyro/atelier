@@ -20,22 +20,36 @@ impl Viewer {
     /// are dropped and the pages laid out again. Otherwise old tiles stay
     /// up until fresh ones arrive.
     pub(super) fn rebuild(&mut self, pages: &HashSet<usize>, turned: bool) {
+        self.try_rebuild(pages, turned);
+    }
+
+    /// [`Viewer::rebuild`], saying whether the document could be built.
+    /// When it could not, the error is shown and the old document stays.
+    pub(super) fn try_rebuild(&mut self, pages: &HashSet<usize>, turned: bool) -> bool {
         let keep_page = self.current_page();
-        let Some(o) = &mut self.open else { return };
+        let Some(o) = &mut self.open else {
+            return false;
+        };
         o.session.set_revision_author(&self.settings.review_author);
         let built = match o.session.build_tracked(&o.doc) {
             Ok(b) => b,
             Err(e) => {
                 self.error = Some(format!("Could not make the change: {e}"));
-                return;
+                return false;
             }
         };
         if let Some(w) = built.warnings.first() {
             self.error = Some(w.to_string());
         }
-        if let (Some(fv), Some(form)) = (&mut o.form, built.form) {
-            fv.tab = form.tab_order(&built.doc);
-            fv.form = form;
+        match (&mut o.form, built.form) {
+            (Some(fv), Some(form)) => {
+                fv.tab = form.tab_order(&built.doc);
+                fv.form = form;
+            }
+            // The first field added gives the file a form; taking the
+            // last one away leaves it without.
+            (None, Some(form)) => o.form = Some(super::form::FormView::new(form, &built.doc)),
+            (form, None) => *form = None,
         }
         o.doc = built.doc;
         o.safety.refresh(o.doc.clone());
@@ -69,6 +83,7 @@ impl Viewer {
             self.go_to_page(keep_page);
         }
         self.update_title();
+        true
     }
 
     /// Turns every page a quarter clockwise (`quarters` = 1) or
@@ -454,6 +469,8 @@ impl Viewer {
     /// each page's index before (`None` for a new one); what the viewer
     /// keeps per page follows its page. Shows `show` afterwards.
     pub(super) fn rearranged(&mut self, old: &[Option<usize>], show: Option<usize>) {
+        // Suggested fields name pages by number, which no longer holds.
+        self.close_detect();
         let Some(o) = &mut self.open else { return };
         o.session.set_revision_author(&self.settings.review_author);
         let built = match o.session.build_tracked(&o.doc) {

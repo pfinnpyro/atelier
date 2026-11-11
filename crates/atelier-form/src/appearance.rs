@@ -522,7 +522,12 @@ pub(crate) fn button_appearance(
     let mut on = background.clone();
     // Common marks are drawn as shapes, so they show in any viewer whether
     // or not it has a ZapfDingbats font; other characters are text.
-    let side = ((w.min(h) - 2.0 * frame.padding()) * if radio { 0.6 } else { 0.85 }).max(1.0);
+    // Small boxes get a margin in proportion, so the mark is not lost in
+    // a margin meant for large ones.
+    let margin = (w.min(h) * 0.12)
+        .max(frame.border_width)
+        .min(frame.padding());
+    let side = ((w.min(h) - 2.0 * margin) * if radio { 0.6 } else { 0.85 }).max(1.0);
     let side = if da.size > 0.0 {
         side.min(da.size)
     } else {

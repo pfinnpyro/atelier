@@ -151,6 +151,15 @@ impl Viewer {
                 ui.colored_label(ui.visuals().warn_fg_color, "This PDF contains an XFA-only form. XFA layout, calculations and scripts are unsupported; no editable AcroForm fallback is available.");
             } else {
                 ui.label("This file has no form fields.");
+                if ui
+                    .button("Find tables and form fields…")
+                    .on_hover_text(
+                        "Suggest fields for the boxes, lines and tables of a printed form",
+                    )
+                    .clicked()
+                {
+                    self.start_detect();
+                }
             }
             return None;
         };

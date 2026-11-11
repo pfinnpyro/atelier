@@ -146,6 +146,13 @@ impl Default for Annotate {
 }
 
 impl Annotate {
+    /// Takes these strokes (in a box 1 wide, y down) as the signature to
+    /// place, without saving them.
+    #[cfg(test)]
+    pub(super) fn use_signature(&mut self, strokes: Vec<Vec<Point>>) {
+        self.signature = Some(strokes);
+    }
+
     pub(super) fn has_pending_ink(&self) -> bool {
         !self.strokes.is_empty() || self.drawing.is_some()
     }
@@ -502,6 +509,8 @@ impl Viewer {
 
     /// Picks a tool; the one in use is put down when picked again.
     pub(super) fn set_tool(&mut self, tool: Tool) {
+        // Reviewing suggested fields takes the page's clicks; a tool ends it.
+        self.close_detect();
         self.commit_ink();
         let a = &mut self.annotate;
         a.tool = if a.tool == tool { Tool::Select } else { tool };
@@ -1104,13 +1113,59 @@ impl Viewer {
         }
     }
 
+    /// The signature field waiting to be signed under a layout point: its
+    /// page and box.
+    pub(super) fn unsigned_at(&self, lx: f64, ly: f64) -> Option<(usize, atelier_syntax::Rect)> {
+        let o = self.open.as_ref()?;
+        let form = &o.form.as_ref()?.form;
+        let (page, _, _) = o.layout.page_at(lx, ly)?;
+        let user = o.layout.to_user(page, lx, ly)?;
+        let (f, w) = form.widget_at(page, user.x, user.y)?;
+        let field = form.fields.get(f)?;
+        (field.kind == atelier_form::FieldKind::Signature
+            && field.value == atelier_form::Value::None
+            && !field.is_read_only())
+        .then(|| (page, field.widgets[w].rect))
+    }
+
+    /// A click on a signature field waiting to be signed puts the saved
+    /// ink signature in it, sized to the field; with none saved yet, the
+    /// pad opens to draw one. Returns whether such a field was clicked.
+    pub(super) fn sign_click(&mut self, lx: f64, ly: f64) -> bool {
+        let Some((page, rect)) = self.unsigned_at(lx, ly) else {
+            return false;
+        };
+        let Some(sig) = &self.annotate.signature else {
+            self.annotate.pad = Some(Pad::default());
+            self.notice =
+                Some("Draw your signature, then click the field again to sign there.".into());
+            return true;
+        };
+        let height = sig
+            .iter()
+            .flatten()
+            .map(|p| p.y)
+            .fold(0.0_f64, f64::max)
+            .max(1e-6);
+        let (w, h) = (rect.x1 - rect.x0, rect.y1 - rect.y0);
+        // Room is left for the thickness of the line.
+        let width = (w * 0.8).min(h * 0.8 / height);
+        let centre = Point::new((rect.x0 + rect.x1) / 2.0, (rect.y0 + rect.y1) / 2.0);
+        self.place_signature_sized(page, centre, width);
+        true
+    }
+
     /// Places the saved signature centred on a point.
     fn place_signature(&mut self, page: usize, at: Point) {
+        self.place_signature_sized(page, at, SIGNATURE_WIDTH);
+    }
+
+    /// Places the saved signature centred on a point, `s` points wide.
+    fn place_signature_sized(&mut self, page: usize, at: Point, s: f64) {
         let Some(sig) = self.annotate.signature.clone() else {
             return;
         };
         let height = sig.iter().flatten().map(|p| p.y).fold(0.0_f64, f64::max);
-        let s = SIGNATURE_WIDTH;
         let strokes = sig
             .iter()
             .map(|st| {
@@ -1122,7 +1177,8 @@ impl Viewer {
         let annot = NewAnnot {
             markup: Markup::Ink {
                 strokes,
-                width: 1.6,
+                // Thinner where the signature is made small to fit a field.
+                width: (1.6 * s / SIGNATURE_WIDTH).clamp(0.5, 1.6),
             },
             color: self.annotate.ink,
         };

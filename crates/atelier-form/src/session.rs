@@ -22,15 +22,20 @@ pub struct Built {
 }
 
 pub struct Session {
-    base: Arc<Document>,
+    pub(crate) base: Arc<Document>,
     history: crate::revisions::History,
     savepoint: Arc<Document>,
-    base_form: Option<Form>,
+    /// The file's form, followed by the fields added since.
+    pub(crate) base_form: Option<Form>,
+    /// How many of the form's fields are the file's own.
+    pub(crate) own_fields: usize,
+    /// Fields added, oldest first: the form's fields from `own_fields` on.
+    pub(crate) added: Vec<crate::new_field::Added>,
     /// Changed fields and their new values, oldest change first, one entry
     /// per field.
-    edits: Vec<(usize, Value)>,
+    pub(crate) edits: Vec<(usize, Value)>,
     /// The pages, in order: where each comes from.
-    order: Vec<PageSlot>,
+    pub(crate) order: Vec<PageSlot>,
     /// Files whose pages were added.
     files: Vec<Arc<Document>>,
     /// Pages turned to a new /Rotate.
@@ -47,9 +52,13 @@ pub struct Session {
     removed_annots: BTreeSet<(PageSlot, usize)>,
     annot_history: Vec<AnnotSnapshot>,
     /// Fields shown (false) or hidden (true) by form scripts, by index.
-    hidden: BTreeMap<usize, bool>,
+    pub(crate) hidden: BTreeMap<usize, bool>,
     pub(crate) styles: BTreeMap<usize, crate::FieldStyle>,
     pub(crate) bounds: BTreeMap<(usize, usize), atelier_syntax::Rect>,
+    /// Check boxes given another mark, by field.
+    pub(crate) marks: BTreeMap<usize, crate::CheckMark>,
+    /// The document's own mark for check boxes added to it.
+    pub(crate) document_mark: Option<crate::CheckMark>,
 }
 
 struct AnnotSnapshot {
@@ -77,7 +86,8 @@ impl Session {
             order: own_order(&base),
             savepoint: base.clone(),
             history: crate::revisions::History::load(&base),
-            base,
+            own_fields: base_form.as_ref().map_or(0, |f| f.fields.len()),
+            added: Vec::new(),
             base_form,
             edits: Vec::new(),
             files: Vec::new(),
@@ -91,6 +101,9 @@ impl Session {
             hidden: BTreeMap::new(),
             styles: BTreeMap::new(),
             bounds: BTreeMap::new(),
+            marks: BTreeMap::new(),
+            document_mark: Self::saved_document_mark(&base),
+            base,
         }
     }
 
@@ -413,7 +426,7 @@ impl Session {
     }
 
     /// The page a slot names, from the file it comes from.
-    fn page(&self, slot: PageSlot) -> Option<&Page> {
+    pub(crate) fn page(&self, slot: PageSlot) -> Option<&Page> {
         match slot {
             PageSlot::Own(n) => self.base.pages().ok()?.get(n),
             PageSlot::Added { file, page } => self.files.get(file)?.pages().ok()?.get(page),
@@ -435,7 +448,7 @@ impl Session {
             .is_some_and(|s| self.layers.contains_key(s))
     }
 
-    /// The form as the file has it.
+    /// The form as the file has it, followed by any fields added since.
     pub fn original(&self) -> Option<&Form> {
         self.base_form.as_ref()
     }
@@ -571,6 +584,12 @@ impl Session {
         self.annots.retain(|(s, _)| kept.contains(s));
         self.review_edits.retain(|(slot, _), _| kept.contains(slot));
         self.removed_annots.retain(|(slot, _)| kept.contains(slot));
+        // Fields added to the pages go with them.
+        for i in (0..self.added.len()).rev() {
+            if !kept.contains(&self.added[i].slot) {
+                self.drop_added(i);
+            }
+        }
         Some(old)
     }
 
@@ -611,6 +630,9 @@ impl Session {
             || !self.hidden.is_empty()
             || !self.styles.is_empty()
             || !self.bounds.is_empty()
+            || !self.added.is_empty()
+            || !self.marks.is_empty()
+            || self.document_mark_changed()
             || self.history.dirty
     }
 
@@ -640,6 +662,9 @@ impl Session {
             && self.hidden.is_empty()
             && self.styles.is_empty()
             && self.bounds.is_empty()
+            && self.added.is_empty()
+            && self.marks.is_empty()
+            && !self.document_mark_changed()
             && !redraw
             && !reorder
         {
@@ -652,7 +677,10 @@ impl Session {
         let mut update = self.base.update();
         let mut warnings = Vec::new();
         if let Some(form) = &mut form {
+            // First of all, so the added fields get the objects foreseen.
+            self.write_added(form, &mut update)?;
             self.apply_styles(form, &mut update, &mut warnings)?;
+            self.apply_marks(form, &mut update)?;
             if form.need_appearances {
                 for i in 0..form.fields.len() {
                     // Redrawing fields the viewer cannot fill would only
@@ -690,7 +718,11 @@ impl Session {
                 }
             }
         }
+        self.write_document_mark(&mut update)?;
         let refs = self.place_pages(&mut update, reorder)?;
+        if let Some(form) = &mut form {
+            self.place_added(form, &mut update, &refs)?;
+        }
         for (slot, &r) in &self.rotations {
             let Some(&page_ref) = refs.get(slot) else {
                 continue;
@@ -938,6 +970,10 @@ impl Session {
         self.savepoint = doc.clone();
         self.history = crate::revisions::History::load(&doc);
         self.base_form = Form::load(&doc).ok().flatten();
+        self.own_fields = self.base_form.as_ref().map_or(0, |f| f.fields.len());
+        self.added.clear();
+        self.marks.clear();
+        self.document_mark = Self::saved_document_mark(&doc);
         self.order = own_order(&doc);
         self.base = doc;
         self.edits.clear();
@@ -956,6 +992,14 @@ impl Session {
 
     /// Pages whose widgets show `field`, as the pages are now ordered.
     pub fn pages_of(&self, field: usize) -> Vec<usize> {
+        if let Some(slot) = self.added_slot(field) {
+            return self
+                .order
+                .iter()
+                .position(|s| *s == slot)
+                .into_iter()
+                .collect();
+        }
         let own: BTreeSet<usize> = self
             .base_form
             .as_ref()

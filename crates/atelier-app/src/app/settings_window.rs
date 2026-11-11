@@ -202,6 +202,25 @@ impl Viewer {
         ui.add_space(14.0);
         ui.separator();
         ui.add_space(8.0);
+        ui.heading("Forms");
+        ui.horizontal(|ui| {
+            ui.label("Ticked check boxes show a");
+            egui::ComboBox::from_id_salt("check-mark")
+                .selected_text(s.check_mark.label())
+                .show_ui(ui, |ui| {
+                    for mark in atelier_form::CheckMark::ALL {
+                        ui.selectable_value(&mut s.check_mark, mark, mark.label());
+                    }
+                });
+        })
+        .response
+        .on_hover_text(
+            "For check boxes Atelier adds. A document can keep a mark of its own, and \
+             each check box can be given another (Find tables and form fields).",
+        );
+        ui.add_space(14.0);
+        ui.separator();
+        ui.add_space(8.0);
         ui.heading("Scans");
         ui.checkbox(&mut s.ocr, "Read the text of scans (OCR)")
             .on_hover_text(

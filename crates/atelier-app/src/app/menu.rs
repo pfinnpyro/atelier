@@ -254,6 +254,15 @@ impl Viewer {
         } else {
             Value::None
         };
+        let sized = matches!(
+            f.kind,
+            FieldKind::Text | FieldKind::ComboBox | FieldKind::ListBox
+        );
+        let size = o
+            .session
+            .field_style(at.0)
+            .map_or(0.0, |s| s.appearance.size);
+        let mark = (f.kind == FieldKind::Checkbox).then(|| o.session.check_mark(at.0));
 
         if typed
             && ui
@@ -292,6 +301,39 @@ impl Viewer {
         {
             self.commit(at.0, original);
             ui.close();
+        }
+        if sized {
+            ui.separator();
+            let mut picked = None;
+            ui.menu_button("Text size", |ui| {
+                for option in std::iter::once(0.0).chain(super::detect::SIZES) {
+                    if ui
+                        .radio(size == option, super::detect::size_label(option))
+                        .clicked()
+                    {
+                        picked = Some(option);
+                        ui.close();
+                    }
+                }
+            });
+            if let Some(size) = picked {
+                self.set_text_size(at.0, size);
+            }
+        }
+        if let Some(mark) = mark {
+            ui.separator();
+            let mut picked = None;
+            ui.menu_button("Mark when ticked", |ui| {
+                for option in atelier_form::CheckMark::ALL {
+                    if ui.radio(mark == Some(option), option.label()).clicked() {
+                        picked = Some(option);
+                        ui.close();
+                    }
+                }
+            });
+            if let Some(mark) = picked {
+                self.set_mark(at.0, mark);
+            }
         }
     }
 }

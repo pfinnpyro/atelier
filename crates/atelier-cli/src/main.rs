@@ -30,6 +30,12 @@ Usage:
                                            update. Checkboxes take on, off or a state
                                            name; multi-select lists take a|b|c.
                                            --refresh redraws every field's appearance
+  atelier detect <file.pdf> [-o out.pdf] [--tables]
+                                           suggest form fields for the boxes, lines
+                                           and tables of a printed form, page by page;
+                                           -o saves a copy with a field made of each
+                                           suggestion; --tables prints each table's
+                                           text, tab-separated
   atelier actions <file.pdf>               list scripts and other actions (never run)
   atelier compat <file.pdf>                XFA (static or dynamic), scripts that depend
                                            on the viewer, and embedded files
@@ -96,6 +102,7 @@ fn run(args: &[String]) -> Result<(), String> {
         "text" => text(&doc, &args[2..], &mut out),
         "fields" => fields(&doc, &mut out),
         "fill" => fill(&doc, &args[2..], &mut out),
+        "detect" => detect(&doc, &args[2..], &mut out),
         "actions" => actions(&doc, &mut out),
         "compat" => compat(&doc, &mut out),
         "attachments" => attachments(&doc, &args[2..], &mut out),
@@ -715,6 +722,92 @@ fn fill(doc: &Document, args: &[String], out: &mut Out) -> Result<(), String> {
     let bytes = update.to_bytes().map_err(|e| e.to_string())?;
     std::fs::write(&output, &bytes).map_err(|e| format!("cannot write {output}: {e}"))?;
     writeln!(out, "wrote {output} ({} bytes)", bytes.len()).map_err(io)?;
+    Ok(())
+}
+
+/// Lists the tables and suggested fields of each page; with `-o`, saves
+/// a copy that has them as fields.
+fn detect(doc: &Document, args: &[String], out: &mut Out) -> Result<(), String> {
+    let mut output = None;
+    let mut tables = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-o" => {
+                output = Some(args.get(i + 1).ok_or("-o needs a file name")?.clone());
+                i += 1;
+            }
+            "--tables" => tables = true,
+            a => return Err(format!("unknown option `{a}`")),
+        }
+        i += 1;
+    }
+    let pages = doc.pages().map_err(|e| e.to_string())?;
+    let form = atelier_form::Form::load(doc).ok().flatten();
+    let mut suggested = Vec::new();
+    for (n, page) in pages.iter().enumerate() {
+        let text = extract_text(doc, page).unwrap_or_default();
+        // Places that already have a field are left alone.
+        let taken: Vec<_> = form
+            .iter()
+            .flat_map(|f| &f.fields)
+            .flat_map(|f| &f.widgets)
+            .filter(|w| w.page == Some(n))
+            .map(|w| w.rect)
+            .collect();
+        let found = atelier_form::detect_page(doc, page, &text, &taken);
+        for t in &found.tables {
+            writeln!(
+                out,
+                "page {} table {} x {} [{:.1} {:.1} {:.1} {:.1}]",
+                n + 1,
+                t.rows,
+                t.cols,
+                t.rect.x0,
+                t.rect.y0,
+                t.rect.x1,
+                t.rect.y1
+            )
+            .map_err(io)?;
+            if tables {
+                writeln!(out, "{}", t.to_tsv()).map_err(io)?;
+            }
+        }
+        for s in found.fields {
+            let (f, r) = (&s.field, s.field.rect);
+            writeln!(
+                out,
+                "page {} {:?} {} from a {} [{:.1} {:.1} {:.1} {:.1}]",
+                n + 1,
+                f.name,
+                f.kind.label().to_lowercase(),
+                s.source.label(),
+                r.x0,
+                r.y0,
+                r.x1,
+                r.y1
+            )
+            .map_err(io)?;
+            suggested.push((n, s.field));
+        }
+    }
+    let Some(output) = output else {
+        return Ok(());
+    };
+    let count = suggested.len();
+    let base = doc.reopen(doc.data().to_vec()).map_err(|e| e.to_string())?;
+    let mut session = atelier_form::Session::new(std::sync::Arc::new(base));
+    for (page, field) in suggested {
+        session.add_field(page, field).map_err(|e| e.to_string())?;
+    }
+    let built = session.build().map_err(|e| e.to_string())?;
+    std::fs::write(&output, built.doc.data()).map_err(|e| format!("cannot write {output}: {e}"))?;
+    writeln!(
+        out,
+        "wrote {output} with {count} new {}",
+        if count == 1 { "field" } else { "fields" }
+    )
+    .map_err(io)?;
     Ok(())
 }
 
