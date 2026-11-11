@@ -45,6 +45,10 @@ const MIN_AXIS_LEAD: f64 = 1.5;
 const MIN_UPRIGHT_LEAD: f64 = 1.5;
 /// Rising and hanging letters needed to judge a page image.
 const MIN_TELLING_LETTERS: usize = 20;
+/// And they must be at least this share of the letters in the lines. In
+/// lower-case text a quarter or more of the letters rise or hang; in
+/// capitals almost none do.
+const MIN_TELLING_SHARE: f64 = 0.1;
 /// Text is looked for up to this many degrees off square, in steps of
 /// `SKEW_STEP`.
 const MAX_SKEW: f64 = 12.0;
@@ -245,8 +249,9 @@ fn straightest(marks: &[Mark]) -> (f64, f64) {
 }
 
 /// Letters rising above their line's middle band (ascenders, capitals)
-/// and hanging below it (descenders), counted over every line.
-fn rising_and_hanging(marks: &[Mark], slope: f64) -> (usize, usize) {
+/// and hanging below it (descenders), counted over every line, and how
+/// many letters those lines hold in all.
+fn rising_and_hanging(marks: &[Mark], slope: f64) -> (usize, usize, usize) {
     let centre = marks.iter().map(|m| m.x).sum::<f64>() / marks.len().max(1) as f64;
     let (rows, lowest) = profile(marks, slope, centre);
     let peak = rows.iter().copied().fold(0.0, f64::max);
@@ -277,7 +282,7 @@ fn rising_and_hanging(marks: &[Mark], slope: f64) -> (usize, usize) {
         v.sort_by(f64::total_cmp);
         v[v.len() / 2]
     };
-    let (mut rising, mut hanging) = (0, 0);
+    let (mut rising, mut hanging, mut all) = (0, 0, 0);
     for line in members.into_iter().filter(|l| l.len() >= 5) {
         // Most letters sit between the baseline and the x-height.
         let x_line = median(line.iter().map(|m| m.0).collect());
@@ -287,10 +292,11 @@ fn rising_and_hanging(marks: &[Mark], slope: f64) -> (usize, usize) {
             continue;
         }
         let reach = x_height * 0.2;
+        all += line.len();
         rising += line.iter().filter(|m| m.0 < x_line - reach).count();
         hanging += line.iter().filter(|m| m.1 > base + reach).count();
     }
-    (rising, hanging)
+    (rising, hanging, all)
 }
 
 /// Which way up a page image reads, from the shape of its text: the
@@ -316,8 +322,13 @@ pub fn upright_from_image(gray: &[u8], width: usize, height: usize) -> Option<u1
     } else {
         return None;
     };
-    let (rising, hanging) = rising_and_hanging(&marks, slope);
-    if rising + hanging < MIN_TELLING_LETTERS {
+    let (rising, hanging, all) = rising_and_hanging(&marks, slope);
+    // Capitals and digits all stand the same height, so a page of them has
+    // only stray marks (commas, brackets, handwriting) to go by, and those
+    // mislead.
+    if rising + hanging < MIN_TELLING_LETTERS
+        || ((rising + hanging) as f64) < MIN_TELLING_SHARE * all as f64
+    {
         return None;
     }
     if rising as f64 >= hanging as f64 * MIN_UPRIGHT_LEAD {
@@ -429,8 +440,9 @@ mod tests {
 
     /// A grey page of fake text: lines of letter-sized blocks, some rising
     /// above the line and fewer hanging below, sloping by `skew` degrees
-    /// and then turned `quarters` times clockwise.
-    fn fake_page(skew: f64, quarters: usize) -> (Vec<u8>, usize, usize) {
+    /// and then turned `quarters` times clockwise. With `capitals`, the
+    /// letters are all one height but for a few commas hanging below.
+    fn fake_page(skew: f64, quarters: usize, capitals: bool) -> (Vec<u8>, usize, usize) {
         let (w, h) = (900usize, 1200usize);
         let mut img = vec![225u8; w * h];
         let slope = skew.to_radians().tan();
@@ -443,7 +455,10 @@ mod tests {
             let base = 120 + line * 32;
             let mut x = 80;
             while x < 800 {
-                let kind = next();
+                let kind = match next() {
+                    k if capitals && k < 97 => 0,
+                    k => k,
+                };
                 let (top, bottom) = match kind {
                     0..=69 => (base - 11, base),
                     70..=91 => (base - 17, base),
@@ -478,7 +493,7 @@ mod tests {
     #[test]
     fn finds_which_way_up_a_scan_reads() {
         for (quarters, skew) in [(0, 0.0), (1, 2.0), (2, -3.0), (3, 1.0)] {
-            let (img, w, h) = fake_page(skew, quarters);
+            let (img, w, h) = fake_page(skew, quarters, false);
             // Turned `quarters` clockwise, it needs the rest of the way round.
             let want = ((4 - quarters) % 4 * 90) as u16;
             assert_eq!(
@@ -487,6 +502,13 @@ mod tests {
                 "turned {quarters} quarters"
             );
         }
+    }
+
+    #[test]
+    fn a_page_of_capitals_says_nothing() {
+        // Only the commas hang, which would read as upside down.
+        let (img, w, h) = fake_page(0.0, 0, true);
+        assert_eq!(upright_from_image(&img, w, h), None);
     }
 
     #[test]
