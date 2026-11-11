@@ -141,6 +141,42 @@ impl Form {
         self.set_value(update, index, default)
     }
 
+    /// Draws a check box's ticked and empty appearances afresh, with the
+    /// mark its /MK names, in place of whatever it had.
+    pub(crate) fn redraw_check(&mut self, update: &mut Update<'_>, index: usize) -> Result<()> {
+        let doc = update.document();
+        let field = &self.fields[index];
+        let da = DefaultAppearance::parse(field.da.as_deref().or(self.da.as_deref()).unwrap_or(""));
+        let state = match &field.value {
+            Value::State(s) => s.clone(),
+            _ => "Off".to_string(),
+        };
+        let mut names = Vec::new();
+        for widget in &field.widgets {
+            let mut dict = dict_in(update, widget.obj)?;
+            let frame = Frame::new(doc, &dict, widget);
+            let on = widget.on_state.clone().unwrap_or_else(|| "Yes".to_string());
+            let (on_ap, off_ap) = button_appearance(doc, &frame, &dict, &da, false);
+            let mut states = Dict::new();
+            states.insert(
+                Name::new(on.as_bytes()),
+                Object::Reference(update.add(on_ap.into_stream())),
+            );
+            states.insert("Off", Object::Reference(update.add(off_ap.into_stream())));
+            let mut ap = Dict::new();
+            ap.insert("N", Object::Dict(states));
+            dict.insert("AP", Object::Dict(ap));
+            let shown = if state == on { on.as_str() } else { "Off" };
+            dict.insert("AS", Object::Name(Name::new(shown.as_bytes())));
+            update.set(widget.obj, Object::Dict(dict));
+            names.push(on);
+        }
+        for (widget, on) in self.fields[index].widgets.iter_mut().zip(names) {
+            widget.on_state = Some(on);
+        }
+        Ok(())
+    }
+
     /// Redraws every widget of a field from its current value: what
     /// viewers do for files that set /NeedAppearances.
     pub fn refresh_appearance(

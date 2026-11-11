@@ -1,10 +1,17 @@
-//! First security workflow: export encrypted copies or sign a completed revision.
+//! Security export workflows and signing identity selection.
 use super::Viewer;
 use eframe::egui;
-use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
+
+#[derive(Default, PartialEq, Eq, Clone, Copy)]
+enum SigningSource {
+    #[default]
+    Pem,
+    Pkcs12,
+    #[cfg(windows)]
+    WindowsStore,
+}
 
 #[derive(Default)]
 pub(super) struct SecurityUi {
@@ -15,6 +22,10 @@ pub(super) struct SecurityUi {
     certificate: Option<PathBuf>,
     key: Option<PathBuf>,
     key_password: String,
+    source: SigningSource,
+    #[cfg(windows)]
+    windows: super::windows_identity::StoreUi,
+    identity: Option<PathBuf>,
     job: Option<Receiver<Result<String, String>>>,
 }
 
@@ -56,22 +67,45 @@ impl Viewer {
             .show(ctx, |ui| {
                 let s = &mut self.security;
                 ui.add_enabled_ui(s.job.is_none(), |ui| {
+                    let was_signing = s.signing;
                     ui.horizontal(|ui| {
                         ui.selectable_value(&mut s.signing, false, "Encrypt a copy");
                         ui.selectable_value(&mut s.signing, true, "Sign with certificate");
                     });
+                    if was_signing != s.signing { s.key_password.clear(); s.password.clear(); s.confirm.clear(); }
                     ui.separator();
                     if s.signing {
                         ui.label("Signs the entire current revision, including any ink signatures you placed. Later edits will be a separate revision.");
-                        ui.label("Uses OpenSSL and a PEM certificate/private key. Certificate trust and revocation are not checked by Atelier yet.");
-                        for (label, path) in [("Certificate (PEM)…", &mut s.certificate), ("Private key (PEM)…", &mut s.key)] {
-                            ui.horizontal(|ui| {
-                                if ui.button(label).clicked() && let Some(p) = rfd::FileDialog::new().add_filter("PEM files", &["pem", "crt", "key"]).pick_file() { *path = Some(p); }
-                                ui.label(path.as_ref().and_then(|p| p.file_name()).map(|p| p.to_string_lossy()).unwrap_or_default());
-                            });
+                        ui.label("Choose a file identity or an available system certificate. Inspect exported signatures in the Signatures sidebar. Revocation is not checked.");
+                        let previous = s.source;
+                        ui.horizontal_wrapped(|ui| {
+                            ui.selectable_value(&mut s.source, SigningSource::Pem, "PEM certificate and key");
+                            ui.selectable_value(&mut s.source, SigningSource::Pkcs12, "PKCS#12 identity");
+                            #[cfg(windows)]
+                            ui.selectable_value(&mut s.source, SigningSource::WindowsStore, "Windows certificate store");
+                        });
+                        if previous != s.source { s.key_password.clear(); }
+                        if s.source == SigningSource::Pkcs12 {
+                            if ui.button("Choose identity (.p12 / .pfx)...").clicked()
+                                && let Some(path) = rfd::FileDialog::new().add_filter("PKCS#12 identities", &["p12", "pfx"]).pick_file() {
+                                s.identity = Some(path); s.key_password.clear();
+                            }
+                            if let Some(path) = &s.identity { ui.label(path.file_name().unwrap_or_default().to_string_lossy()); }
+                            ui.label("Identity password (leave empty if none)");
+                        } else if s.source == SigningSource::Pem {
+                            for (label, path) in [("Certificate (PEM)…", &mut s.certificate), ("Private key (PEM)…", &mut s.key)] {
+                                ui.horizontal(|ui| {
+                                    if ui.button(label).clicked() && let Some(p) = rfd::FileDialog::new().add_filter("PEM files", &["pem", "crt", "key"]).pick_file() { *path = Some(p); s.key_password.clear(); }
+                                    ui.label(path.as_ref().and_then(|p| p.file_name()).map(|p| p.to_string_lossy()).unwrap_or_default());
+                                });
+                            }
+                            ui.label("Private key password (if encrypted)");
                         }
-                        ui.label("Private key password (if encrypted)");
-                        ui.add(egui::TextEdit::singleline(&mut s.key_password).password(true));
+                        #[cfg(windows)]
+                        if s.source == SigningSource::WindowsStore { s.windows.draw(ui); }
+                        if s.source == SigningSource::Pem || s.source == SigningSource::Pkcs12 {
+                            ui.add(egui::TextEdit::singleline(&mut s.key_password).password(true));
+                        }
                     } else {
                         ui.label("AES-256 encryption (PDF 2.0, revision 6). A password will be required to open the exported copy.");
                         ui.label("Password (ASCII, up to 127 bytes)");
@@ -81,8 +115,14 @@ impl Viewer {
                         ui.weak("This pass uses the same password for opening and full access. Permissions are unrestricted after opening.");
                     }
                     ui.add_space(10.0);
-                    let ready = self.open.is_some() && if s.signing { s.certificate.is_some() && s.key.is_some() }
-                        else { !s.password.is_empty() && s.password == s.confirm && s.password.is_ascii() && s.password.len() <= 127 };
+                    let ready = self.open.is_some() && if s.signing {
+                        match s.source {
+                            SigningSource::Pem => s.certificate.is_some() && s.key.is_some(),
+                            SigningSource::Pkcs12 => s.identity.is_some(),
+                            #[cfg(windows)]
+                            SigningSource::WindowsStore => s.windows.selected.is_some(),
+                        }
+                    } else { !s.password.is_empty() && s.password == s.confirm && s.password.is_ascii() && s.password.len() <= 127 };
                     export = ui.add_enabled(ready, egui::Button::new(if s.signing { "Sign and export copy…" } else { "Export encrypted copy…" })).clicked();
                 });
                 if self.security.job.is_some() { ui.spinner(); ui.label("Preparing secure copy…"); }
@@ -125,40 +165,82 @@ impl Viewer {
             self.error = Some("Choose a new file for the security export.".into());
             return;
         }
+        if self.security.signing
+            && [
+                &self.security.certificate,
+                &self.security.key,
+                &self.security.identity,
+            ]
+            .into_iter()
+            .flatten()
+            .any(|credential| {
+                credential == &path
+                    || credential
+                        .canonicalize()
+                        .ok()
+                        .zip(path.canonicalize().ok())
+                        .is_some_and(|(a, b)| a == b)
+            })
+        {
+            self.error =
+                Some("Choose an output file different from your signing credentials.".into());
+            return;
+        }
         let doc = o.doc.clone();
         let signing = self.security.signing;
         let password = std::mem::take(&mut self.security.password);
         self.security.confirm.clear();
         let key_password = std::mem::take(&mut self.security.key_password);
-        let cert = self.security.certificate.clone();
-        let key = self.security.key.clone();
+        let identity = match self.security.source {
+            SigningSource::Pkcs12 => self
+                .security
+                .identity
+                .clone()
+                .map(super::identity::Identity::Pkcs12),
+            SigningSource::Pem => self
+                .security
+                .certificate
+                .clone()
+                .zip(self.security.key.clone())
+                .map(|(certificate, key)| super::identity::Identity::Pem { certificate, key }),
+            #[cfg(windows)]
+            SigningSource::WindowsStore => self
+                .security
+                .windows
+                .selected
+                .clone()
+                .map(super::identity::Identity::WindowsStore),
+        };
         let author = self.settings.review_author.clone();
         let (tx, rx) = mpsc::channel();
         let wake = self.ctx.clone();
-        let spawned = std::thread::Builder::new().name("security-export".into()).spawn(move || {
-            let result = (|| -> Result<String, String> {
-                let bytes = if signing {
-                    let prepared = doc.prepare_signature(&author, 32_768).map_err(|e| e.to_string())?;
-                    let cert = cert.ok_or("Choose a certificate")?;
-                    let key = key.ok_or("Choose a private key")?;
-                    let mut child = Command::new("openssl").args(["cms", "-sign", "-binary", "-outform", "DER", "-md", "sha256", "-nosmimecap", "-signer"])
-                        .arg(cert).arg("-inkey").arg(key).args(["-passin", "env:ATELIER_SIGNING_PASSWORD"])
-                        .env("ATELIER_SIGNING_PASSWORD", key_password)
-                        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()
-                        .map_err(|e| format!("Could not start OpenSSL. Install OpenSSL to use PEM signing: {e}"))?;
-                    let written = child.stdin.take().ok_or("Could not open signer input")?.write_all(&prepared.signing_bytes());
-                    let output = child.wait_with_output().map_err(|e| format!("OpenSSL failed: {e}"))?;
-                    if !output.status.success() { return Err(format!("Certificate signing failed: {}", String::from_utf8_lossy(&output.stderr))); }
-                    written.map_err(|e| format!("Could not send the document to OpenSSL: {e}"))?;
-                    prepared.finish(&output.stdout).map_err(|e| e.to_string())?
-                } else {
-                    doc.update().to_encrypted_bytes(&password, &password).map_err(|e| e.to_string())?
-                };
-                super::write_replacing(&path, &bytes).map_err(|e| format!("Could not export {}: {e}", path.display()))?;
-                Ok(format!("{} copy exported to {}.", if signing { "Certificate-signed" } else { "Encrypted" }, path.display()))
-            })();
-            let _ = tx.send(result); wake.request_repaint();
-        });
+        let spawned = std::thread::Builder::new()
+            .name("security-export".into())
+            .spawn(move || {
+                let result = (|| -> Result<String, String> {
+                    let bytes = if signing {
+                        let identity = identity.ok_or("Choose signing credentials")?;
+                        super::identity::sign_document(&doc, &author, &identity, &key_password)?
+                    } else {
+                        doc.update()
+                            .to_encrypted_bytes(&password, &password)
+                            .map_err(|e| e.to_string())?
+                    };
+                    super::write_replacing(&path, &bytes)
+                        .map_err(|e| format!("Could not export {}: {e}", path.display()))?;
+                    Ok(format!(
+                        "{} copy exported to {}.",
+                        if signing {
+                            "Certificate-signed"
+                        } else {
+                            "Encrypted"
+                        },
+                        path.display()
+                    ))
+                })();
+                let _ = tx.send(result);
+                wake.request_repaint();
+            });
         match spawned {
             Ok(_) => self.security.job = Some(rx),
             Err(e) => self.error = Some(format!("Could not start security export: {e}")),

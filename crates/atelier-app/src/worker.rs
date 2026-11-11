@@ -180,6 +180,19 @@ pub enum Done {
         page: usize,
         result: Result<Probed, String>,
     },
+    /// The tables and blanks found on one page of the file opened as
+    /// `opened`, by detection run `run`.
+    Detected {
+        opened: u64,
+        run: u64,
+        page: usize,
+        found: atelier_form::Detected,
+    },
+    /// A detection run looked at every page.
+    DetectEnded {
+        opened: u64,
+        run: u64,
+    },
     /// The spot colours of the file opened as `opened`.
     Spots {
         opened: u64,
@@ -205,6 +218,8 @@ pub struct Pool {
     pub done: Receiver<Done>,
     /// The search that should keep running; any other stops.
     search: Arc<AtomicU64>,
+    /// The field detection that should keep running; any other stops.
+    detect: Arc<AtomicU64>,
     threads: Vec<thread::JoinHandle<()>>,
     /// The OCR engine, loaded the first time it is needed.
     engine: Arc<Mutex<Option<Arc<Engine>>>>,
@@ -242,6 +257,7 @@ impl Pool {
             done_tx,
             done,
             search: Arc::new(AtomicU64::new(0)),
+            detect: Arc::new(AtomicU64::new(0)),
             threads,
             engine: Arc::new(Mutex::new(None)),
         }
@@ -476,6 +492,57 @@ impl Pool {
     /// Stops the running search, if any.
     pub fn stop_search(&self) {
         self.search.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// Looks for tables and the blanks of a form on every page, on a
+    /// thread of its own, stopping any earlier run. What is found arrives
+    /// page by page. `taken` holds, for each page, the boxes of the
+    /// fields it already has. Returns the run's number.
+    pub fn detect(
+        &self,
+        doc: Arc<Document>,
+        opened: u64,
+        ocr: OcrTexts,
+        taken: Vec<Vec<atelier_syntax::Rect>>,
+        wake: impl Fn() + Send + 'static,
+    ) -> u64 {
+        let run = self.detect.fetch_add(1, Ordering::SeqCst) + 1;
+        let current = self.detect.clone();
+        let tx = self.done_tx.clone();
+        let ended = self.done_tx.clone();
+        let spawned = thread::Builder::new().name("detect".into()).spawn(move || {
+            for (i, page) in doc.pages().unwrap_or_default().iter().enumerate() {
+                if current.load(Ordering::SeqCst) != run {
+                    return;
+                }
+                let look = || {
+                    let text = page_text(&doc, i, page, &ocr);
+                    let taken = taken.get(i).map_or(&[][..], Vec::as_slice);
+                    atelier_form::detect_page(&doc, page, &text, taken)
+                };
+                // A page that cannot be read gives nothing; the rest go on.
+                let found = std::panic::catch_unwind(std::panic::AssertUnwindSafe(look))
+                    .unwrap_or_default();
+                let _ = tx.send(Done::Detected {
+                    opened,
+                    run,
+                    page: i,
+                    found,
+                });
+                wake();
+            }
+            let _ = tx.send(Done::DetectEnded { opened, run });
+            wake();
+        });
+        if spawned.is_err() {
+            let _ = ended.send(Done::DetectEnded { opened, run });
+        }
+        run
+    }
+
+    /// Stops the running field detection, if any.
+    pub fn stop_detect(&self) {
+        self.detect.fetch_add(1, Ordering::SeqCst);
     }
 }
 

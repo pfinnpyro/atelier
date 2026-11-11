@@ -36,6 +36,7 @@ impl<'a> Update<'a> {
     /// Exports a fresh AES-256 revision 6 encrypted PDF. Does not mutate the source.
     /// Existing encrypted files and signature fields are rejected in this first pass.
     pub fn to_encrypted_bytes(mut self, user: &str, owner: &str) -> Result<Vec<u8>> {
+        self.doc.signature_write_policy().check(true)?;
         if self.doc.is_encrypted() {
             return Err(Error::Unsupported("changing existing encryption".into()));
         }
@@ -126,6 +127,12 @@ impl<'a> Update<'a> {
     /// The file with the edits: an incremental update, or a full rewrite
     /// when the original's cross-reference data was broken.
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        // A byte-for-byte copy remains safe, including for restricted signatures.
+        if self.is_empty() {
+            return Ok(self.doc.data().to_vec());
+        }
+        let rewrite = self.doc.was_repaired() || self.doc.startxref().is_none();
+        self.doc.signature_write_policy().check(rewrite)?;
         match self.doc.startxref() {
             Some(prev) if !self.doc.was_repaired() => self.incremental(prev),
             _ => self.full(),
@@ -180,6 +187,7 @@ impl<'a> Update<'a> {
         &self,
         leave_out: &std::collections::HashSet<ObjRef>,
     ) -> Result<Vec<u8>> {
+        self.doc.signature_write_policy().check(true)?;
         let mut seen = std::collections::HashSet::new();
         let mut todo: Vec<ObjRef> = Vec::new();
         for key in [b"Root".as_slice(), b"Info", b"Encrypt"] {

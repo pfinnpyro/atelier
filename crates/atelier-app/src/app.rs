@@ -24,7 +24,9 @@ use crate::worker::{Done, Job, Pool};
 mod annotate;
 mod colors;
 mod controls;
+mod detect;
 mod form;
+mod identity;
 mod inspect;
 mod menu;
 mod organize;
@@ -34,10 +36,14 @@ mod revisions;
 mod safety;
 mod scripts;
 mod security;
+mod security_provider;
 mod settings_window;
 mod sidebar;
+mod signatures;
 mod tabs;
 mod updates;
+#[cfg(windows)]
+mod windows_identity;
 
 use form::FormView;
 use inspect::Inspector;
@@ -75,6 +81,7 @@ enum ZoomMode {
 
 /// An open file and everything known about it.
 struct Open {
+    signatures: signatures::Signatures,
     doc: Arc<Document>,
     name: String,
     generation: u64,
@@ -114,6 +121,8 @@ struct Open {
     safety: safety::Safety,
     /// The form's scripts, and which the person allowed to run.
     scripts: Option<scripts::ScriptState>,
+    /// Suggested fields being reviewed, while they are.
+    suggest: Option<detect::Suggest>,
 }
 
 /// Something waiting on the unsaved-changes prompt.
@@ -343,6 +352,7 @@ impl Viewer {
         let warnings = doc.warnings().into_iter().collect();
         let doc = Arc::new(doc);
         let mut open = Open {
+            signatures: Default::default(),
             safety: safety::Safety::new(doc.clone()),
             session: Session::new(doc.clone()),
             opened: self.generation,
@@ -365,6 +375,7 @@ impl Viewer {
             form: None,
             stale: HashSet::new(),
             scripts: None,
+            suggest: None,
         };
         Self::load_form(&mut open);
         let blocked = open.scripts.as_ref().map_or(0, |s| s.runnable().len());
@@ -413,6 +424,17 @@ impl Viewer {
     /// to one the person picks. The file is written beside the target and
     /// then moved over it, so a failed write never leaves half a file.
     fn save(&mut self, to: SaveTo) {
+        // Reject pending restricted edits before consuming ink/editor buffers or
+        // presenting a save dialog. An unchanged copy is still safe to save.
+        if let Some(o) = &self.open {
+            let pending = self.is_dirty()
+                || o.layers_pending
+                || o.form.as_ref().is_some_and(|f| f.is_editing());
+            if pending && let Err(error) = o.doc.signature_write_policy().check(false) {
+                self.error = Some(error.to_string());
+                return;
+            }
+        }
         self.commit_ink();
         self.finish_editing(true);
         // Text OCR read goes into the file too.
@@ -709,6 +731,8 @@ impl Viewer {
         let ppp = f64::from(self.ctx.pixels_per_point());
         let mut reveal = None;
         let mut oriented = None;
+        let mut detected = Vec::new();
+        let mut detect_ended = None;
         while let Ok(done) = self.pool.done.try_recv() {
             let Some(o) = &mut self.open else { continue };
             match done {
@@ -844,8 +868,23 @@ impl Viewer {
                 Done::Spots { opened, spots } if opened == o.opened => {
                     self.colors.spots = Some(spots);
                 }
+                Done::Detected {
+                    opened,
+                    run,
+                    page,
+                    found,
+                } if opened == o.opened => detected.push((run, page, found)),
+                Done::DetectEnded { opened, run } if opened == o.opened => {
+                    detect_ended = Some(run);
+                }
                 _ => {}
             }
+        }
+        for (run, page, found) in detected {
+            self.detected(run, page, found);
+        }
+        if let Some(run) = detect_ended {
+            self.detect_ended(run);
         }
         if let Some((opened, rotations)) = oriented {
             self.oriented(opened, &rotations);
@@ -898,6 +937,7 @@ impl Viewer {
         if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F12)) {
             self.inspector.open = !self.inspector.open;
         }
+        self.detect_keys();
         self.form_keys();
         if shortcut(Key::F) {
             self.request_find();
@@ -1028,6 +1068,26 @@ impl Viewer {
                     ui.add_enabled_ui(self.open.is_some(), |ui| {
                         ui.menu_button("Mark", |ui| self.mark_menu(ui));
                     });
+                    if ui
+                        .add_enabled(
+                            self.open.is_some(),
+                            egui::Button::selectable(
+                                self.reviewing_fields(),
+                                "Find tables and form fields…",
+                            ),
+                        )
+                        .on_hover_text(
+                            "Suggest fields for the boxes, lines and tables of a printed form",
+                        )
+                        .clicked()
+                    {
+                        if self.reviewing_fields() {
+                            self.close_detect();
+                        } else {
+                            self.start_detect();
+                        }
+                        ui.close();
+                    }
                     ui.separator();
                     if let Some(fv) = self.open.as_ref().and_then(|o| o.form.as_ref())
                         && ui.selectable_label(fv.highlight, "Fields").clicked()
@@ -1408,6 +1468,7 @@ impl Viewer {
             self.draw_hotspots(ui, rect.min);
             self.draw_pick(ui, rect.min);
             self.draw_marks(ui, rect.min);
+            self.draw_suggestions(ui, rect.min);
             self.pointer(ui, &response, rect.min);
             self.draw_comment_link(ui, rect.min);
             self.draw_editor(ui, rect.min);
@@ -1747,6 +1808,9 @@ impl Viewer {
             self.zoom_by(f64::from(zoom_delta).sqrt(), anchor);
         }
 
+        if self.detect_pointer(ui, response, origin) {
+            return;
+        }
         let at = response
             .interact_pointer_pos()
             .or(response.hover_pos())
@@ -1774,6 +1838,8 @@ impl Viewer {
             let (lx, ly) = to_layout(p);
             if let Some(icon) = self.form_cursor(lx, ly).filter(|_| !self.selecting) {
                 ui.ctx().set_cursor_icon(icon);
+            } else if !self.selecting && self.unsigned_at(lx, ly).is_some() {
+                ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
             } else if self.over_text(lx, ly) || self.selecting {
                 ui.ctx().set_cursor_icon(CursorIcon::Text);
             }
@@ -1823,7 +1889,7 @@ impl Viewer {
             if let Some(p) = response.interact_pointer_pos() {
                 let (lx, ly) = to_layout(p);
                 let ctrl = ui.input(|i| i.modifiers.command);
-                let on_field = self.form_click(lx, ly, ctrl);
+                let on_field = self.form_click(lx, ly, ctrl) || self.sign_click(lx, ly);
                 self.safety_click(lx, ly);
                 // A double click selects the word under it.
                 if response.double_clicked()
@@ -1881,6 +1947,7 @@ impl eframe::App for Viewer {
         self.tab_bar(ui);
         self.update_banner(ui);
         self.tool_bar(ui);
+        self.fields_bar(ui);
         self.safety_notice(ui);
         if let Some(note) = self.notice.clone().filter(|_| self.open.is_some()) {
             egui::Panel::bottom("notice").show(ui, |ui| {
@@ -1929,6 +1996,7 @@ impl eframe::App for Viewer {
         self.download_progress(&ctx);
         self.pad_window(&ctx);
         self.confirm_window(&ctx);
+        self.poll_signatures(&ctx);
         self.security_window(&ctx);
     }
 }

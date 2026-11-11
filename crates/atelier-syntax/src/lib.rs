@@ -13,7 +13,10 @@ mod lexer;
 mod object;
 mod page;
 mod parser;
+mod reference_effects;
+mod revision_changes;
 mod signature;
+mod signature_policy;
 mod write;
 mod xref;
 
@@ -29,4 +32,12 @@ pub use parser::Parser;
 pub use write::{Update, serialize};
 pub use xref::XrefEntry;
 
-pub use signature::PreparedSignature;
+pub use signature::{PreparedSignature, SignatureInspection};
+
+pub use signature_policy::SignatureWritePolicy;
+
+pub use revision_changes::{
+    ChangeCategory, ChangeKind, ObjectDelta, RevisionDelta, SignedRevisionChanges,
+};
+
+pub use reference_effects::ReferenceImpact;

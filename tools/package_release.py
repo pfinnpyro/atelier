@@ -7,14 +7,18 @@ import os
 from pathlib import Path
 import platform
 import plistlib
+import re
 import shutil
 import subprocess
+import tarfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = {
     "macos-arm64": "aarch64-apple-darwin",
     "windows-x64": "x86_64-pc-windows-msvc",
+    "linux-x64": "x86_64-unknown-linux-gnu",
+    "linux-arm64": "aarch64-unknown-linux-gnu",
 }
 
 
@@ -37,8 +41,26 @@ def checksums(folder):
     ), encoding="utf-8")
 
 
+def validate_linux_binary(path, target):
+    with path.open("rb") as binary:
+        header = binary.read(20)
+    expected = 62 if target == "linux-x64" else 183
+    if len(header) < 20 or header[:6] != b"\x7fELF\x02\x01" or int.from_bytes(header[18:20], "little") != expected:
+        raise SystemExit(f"Wrong ELF architecture: {path} for {target}")
+    versions = subprocess.check_output(["readelf", "--version-info", str(path)], text=True)
+    required = {tuple(map(int, value.split("."))) for value in re.findall(r"GLIBC_([0-9]+(?:\.[0-9]+)+)", versions)}
+    if any(version > (2, 35) for version in required):
+        raise SystemExit(f"{path} requires glibc newer than the Ubuntu 22.04 baseline (2.35). Build on the baseline image.")
+    if "GLIBC_PRIVATE" in versions or "GLIBC_ABI_" in versions:
+        raise SystemExit(f"Unsupported private/new glibc ABI in {path}")
+
+
 def package(target, skip_build=False, installer=False):
     triple = TARGETS[target]
+    if installer and target != "windows-x64":
+        raise SystemExit("--installer is only supported for windows-x64.")
+    if target.startswith("linux-") and platform.system() != "Linux":
+        raise SystemExit("Linux packaging requires Linux. Use a Linux host or run the command inside WSL; cross-architecture builds also need a target linker and sysroot.")
     if target == "macos-arm64" and platform.system() != "Darwin":
         raise SystemExit("macOS packaging requires macOS (codesign, sips, iconutil and ditto).")
     if target == "windows-x64" and platform.system() != "Windows":
@@ -57,6 +79,9 @@ def package(target, skip_build=False, installer=False):
     for name in ("atelier-viewer", "atelier"):
         if not (binaries / (name + suffix)).is_file():
             raise SystemExit(f"Missing binary: {binaries / (name + suffix)}")
+    if target.startswith("linux-"):
+        for name in ("atelier-viewer", "atelier"):
+            validate_linux_binary(binaries / name, target)
     out = ROOT / "dist" / version / target
     if out.exists():
         shutil.rmtree(out)
@@ -98,6 +123,30 @@ def package(target, skip_build=False, installer=False):
         run("codesign", "--verify", "--deep", "--strict", str(app))
         run("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(app),
             str(out / "atelier-macos-arm64.zip"))
+    elif target.startswith("linux-"):
+        # Tar records Unix modes explicitly, independent of the source build's umask.
+        with tarfile.open(out / f"atelier-{target}.tar.gz", "w:gz") as archive:
+            for source, name, mode in (
+                (binaries / "atelier-viewer", "atelier-viewer", 0o755),
+                (binaries / "atelier", "atelier", 0o755),
+                (ROOT / "README.md", "README.md", 0o644),
+                (ROOT / "crates/atelier-app/assets/atelier.png", "atelier.png", 0o644),
+                (ROOT / "tools/linux_install.py", "install.py", 0o644),
+                (ROOT / "installer/linux/org.atelier.Viewer.metainfo.xml", "org.atelier.Viewer.metainfo.xml", 0o644),
+            ):
+                info = archive.gettarinfo(str(source), arcname=f"atelier-{target}/{name}")
+                info.mode = mode
+                info.uid = info.gid = 0
+                info.uname = info.gname = "root"
+                with source.open("rb") as content:
+                    archive.addfile(info, content)
+            import io
+            data = json.dumps({"version": version, "target": target,
+                               "glibc_baseline": "2.35", "format": 1}).encode("utf-8")
+            info = tarfile.TarInfo(f"atelier-{target}/package.json")
+            info.mode = 0o644
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
     else:
         shutil.copy2(binaries / "atelier-viewer.exe", out / "atelier-windows-x64.exe")
         shutil.copy2(binaries / "atelier.exe", out / "atelier-cli-windows-x64.exe")

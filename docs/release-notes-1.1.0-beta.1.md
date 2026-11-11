@@ -1,5 +1,8 @@
 # Atelier 1.1.0-beta.1
 
+> Release snapshot. Later working-tree changes and remaining work are tracked in the
+> [roadmap](roadmap.md); these notes are not current platform-validation results.
+
 This prerelease adds document change tracking and a dedicated review pane.
 
 - Toggle the right-hand review pane from the SVG comment button. It sits beside the document with a small margin.

@@ -110,6 +110,20 @@ impl Document {
         Self::open_with_password(data, &self.password)
     }
 
+    /// Resolve a historical object graph against the unchanged source bytes.
+    pub(crate) fn at_xref(&self, offset: usize) -> Result<Self> {
+        let table = xref::read_from(&self.data, self.header_offset, offset)?;
+        Self::build(
+            self.data.clone(),
+            self.version.clone(),
+            self.header_offset,
+            table,
+            false,
+            Vec::new(),
+        )
+        .unlock(&self.password)
+    }
+
     fn build(
         data: Arc<[u8]>,
         version: String,

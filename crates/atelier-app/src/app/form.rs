@@ -58,6 +58,10 @@ enum EditMenu {
 }
 
 impl FormView {
+    pub(super) fn is_editing(&self) -> bool {
+        self.editor.is_some()
+    }
+
     pub fn new(form: Form, doc: &atelier_syntax::Document) -> Self {
         let tab = form.tab_order(doc);
         Self {
@@ -427,6 +431,20 @@ impl Viewer {
             for &at in &fv.tab {
                 if let Some(r) = self.widget_rect(at, origin).filter(|r| r.intersects(view)) {
                     painter.rect_filled(r, 0.0, FIELD_TINT);
+                }
+            }
+            // Signature fields waiting to be signed take a click too.
+            for (i, f) in fv.form.fields.iter().enumerate() {
+                if f.kind != FieldKind::Signature || f.value != Value::None {
+                    continue;
+                }
+                for j in 0..f.widgets.len() {
+                    if let Some(r) = self
+                        .widget_rect((i, j), origin)
+                        .filter(|r| r.intersects(view) && !f.widgets[j].is_hidden())
+                    {
+                        painter.rect_filled(r, 0.0, FIELD_TINT);
+                    }
                 }
             }
         }

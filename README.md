@@ -6,8 +6,10 @@ A native PDF viewer and editor, written from the ground up in Rust. No webview:
 the PDF engine (parsing, decompression, fonts, rendering, saving) is our own code,
 and the app draws pages straight to the GPU.
 
-Packaged releases target Windows x64 and macOS on Apple Silicon.
-Linux can be built from source.
+Release packaging supports Windows x64, macOS on Apple Silicon, and Linux x64/ARM64
+(GNU glibc 2.35+). Linux packages include a per-user installer and managed updates. The current development
+host is Windows; macOS runtime validation and Keychain work are deferred until a Mac or native CI is available.
+See the [single roadmap and current status](docs/roadmap.md) for all planned work.
 
 ### Status
 The core viewer and editor are in place: pages render with paths, strokes,
@@ -69,16 +71,23 @@ configurations are in `.run/`. Build packages locally with:
 python3 tools/package_release.py macos-arm64
 # On Windows, with MSVC build tools and Inno Setup 6:
 python tools/package_release.py windows-x64 --installer
+# On Linux, with the corresponding target linker and libraries:
+python3 tools/package_release.py linux-x64
+python3 tools/package_release.py linux-arm64
+# Or build both Linux targets through Docker on any host:
+python tools/package_linux.py both
 ```
 
 Packages and checksums are written to `dist/<version>/<platform>/`. A matching
-`v<version>` tag builds both platforms and creates a complete draft GitHub release;
+`v<version>` tag builds all four platforms and creates a complete draft GitHub release;
 manual workflow runs produce downloadable build artifacts. Stable tags use
 `v1.0.0`; Preview tags use a suffix such as `v1.1.0-beta.1`.
 
-The existing updater supports Windows installation and macOS manual downloads.
-See [release operations and the update/channel plan](docs/releases.md) for
-prerequisites, publication steps, signing limitations and planned improvements.
+The updater supports Windows installation and verified updates/rollback for managed
+Linux installations. macOS and portable Linux copies use manual downloads.
+See [release operations](docs/releases.md) for
+prerequisites, publication steps and signing limitations. Development priorities
+are maintained in the [roadmap](docs/roadmap.md).
 
 ## Tabs and recent files
 
@@ -125,17 +134,30 @@ Both export to a separate file and leave the working document open.
   owner access, with unrestricted permissions after opening. New passwords must
   be printable ASCII and at most 127 bytes. Changing existing encryption and
   encrypting documents with signature fields are not supported yet.
-- Signing uses an installed `openssl` command and a PEM certificate/private key,
-  producing an invisible `adbe.pkcs7.detached` CMS signature over the current
-  revision. Placed ink is part of that signed revision. A private key password
-  can be supplied for an encrypted PEM; it is passed to the child process through
-  its environment and is not stored in settings. Atelier does not yet validate
-  certificate trust, expiration, revocation, or signatures when opening files.
-  PKCS#12, OS certificate stores, timestamps and signing encrypted PDFs are future work.
+- File signing uses OpenSSL with PEM credentials or a PKCS#12 identity (`.p12`/`.pfx`).
+  Select the identity type in **Document security**, choose credentials and enter any
+  key/identity password. PKCS#12 files must contain one signing identity; included CA
+  certificates are embedded in CMS. Passwordless identities are supported.
+- On Windows, **Windows certificate store** discovers identities in the current user's
+  Personal store. Select a certificate by subject and thumbprint; Windows handles private
+  key access and may prompt for authorization. Native signing includes the signer
+  certificate only and does not require OpenSSL. Mac Keychain is not implemented.
+- Both providers create an invisible detached CMS signature over the current revision,
+  including placed ink. Private keys are not extracted into Atelier settings; passwords
+  are not saved or placed in command arguments. Encrypted-PDF signing is unsupported.
+- The sidebar's **Signatures** tab automatically checks supported detached CMS using
+  OpenSSL. It lists each verifying signer, certificate details, signed-byte endpoint and
+  later-byte warnings, with separate integrity, chain trust and date results. **Verify
+  again** refreshes results. Choose a PEM CA bundle for this document or use OpenSSL's
+  configured CA store, which can differ from the OS store. Embedded certificates do not
+  establish trust. Certificate checks use purpose `any`, not document-signing policy.
 
-Tests cover password rejection and reopening, Apple PDFKit interoperability on
-macOS, and external CMS verification with OpenSSL, including rejection after tampering.
-See [feature passes and implementation options](docs/feature-passes.md) for the next steps.
+Revocation, trusted timestamps, historical signature enumeration and classification of
+subsequent edits remain unsupported. A valid signature over earlier bytes does not
+certify later changes. No overall trusted-document or PAdES conformance is claimed.
+Tests cover signing and tampering, PKCS#12 and PEM failures, chain/date checks, and native
+Windows CMS with ephemeral test keys. Historical Mac tests do not validate this working
+tree on macOS. See the [roadmap](docs/roadmap.md) for scope, evidence and outstanding gates.
 
 ## Organizing pages
 
@@ -155,10 +177,63 @@ Each main toolbar button's icon/text mode is configurable in Settings; **Set all
 applies one style to every configurable button. macOS uses its native titlebar
 so window controls retain the system's vertical placement.
 
-Changes are saved like any other. Once pages are removed, saving writes the
-file out whole without them, so their content is gone from the file's bytes
-and not only from its page list. Saving pages as a new file leaves out
-everything the other pages used, including the form and bookmarks.
+Saving page deletion uses a full rewrite, but tracked history can still retain earlier
+page snapshots. Deleting a page is not secure erasure. Extracting pages into a new file
+omits source-level forms/bookmarks and begins a fresh history.
+
+## Finding tables and form fields
+
+**Find tables and form fields…** in the main menu (also on the inspector's Fields tab
+when a file has none) looks at every page of a printed form for ruled tables, boxes,
+lines to write on and check boxes, and suggests a field for each, named after the
+label printed beside it or, in a table, its row and column headings. Places that
+already have a field are left alone.
+
+Suggestions lie over the pages in green. Click one to pick it (Tab goes to the next),
+drag it to move it and its edges to resize it, and use the bar at the bottom to
+rename it, change its kind (one line of text, several lines, or a check box), add it
+(Enter, or a double click) or dismiss it (Delete). **Add all** takes every suggestion,
+and dragging on bare page draws a field by hand. Added fields fill in like any others
+and are saved with the file; until then they can still be renamed or removed, and any
+field that is not read-only can be moved and resized the same way. Tables are outlined
+in purple, and **Tables** in the bar copies one as tab-separated text for a spreadsheet.
+
+A blank labelled for a signature ("Signature", "Sign here") is suggested as an empty
+signature field, and one labelled for initials as a short text field set in the middle
+of its box; labels are read in English only. A short blank (up to an inch and a
+quarter) set against a statement to be agreed to, such as "____ I certify that…" or
+"____ We hereby acknowledge…", is taken as one for initials too, whether the statement
+follows the blank, ends just before it or stands over it; a misspelt or misread letter
+in the verb is allowed for. Clicking an empty signature field puts
+your saved ink signature in it, sized to fit, or opens the pad to draw one first.
+A file with a signature field cannot be exported with **Encrypt a copy**.
+
+Text in added fields is sized to fit its box, shrinking as more is typed, unless a
+size is set: pick one in the review bar, or right-click any text field and use
+**Text size**. A ticked check box shows a filled square by default. The mark (filled
+square, check, cross, dot, diamond or star) is a preference in Settings under
+**Forms**; **Check marks** in the review bar gives the open document a mark of its own,
+kept in the file, and can redraw every check box with it; and each check box can be
+given another from the bar or its right-click menu (**Mark when ticked**).
+
+Detection works from what the page draws, so it needs no network and no model. Scans
+are read from their picture instead: ruled boxes and tables are found, lines to write
+on once OCR has read the labels beside them, and small check boxes not at all. Radio buttons and drop-down lists are
+not suggested, and nothing can be added to an XFA form or to a
+signed file whose signature forbids changes. `atelier detect file.pdf [-o out.pdf]`
+does the same from the command line.
+
+## Changes and history
+
+The review pane's **Changes** tab supports opt-in tracking, explicit editing sessions,
+author/time and before/after details, revision navigation, dependency-safe Accept/Reject,
+and tracked undo/redo. Form, script-driven field, visibility, page, annotation and
+comment edits can be recorded; arbitrary page text replacement remains unsupported.
+
+The PDF contains a private snapshot journal that other viewers do not understand and
+may discard. Earlier values and deleted content can remain recoverable. Current history
+restores snapshots, not independent semantic merges. See [editing history](docs/editing-history.md)
+for property tracking/storage and the [roadmap](docs/roadmap.md) for planned extensions.
 
 ## Form scripts
 
@@ -191,7 +266,8 @@ links that launch programs, print scripts) ever runs.
 | Ctrl+O | Open a file, in a new tab |
 | Ctrl+Tab, Ctrl+Shift+Tab | Next and previous tab |
 | Ctrl+W | Close the tab (asks first when it has unsaved changes) |
-| Ctrl+Z | Take back the newest mark |
+| Ctrl+Z | Undo a tracked edit or the latest annotation |
+| Ctrl+Shift+Z | Redo a tracked edit |
 | Ctrl+wheel, Ctrl+= and Ctrl+−, Ctrl+0 | Zoom around the pointer, zoom in and out, 100% |
 | Page Up, Page Down, Space, Home, End, arrows | Move through the document |
 | Drag | Select text; Ctrl+C copies it, Esc clears it |
@@ -228,13 +304,9 @@ Atelier and with poppler's `pdftoppm` and prints how many pixels differ
 compares every glyph outline with fontTools'. `tools/gen_font_data.py`
 regenerates the font tables in `atelier-font/src/data`.
 
-## Next steps
+## Development roadmap
 
-The original phase list is complete enough to retire. The next rendering step
-is to improve transparency fidelity, especially isolated and knockout groups,
-then build a small in-house visual regression corpus for blend modes, soft
-masks, shadings and patterns. Keep the corpus alongside the renderer so each
-fix has a reproducible example and can be compared with a reference renderer.
-
-After that, prioritize tagged PDF structure and accessibility, then broaden
-the GUI's responsive navigation and contextual document tools.
+The [roadmap and current status](docs/roadmap.md) is the only implementation plan.
+It groups shared foundations, records completed work and acceptance gates, and separates
+Windows-host work from deferred platform tasks. See [editing history](docs/editing-history.md)
+for current revision semantics and the [historical QA record](QA_EVALUATION.md) for past observations.

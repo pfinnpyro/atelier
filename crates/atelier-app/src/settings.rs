@@ -55,6 +55,8 @@ pub struct Settings {
     pub check_updates: bool,
     /// Offer preview releases as well as stable ones.
     pub preview: bool,
+    /// The mark ticked check boxes show, for check boxes Atelier adds.
+    pub check_mark: atelier_form::CheckMark,
 }
 
 impl Default for Settings {
@@ -71,6 +73,7 @@ impl Default for Settings {
             sidebar: true,
             check_updates: true,
             preview: false,
+            check_mark: atelier_form::CheckMark::default(),
         }
     }
 }
@@ -147,6 +150,9 @@ impl Settings {
                 "sidebar" => s.sidebar = on,
                 "check-updates" => s.check_updates = on,
                 "channel" => s.preview = value.trim() == "preview",
+                "check-mark" => {
+                    s.check_mark = atelier_form::CheckMark::parse(value).unwrap_or_default();
+                }
                 _ => {}
             }
         }
@@ -172,6 +178,7 @@ impl Settings {
             if self.preview { "preview" } else { "stable" }
         );
         text.push_str(&format!("certify-ink = {}\n", self.certify_ink));
+        text.push_str(&format!("check-mark = {}\n", self.check_mark.key()));
         for (index, display) in self.toolbar_display.iter().enumerate() {
             text.push_str(&format!("toolbar-{index} = {}\n", display.key()));
         }
@@ -214,6 +221,7 @@ mod tests {
             sidebar: false,
             check_updates: false,
             preview: true,
+            check_mark: atelier_form::CheckMark::Cross,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(

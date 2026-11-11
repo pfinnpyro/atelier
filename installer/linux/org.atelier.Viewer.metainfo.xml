@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.atelier.Viewer</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <!-- Project licensing must be supplied by the repository owner. -->
+  <name>Atelier</name>
+  <summary>View, fill and edit PDF documents</summary>
+  <description><p>A native PDF viewer and editor with form filling, annotations, page organization, printing and OCR.</p></description>
+  <developer_name>Atelier contributors</developer_name>
+  <launchable type="desktop-id">org.atelier.Viewer.desktop</launchable>
+  <url type="homepage">https://github.com/pfinnpyro/atelier</url>
+  <url type="bugtracker">https://github.com/pfinnpyro/atelier/issues</url>
+  <provides><binary>atelier-viewer</binary><binary>atelier</binary></provides>
+  <categories><category>Office</category><category>Viewer</category></categories>
+  <content_rating type="oars-1.1"/>
+</component>

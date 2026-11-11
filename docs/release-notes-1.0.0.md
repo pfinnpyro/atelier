@@ -1,5 +1,8 @@
 # Atelier 1.0.0
 
+> Release snapshot. Later working-tree changes and remaining work are tracked in the
+> [roadmap](roadmap.md); these notes are not current platform-validation results.
+
 The first official Atelier release, with packaged builds for Apple Silicon Macs
 and Windows x64.
 
