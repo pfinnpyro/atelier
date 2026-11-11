@@ -4,7 +4,21 @@
 > [roadmap](roadmap.md); these notes are not current platform-validation results.
 
 This prerelease adds certificate signing, signature verification and signature-aware
-editing guards, editing sessions and field formatting, and Linux packages.
+editing guards, editing sessions and field formatting, finding form fields on printed
+forms, and Linux packages.
+
+- **Find tables and form fields…** (main menu, and the inspector's Fields tab when a file
+  has none) looks over a printed form for ruled tables, boxes, lines to write on and check
+  boxes, and suggests a field for each, named after its label or its table row and column.
+  Review the suggestions over the page: move, resize, rename, add or dismiss them, add them
+  all, or draw a field by hand. Signature and initials blanks are recognised (labels are
+  read in English only), and tables can be copied as tab-separated text. Scans are read
+  from their picture: boxes and tables are found, lines to write on once OCR has read the
+  labels, and small check boxes not at all. `atelier detect` does the same from the
+  command line.
+- Text in added fields sizes itself to fit unless a size is set. The mark a ticked check
+  box shows can be chosen in Settings, for one document, or for one box.
+- Auto-orient no longer turns upright scans set in capitals upside down.
 
 - **Sign with certificate…** (Save dropdown) signs a copy of the current revision with a
   PEM key/certificate or a PKCS#12 identity (`.p12`/`.pfx`, with or without a password).
