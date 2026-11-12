@@ -10,6 +10,7 @@ mod icons;
 mod macos;
 #[cfg(target_os = "macos")]
 mod menu_bar;
+mod profiles;
 mod recent;
 mod settings;
 mod update;

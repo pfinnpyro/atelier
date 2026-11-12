@@ -60,6 +60,16 @@ pub struct Aes {
     round_keys: Vec<[u8; 16]>,
 }
 
+impl Drop for Aes {
+    /// The round keys give the key away, so they do not outlive it.
+    fn drop(&mut self) {
+        for k in &mut self.round_keys {
+            k.fill(0);
+        }
+        std::hint::black_box(&self.round_keys);
+    }
+}
+
 impl Aes {
     /// Expands a 16-, 24- or 32-byte key; `None` for any other length.
     pub fn new(key: &[u8]) -> Option<Self> {

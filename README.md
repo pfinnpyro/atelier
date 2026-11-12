@@ -169,6 +169,7 @@ Move to start/end, rotate and export work on the selected pages.
   beginning/end, or before/after the selected pages.
 - **Split…** exports two new PDFs at a page boundary.
 - **Export…** saves the selected pages as a separate PDF.
+- **Print selected…** opens the Print dialog on the selected pages.
 
 The navigation sidebar retains page previews, outline, thumbnail spreads,
 selection, rotation and deletion. Find (Ctrl/Cmd+F or the main menu) reveals
@@ -222,6 +223,44 @@ on once OCR has read the labels beside them, and small check boxes not at all. R
 not suggested, and nothing can be added to an XFA form or to a
 signed file whose signature forbids changes. `atelier detect file.pdf [-o out.pdf]`
 does the same from the command line.
+
+## Filling forms from a profile
+
+**Fill from a profile…** in the main menu keeps named sets of details, such as
+"Home" and "Work", and fills forms with them. A profile has places for a name, a
+point of contact, a mailing address, a street address, city, state, ZIP code, email
+and phone, and takes any other details you add under labels of your own.
+
+Pick a profile and choose **This page** or **Whole document**. Atelier lists the
+fields it would fill and with what; untick any that are wrong, then **Fill**. Fields
+that already hold something are left alone unless **Replace what is already filled
+in** is ticked. Only text fields and lists of choices are filled, never check boxes,
+password fields or read-only ones. The search box finds profiles by name or by
+anything in them, allowing for a misspelling.
+
+Fields are matched by what they are called, their tooltip first and their name
+otherwise. Word order, filler words ("Name of applicant"), abbreviations ("Tel",
+"Addr") and small misspellings are allowed for; extra words that change the meaning
+are not, so "Company name", "Spouse name" and "Address line 2" are left empty, as is
+anything in a group named for somebody else (`Employer.Address`). A field asking for
+city, state and ZIP together gets all three. A detail you add is matched by its
+label, and commas give it other names: "SSN, Social security number". Labels are
+read in English only. A printed form needs its fields first: see above.
+
+A profile can be encrypted with a passphrase. An encrypted profile is decrypted only
+into memory, and only while the Form profiles window is open: closing the window,
+**Lock**, or five minutes without use overwrites the details and the keys, and nothing
+decrypted is ever written to disk. The passphrase is not kept, and without it the
+profile cannot be recovered. Only the profile's name is readable in its file. What a
+profile fills in becomes part of the document, as if typed.
+
+The limits: the file is sealed with PBKDF2-HMAC-SHA256 (600,000 rounds), AES-256-CBC
+and HMAC-SHA256 from Atelier's own `atelier-crypto`, which has not been independently
+reviewed. Overwriting is best effort: the text boxes used to edit a profile keep
+copies that are dropped but not overwritten, memory can be paged to disk by the
+system, and turning encryption on overwrites the old plain file in place, which a
+solid-state drive may not honour. Profiles are kept in a `profiles` folder beside
+the settings file.
 
 ## Changes and history
 

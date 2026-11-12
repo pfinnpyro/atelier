@@ -37,3 +37,7 @@ debug = 1
 [profile.dev.package.atelier-filters]
 opt-level = 2
 
+# Unlocking an encrypted profile hashes its passphrase hundreds of
+# thousands of times, which would take most of a minute unoptimised.
+[profile.dev.package.atelier-crypto]
+opt-level = 2

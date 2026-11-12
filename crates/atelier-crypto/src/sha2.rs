@@ -107,54 +107,66 @@ fn pad(data: &[u8], block: usize, len_bytes: usize) -> Vec<u8> {
     m
 }
 
-/// The SHA-256 hash of `data`.
-pub fn sha256(data: &[u8]) -> [u8; 32] {
-    let mut h: [u32; 8] = [
-        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
-        0x5be0cd19,
-    ];
-    for block in pad(data, 64, 8).chunks_exact(64) {
-        let mut w = [0u32; 64];
-        for i in 0..16 {
-            w[i] = u32::from_be_bytes([
-                block[i * 4],
-                block[i * 4 + 1],
-                block[i * 4 + 2],
-                block[i * 4 + 3],
-            ]);
-        }
-        for i in 16..64 {
-            let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
-            let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
-            w[i] = w[i - 16]
-                .wrapping_add(s0)
-                .wrapping_add(w[i - 7])
-                .wrapping_add(s1);
-        }
-        let mut v = h;
-        for i in 0..64 {
-            let [a, b, c, d, e, f, g, hh] = v;
-            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let ch = (e & f) ^ (!e & g);
-            let t1 = hh
-                .wrapping_add(s1)
-                .wrapping_add(ch)
-                .wrapping_add(K256[i])
-                .wrapping_add(w[i]);
-            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
-            let maj = (a & b) ^ (a & c) ^ (b & c);
-            let t2 = s0.wrapping_add(maj);
-            v = [t1.wrapping_add(t2), a, b, c, d.wrapping_add(t1), e, f, g];
-        }
-        for (x, y) in h.iter_mut().zip(v) {
-            *x = x.wrapping_add(y);
-        }
+/// The state SHA-256 starts from.
+pub(crate) const INIT256: [u32; 8] = [
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+];
+
+/// Mixes one 64-byte block into a SHA-256 state.
+pub(crate) fn compress256(h: &mut [u32; 8], block: &[u8]) {
+    let mut w = [0u32; 64];
+    for i in 0..16 {
+        w[i] = u32::from_be_bytes([
+            block[i * 4],
+            block[i * 4 + 1],
+            block[i * 4 + 2],
+            block[i * 4 + 3],
+        ]);
     }
+    for i in 16..64 {
+        let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
+        let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
+        w[i] = w[i - 16]
+            .wrapping_add(s0)
+            .wrapping_add(w[i - 7])
+            .wrapping_add(s1);
+    }
+    let mut v = *h;
+    for i in 0..64 {
+        let [a, b, c, d, e, f, g, hh] = v;
+        let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+        let ch = (e & f) ^ (!e & g);
+        let t1 = hh
+            .wrapping_add(s1)
+            .wrapping_add(ch)
+            .wrapping_add(K256[i])
+            .wrapping_add(w[i]);
+        let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+        let maj = (a & b) ^ (a & c) ^ (b & c);
+        let t2 = s0.wrapping_add(maj);
+        v = [t1.wrapping_add(t2), a, b, c, d.wrapping_add(t1), e, f, g];
+    }
+    for (x, y) in h.iter_mut().zip(v) {
+        *x = x.wrapping_add(y);
+    }
+}
+
+/// A SHA-256 state as the 32 bytes of a hash.
+pub(crate) fn output256(h: &[u32; 8]) -> [u8; 32] {
     let mut out = [0u8; 32];
     for (i, x) in h.iter().enumerate() {
         out[i * 4..i * 4 + 4].copy_from_slice(&x.to_be_bytes());
     }
     out
+}
+
+/// The SHA-256 hash of `data`.
+pub fn sha256(data: &[u8]) -> [u8; 32] {
+    let mut h = INIT256;
+    for block in pad(data, 64, 8).chunks_exact(64) {
+        compress256(&mut h, block);
+    }
+    output256(&h)
 }
 
 fn sha512_core(data: &[u8], mut h: [u64; 8]) -> [u8; 64] {

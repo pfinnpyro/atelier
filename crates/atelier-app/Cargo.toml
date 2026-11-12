@@ -30,6 +30,8 @@ rfd = "0.17"
 # Already part of eframe; used directly to read the clipboard for Paste.
 arboard = { version = "3.6", default-features = false }
 image = "0.25.10"
+# Salts and IVs for encrypted form profiles.
+getrandom = "0.3"
 
 # The workspace forbids unsafe code; this crate only denies it, so the one
 # module that talks to AppKit (`macos.rs`) can allow it.

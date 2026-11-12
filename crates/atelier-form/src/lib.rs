@@ -11,6 +11,7 @@ mod detect;
 mod fill;
 mod new_field;
 mod pages;
+mod profile;
 mod revisions;
 mod scripts;
 mod session;
@@ -32,6 +33,9 @@ pub use detect::{
 pub use fill::FillWarning;
 pub use new_field::{CheckMark, NewField, NewFieldKind};
 pub use pages::PageSlot;
+pub use profile::{
+    Entry, EntryKind, Planned, Profile, Skipped, Standard, field_label, plan, search, wipe_string,
+};
 pub use revisions::{Revision, RevisionChange, RevisionEvent, RevisionState};
 pub use scripts::{
     Action, FieldScripts, FormScripts, Hotspot, document_actions, form_scripts, hotspots,

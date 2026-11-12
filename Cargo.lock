@@ -430,6 +430,7 @@ dependencies = [
  "atelier-view",
  "eframe",
  "egui_extras",
+ "getrandom 0.3.4",
  "image",
  "muda",
  "objc2 0.6.5",
