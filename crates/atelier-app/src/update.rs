@@ -18,9 +18,17 @@ use json::Value;
 
 /// Where releases come from.
 pub const REPO: &str = "pfinnpyro/atelier";
-/// The program for a portable copy, the installer, and the sums.
+/// The program for a portable copy, the installer, and the sums. The
+/// FIPS build has packages of its own, so that an update never swaps the
+/// system's validated cryptography for Atelier's own.
+#[cfg(not(feature = "fips"))]
 const EXE_ASSET: &str = "atelier-windows-x64.exe";
+#[cfg(not(feature = "fips"))]
 const SETUP_ASSET: &str = "atelier-setup-windows-x64.exe";
+#[cfg(feature = "fips")]
+const EXE_ASSET: &str = "atelier-windows-x64-fips.exe";
+#[cfg(feature = "fips")]
+const SETUP_ASSET: &str = "atelier-setup-windows-x64-fips.exe";
 /// The zipped Atelier.app.
 const MAC_ASSET: &str = "atelier-macos-arm64.zip";
 const SUMS_ASSET: &str = "SHA256SUMS.txt";
@@ -162,6 +170,15 @@ pub fn newest_for_platform(releases: &[Release], preview: bool, than: &Version) 
         let compatible: Vec<_> = releases
             .iter()
             .filter(|r| r.asset(MAC_ASSET).is_some() && r.asset(SUMS_ASSET).is_some())
+            .cloned()
+            .collect();
+        newest(&compatible, preview, than)
+    } else if cfg!(feature = "fips") {
+        // A FIPS build takes only releases that carry FIPS packages.
+        let compatible: Vec<_> = releases
+            .iter()
+            .filter(|r| r.asset(EXE_ASSET).is_some() && r.asset(SETUP_ASSET).is_some())
+            .filter(|r| r.asset(SUMS_ASSET).is_some())
             .cloned()
             .collect();
         newest(&compatible, preview, than)

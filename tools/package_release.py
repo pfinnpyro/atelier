@@ -55,8 +55,10 @@ def validate_linux_binary(path, target):
         raise SystemExit(f"Unsupported private/new glibc ABI in {path}")
 
 
-def package(target, skip_build=False, installer=False):
+def package(target, skip_build=False, installer=False, fips=False):
     triple = TARGETS[target]
+    if fips and target != "windows-x64":
+        raise SystemExit("--fips is only supported for windows-x64: the validated module wired up so far is Windows CNG.")
     if installer and target != "windows-x64":
         raise SystemExit("--installer is only supported for windows-x64.")
     if target.startswith("linux-") and platform.system() != "Linux":
@@ -69,8 +71,10 @@ def package(target, skip_build=False, installer=False):
         ["cargo", "metadata", "--no-deps", "--format-version=1", "--locked", "--offline"], cwd=ROOT))
     version = next(p["version"] for p in metadata["packages"] if p["name"] == "atelier-app")
     if not skip_build:
+        # The FIPS build seals form profiles with the system's validated module.
+        features = ("--features", "atelier-app/fips") if fips else ()
         run("cargo", "build", "--locked", "--release", "--target", triple,
-            "-p", "atelier-app", "-p", "atelier-cli")
+            "-p", "atelier-app", "-p", "atelier-cli", *features)
     target_dir = Path(os.environ.get("CARGO_TARGET_DIR", ROOT / "target"))
     if not target_dir.is_absolute():
         target_dir = ROOT / target_dir
@@ -82,7 +86,10 @@ def package(target, skip_build=False, installer=False):
     if target.startswith("linux-"):
         for name in ("atelier-viewer", "atelier"):
             validate_linux_binary(binaries / name, target)
-    out = ROOT / "dist" / version / target
+    # FIPS packages carry their own names, so the two sets can sit in one
+    # release and each build updates to its own kind.
+    variant = "-fips" if fips else ""
+    out = ROOT / "dist" / version / (target + variant)
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
@@ -148,16 +155,16 @@ def package(target, skip_build=False, installer=False):
             info.size = len(data)
             archive.addfile(info, io.BytesIO(data))
     else:
-        shutil.copy2(binaries / "atelier-viewer.exe", out / "atelier-windows-x64.exe")
-        shutil.copy2(binaries / "atelier.exe", out / "atelier-cli-windows-x64.exe")
-        with zipfile.ZipFile(out / "atelier-windows-x64.zip", "w", zipfile.ZIP_DEFLATED) as archive:
+        shutil.copy2(binaries / "atelier-viewer.exe", out / f"atelier-windows-x64{variant}.exe")
+        shutil.copy2(binaries / "atelier.exe", out / f"atelier-cli-windows-x64{variant}.exe")
+        with zipfile.ZipFile(out / f"atelier-windows-x64{variant}.zip", "w", zipfile.ZIP_DEFLATED) as archive:
             archive.write(binaries / "atelier-viewer.exe", "atelier-viewer.exe")
             archive.write(binaries / "atelier.exe", "atelier.exe")
             archive.write(ROOT / "README.md", "README.md")
         if installer:
             iscc = shutil.which("ISCC.exe") or str(Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)")) / "Inno Setup 6/ISCC.exe")
             run(iscc, f"/DAppVersion={version}", f"/DBinaryDir={binaries}",
-                f"/O{out}", "/Fatelier-setup-windows-x64", str(ROOT / "installer/atelier.iss"))
+                f"/O{out}", f"/Fatelier-setup-windows-x64{variant}", str(ROOT / "installer/atelier.iss"))
     checksums(out)
     print(f"Packaged Atelier {version}: {out}")
 
@@ -167,5 +174,7 @@ if __name__ == "__main__":
     parser.add_argument("target", choices=TARGETS)
     parser.add_argument("--skip-build", action="store_true", help="Package existing release binaries")
     parser.add_argument("--installer", action="store_true", help="Also build the Windows installer with Inno Setup 6")
+    parser.add_argument("--fips", action="store_true",
+                        help="Build the FIPS variant, which uses the system's validated cryptography (windows-x64 only)")
     args = parser.parse_args()
-    package(args.target, args.skip_build, args.installer)
+    package(args.target, args.skip_build, args.installer, args.fips)

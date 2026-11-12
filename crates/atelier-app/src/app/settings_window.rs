@@ -326,6 +326,12 @@ impl Viewer {
 fn about_ui(ui: &mut egui::Ui) {
     ui.heading(RichText::new("Atelier").size(22.0));
     ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
+    if cfg!(feature = "fips") {
+        ui.label(format!(
+            "FIPS build: form profiles are encrypted by {}.",
+            crate::sealing::MODULE
+        ));
+    }
     ui.add_space(6.0);
     ui.label(
         "A PDF viewer, form filler and inspector, written from the ground up in Rust: \

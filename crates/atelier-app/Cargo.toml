@@ -14,6 +14,12 @@ path = "src/main.rs"
 [build-dependencies]
 winresource = "0.1"
 
+[features]
+# Build for places that must use validated cryptography: form profiles
+# are then sealed by the operating system's FIPS-validated module (Windows
+# CNG) and not by Atelier's own code. Windows only so far.
+fips = ["dep:windows-sys"]
+
 [dependencies]
 atelier-crypto.workspace = true
 atelier-form.workspace = true
@@ -43,6 +49,8 @@ all = { level = "warn", priority = -1 }
 
 [target."cfg(windows)".dependencies]
 winreg = "0.55"
+# CNG, for the `fips` build.
+windows-sys = { version = "0.61", optional = true, features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
 
 [target."cfg(target_os = \"macos\")".dependencies]
 # The menu bar.

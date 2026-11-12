@@ -4,6 +4,8 @@
 
 mod app;
 mod chrome;
+#[cfg(all(feature = "fips", windows))]
+mod cng;
 mod default_app;
 mod icons;
 #[cfg(target_os = "macos")]
@@ -12,6 +14,7 @@ mod macos;
 mod menu_bar;
 mod profiles;
 mod recent;
+mod sealing;
 mod settings;
 mod update;
 mod worker;

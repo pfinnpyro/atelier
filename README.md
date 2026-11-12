@@ -254,9 +254,26 @@ decrypted is ever written to disk. The passphrase is not kept, and without it th
 profile cannot be recovered. Only the profile's name is readable in its file. What a
 profile fills in becomes part of the document, as if typed.
 
-The limits: the file is sealed with PBKDF2-HMAC-SHA256 (600,000 rounds), AES-256-CBC
-and HMAC-SHA256 from Atelier's own `atelier-crypto`, which has not been independently
-reviewed. Overwriting is best effort: the text boxes used to edit a profile keep
+The file is sealed with PBKDF2-HMAC-SHA256 (600,000 rounds), AES-256-CBC and
+HMAC-SHA256. Which code does that depends on the package:
+
+- The ordinary packages use Atelier's own `atelier-crypto`, which has not been
+  independently reviewed.
+- The **FIPS packages** (`-fips` in their names; Windows x64 so far) do every one of
+  those operations, and draw their random numbers, in Windows CNG's Cryptographic
+  Primitives Library, the module Microsoft has validated under FIPS 140, and run none
+  of Atelier's own cryptography for profiles. New passphrases must have at least
+  eight characters. About Atelier says when a copy is the FIPS build, and a FIPS
+  build updates only to FIPS packages.
+
+Profiles sealed by either open in the other. The FIPS build covers form profiles
+only: password-protecting a PDF, checking an update's checksum and reading encrypted
+PDFs still use Atelier's own code, as the PDF format's own scheme is not a FIPS one,
+and signatures go through OpenSSL as before. Using a validated module does not make
+Atelier itself validated; whether a FIPS build satisfies a given policy is for
+whoever accredits the system. macOS and Linux have no FIPS package yet.
+
+Overwriting is best effort: the text boxes used to edit a profile keep
 copies that are dropped but not overwritten, memory can be paged to disk by the
 system, and turning encryption on overwrites the old plain file in place, which a
 solid-state drive may not honour. Profiles are kept in a `profiles` folder beside
