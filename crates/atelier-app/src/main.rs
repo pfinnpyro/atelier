@@ -6,6 +6,10 @@ mod app;
 mod chrome;
 mod default_app;
 mod icons;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+mod menu_bar;
 mod recent;
 mod settings;
 mod update;
@@ -27,7 +31,14 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     let icon = load_icon();
-    let path = std::env::args_os().nth(1).map(PathBuf::from);
+    // Old macOS versions pass a process serial number to apps that Finder
+    // starts; it is not a file.
+    let path = std::env::args_os()
+        .nth(1)
+        .filter(|a| !a.to_string_lossy().starts_with("-psn_"))
+        .map(PathBuf::from);
+    #[cfg(target_os = "macos")]
+    macos::listen_for_apple_events();
     let options = eframe::NativeOptions {
         viewport: chrome::viewport(
             eframe::egui::ViewportBuilder::default()
