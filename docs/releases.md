@@ -245,8 +245,17 @@ The existing app checks the latest 30 GitHub releases at startup when enabled,
 compares versions, and presents release notes. On Windows it downloads the setup
 EXE for installed copies or the viewer EXE for portable copies, verifies it with
 `SHA256SUMS.txt`, and installs only after user action and saved document changes.
-macOS offers the release download page; Linux managed installs support verified
-versioned updates and rollback, while portable/source copies use manual downloads.
+On macOS it downloads `atelier-macos-arm64.zip`, verifies it with `SHA256SUMS.txt`,
+unpacks it beside the running app, checks its code signature and swaps the two
+`Atelier.app` bundles, keeping the old one as `Atelier.app.old` until the next start.
+That needs a writable folder, so a copy still running from Downloads (translocated)
+or from an `/Applications` the user cannot write to gets the release page instead.
+Linux managed installs support verified versioned updates and rollback, while
+portable/source copies use manual downloads.
+
+A preview build on the Stable channel is still offered later previews of its own
+version (1.1.0-beta.2 is offered 1.1.0-beta.3 and 1.1.0, never 1.2.0-beta.1), and a
+fresh preview install starts on the Preview channel.
 Checksums detect corruption but are not an independent authenticity guarantee.
 
 Implementation priorities for release discovery, authenticated manifests, staging,
