@@ -22,6 +22,7 @@ use eframe::egui::{self, Vec2};
 
 use super::Viewer;
 use crate::profiles::{Item, Store};
+use crate::sealing;
 
 /// An unlocked profile nobody has used for this long is locked.
 const IDLE: Duration = Duration::from_secs(5 * 60);
@@ -634,6 +635,21 @@ impl Profiles {
                         "An encrypted profile is decrypted only in memory, while this \
                          window is open. Without its passphrase it cannot be recovered.",
                     );
+                    ui.weak(match sealing::system_policy() {
+                        Some(true) => {
+                            format!(
+                                "Encrypted by {}. Windows FIPS policy is on.",
+                                sealing::MODULE
+                            )
+                        }
+                        Some(false) => {
+                            format!(
+                                "Encrypted by {}. Windows FIPS policy is off.",
+                                sealing::MODULE
+                            )
+                        }
+                        None => format!("Encrypted by {}.", sealing::MODULE),
+                    });
                 } else if draft.was_encrypted {
                     ui.colored_label(
                         ui.visuals().warn_fg_color,
@@ -676,6 +692,12 @@ impl Profiles {
             return;
         } else if draft.passphrase != draft.again {
             draft.problem = Some("The two passphrases differ.".into());
+            return;
+        } else if draft.passphrase.chars().count() < sealing::MIN_PASSPHRASE {
+            draft.problem = Some(format!(
+                "Use a passphrase of at least {} characters.",
+                sealing::MIN_PASSPHRASE
+            ));
             return;
         } else {
             store.save_sealed(id, profile, Some(&draft.passphrase))

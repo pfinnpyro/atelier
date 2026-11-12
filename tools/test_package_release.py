@@ -59,6 +59,31 @@ class LinuxPackagingTests(unittest.TestCase):
                     build.assert_not_called()
                     self.assertFalse((folder / "stale").exists())
 
+    def test_fips_packages_are_windows_only_and_named_apart(self):
+        with patch.object(packaging.subprocess, "check_output") as metadata:
+            for target in ("linux-x64", "linux-arm64", "macos-arm64"):
+                with self.assertRaisesRegex(SystemExit, "only supported for windows-x64"):
+                    packaging.package(target, fips=True)
+            metadata.assert_not_called()
+        for fips, variant in ((False, ""), (True, "-fips")):
+            with self.subTest(fips=fips), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                binary_dir = root / "custom-target" / packaging.TARGETS["windows-x64"] / "release"
+                binary_dir.mkdir(parents=True)
+                for name in ("atelier-viewer.exe", "atelier.exe"):
+                    (binary_dir / name).write_bytes(name.encode())
+                (root / "README.md").write_text("Windows packaging fixture", encoding="utf-8")
+                metadata = json.dumps({"packages": [{"name": "atelier-app", "version": "1.2.3"}]}).encode()
+                with patch.object(packaging, "ROOT", root), patch.object(packaging.platform, "system", return_value="Windows"), patch.object(packaging.subprocess, "check_output", return_value=metadata), patch.object(packaging, "run") as build, patch.dict(os.environ, {"CARGO_TARGET_DIR": "custom-target"}):
+                    packaging.package("windows-x64", fips=fips)
+                    command = build.call_args.args
+                    self.assertEqual("atelier-app/fips" in command, fips)
+                    folder = root / "dist/1.2.3" / ("windows-x64" + variant)
+                    names = {f"atelier-windows-x64{variant}.exe", f"atelier-cli-windows-x64{variant}.exe", f"atelier-windows-x64{variant}.zip"}
+                    self.assertEqual({p.name for p in folder.iterdir()}, names | {"SHA256SUMS.txt"})
+                    listed = {line.split(maxsplit=1)[1] for line in (folder / "SHA256SUMS.txt").read_text().splitlines()}
+                    self.assertEqual(listed, names)
+
     def test_linux_host_and_installer_checks_happen_before_build(self):
         with patch.object(packaging.platform, "system", return_value="Windows"), patch.object(packaging.subprocess, "check_output") as metadata:
             with self.assertRaisesRegex(SystemExit, "requires Linux"):

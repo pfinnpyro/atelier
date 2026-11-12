@@ -14,9 +14,10 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use atelier_crypto::{SealKey, wipe};
+use atelier_crypto::wipe;
 use atelier_form::{Profile, wipe_string};
 
+use crate::sealing;
 use crate::settings::Settings;
 
 const PLAIN: &str = "atelier-profile 1";
@@ -39,6 +40,8 @@ pub enum Problem {
     Locked,
     /// The system gave no random numbers to seal with.
     NoRandomness,
+    /// The cryptographic module refused or failed.
+    Module,
     /// There is nowhere to keep profiles.
     NoFolder,
     Io(String),
@@ -51,6 +54,7 @@ impl std::fmt::Display for Problem {
             Self::Damaged => f.write_str("The profile's file is damaged."),
             Self::Locked => f.write_str("Unlock the profile first."),
             Self::NoRandomness => f.write_str("The system gave no random numbers to encrypt with."),
+            Self::Module => f.write_str("The system's cryptography could not be used."),
             Self::NoFolder => f.write_str("There is no settings folder to keep profiles in."),
             Self::Io(e) => write!(f, "Could not save the profile: {e}"),
         }
@@ -65,7 +69,7 @@ impl From<std::io::Error> for Problem {
 
 /// What is needed to seal a profile again without its passphrase.
 pub struct Keys {
-    key: SealKey,
+    key: sealing::Key,
     salt: [u8; 16],
     iterations: u32,
 }
@@ -134,8 +138,11 @@ fn unhex(text: &str) -> Option<Vec<u8>> {
 
 fn random<const N: usize>() -> Result<[u8; N], Problem> {
     let mut bytes = [0u8; N];
-    getrandom::fill(&mut bytes).map_err(|_| Problem::NoRandomness)?;
-    Ok(bytes)
+    if sealing::random(&mut bytes) {
+        Ok(bytes)
+    } else {
+        Err(Problem::NoRandomness)
+    }
 }
 
 /// A sealed profile as its file has it.
@@ -335,7 +342,8 @@ impl Store {
         let path = self.path(id)?;
         let text = std::fs::read_to_string(path)?;
         let sealed = SealedFile::parse(&text).ok_or(Problem::Damaged)?;
-        let key = SealKey::derive(passphrase.as_bytes(), &sealed.salt, sealed.iterations);
+        let key = sealing::Key::derive(passphrase.as_bytes(), &sealed.salt, sealed.iterations)
+            .ok_or(Problem::Module)?;
         let secret = key
             .open(
                 &sealed.iv,
@@ -484,7 +492,8 @@ impl Store {
             Some(passphrase) => {
                 let salt = random::<16>()?;
                 Some(Keys {
-                    key: SealKey::derive(passphrase.as_bytes(), &salt, self.iterations),
+                    key: sealing::Key::derive(passphrase.as_bytes(), &salt, self.iterations)
+                        .ok_or(Problem::Module)?,
                     salt,
                     iterations: self.iterations,
                 })
@@ -502,12 +511,13 @@ impl Store {
         };
         let iv = random::<16>()?;
         let mut text = profile.to_text();
-        let (data, tag) = keys.key.seal(
+        let sealed = keys.key.seal(
             &iv,
             &header(&profile.name, keys.iterations, &keys.salt),
             text.as_bytes(),
         );
         wipe_string(&mut text);
+        let (data, tag) = sealed.ok_or(Problem::Module)?;
         let file = SealedFile {
             name: profile.name.clone(),
             iterations: keys.iterations,
