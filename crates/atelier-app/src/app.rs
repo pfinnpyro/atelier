@@ -34,6 +34,7 @@ mod menu;
 mod organize;
 mod pages;
 mod print;
+mod profiles;
 mod revisions;
 mod safety;
 mod scripts;
@@ -188,6 +189,7 @@ pub struct Viewer {
     ocr_download: Option<settings_window::Download>,
     colors: colors::Colors,
     print: print::PrintDialog,
+    profiles: profiles::Profiles,
     updater: updates::Updater,
     sidebar: Sidebar,
     /// The open files in tab order; the one in front is `None`, its state
@@ -269,6 +271,7 @@ impl Viewer {
             ocr_download: None,
             colors: colors::Colors::default(),
             print: print::PrintDialog::default(),
+            profiles: profiles::Profiles::default(),
             updater: updates::Updater::default(),
             sidebar: Sidebar::default(),
             tabs: Vec::new(),
@@ -1105,6 +1108,19 @@ impl Viewer {
                     } else {
                         self.start_detect();
                     }
+                    ui.close();
+                }
+                if ui
+                    .add(egui::Button::selectable(
+                        self.profiles.open,
+                        "Fill from a profile…",
+                    ))
+                    .on_hover_text(
+                        "Keep your name, addresses and other details, and fill forms with them",
+                    )
+                    .clicked()
+                {
+                    self.toggle_profiles();
                     ui.close();
                 }
                 ui.separator();
@@ -2054,6 +2070,7 @@ impl eframe::App for Viewer {
         self.password_window(&ctx);
         self.settings_window(&ctx);
         self.colors_window(&ctx);
+        self.profiles_window(&ctx);
         self.print_window(&ctx);
         self.download_progress(&ctx);
         self.pad_window(&ctx);

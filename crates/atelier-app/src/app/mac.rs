@@ -151,6 +151,7 @@ impl Viewer {
                 (Command::Draw, tool == Tool::Draw),
                 (Command::InkSignature, tool == Tool::Sign),
                 (Command::DetectFields, self.reviewing_fields()),
+                (Command::Profiles, self.profiles.open),
             ],
             recent: self.recent.files.clone(),
         }
@@ -208,6 +209,7 @@ impl Viewer {
                     self.start_detect();
                 }
             }
+            Command::Profiles => self.toggle_profiles(),
             Command::Sidebar => self.toggle_sidebar(),
             Command::Comments => self.annotate.toggle_comments(),
             Command::Inspector => self.inspector.open = !self.inspector.open,

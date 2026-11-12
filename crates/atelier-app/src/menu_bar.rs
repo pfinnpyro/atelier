@@ -44,6 +44,7 @@ pub enum Command {
     InkSignature,
     BackInk,
     DetectFields,
+    Profiles,
     Sidebar,
     Inspector,
     Comments,
@@ -110,6 +111,7 @@ const SIMPLE: &[Command] = &[
     Command::InkSignature,
     Command::BackInk,
     Command::DetectFields,
+    Command::Profiles,
     Command::Sidebar,
     Command::Inspector,
     Command::Comments,
@@ -259,6 +261,7 @@ impl MenuBar {
             &separator(),
             &mark,
             &bar.check(Command::DetectFields, "Find Tables and Form Fields…", None),
+            &bar.check(Command::Profiles, "Fill from a Profile…", None),
         ])
         .ok()?;
 
