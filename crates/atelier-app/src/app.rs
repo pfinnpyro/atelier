@@ -28,6 +28,8 @@ mod detect;
 mod form;
 mod identity;
 mod inspect;
+#[cfg(target_os = "macos")]
+mod mac;
 mod menu;
 mod organize;
 mod pages;
@@ -194,6 +196,8 @@ pub struct Viewer {
     recent: crate::recent::Recent,
     annotate: annotate::Annotate,
     security: security::SecurityUi,
+    #[cfg(target_os = "macos")]
+    mac: mac::Mac,
 }
 
 /// An encrypted file the password prompt is open for.
@@ -216,6 +220,8 @@ impl Viewer {
             _ => egui::ThemePreference::System,
         });
         crate::update::clean_up();
+        #[cfg(target_os = "macos")]
+        v.start_mac();
         if v.settings.check_updates {
             v.updater.check(v.settings.preview, true, v.ctx.clone());
         }
@@ -269,6 +275,8 @@ impl Viewer {
             recent: crate::recent::Recent::load(),
             annotate: annotate::Annotate::default(),
             security: security::SecurityUi::default(),
+            #[cfg(target_os = "macos")]
+            mac: mac::Mac::default(),
         }
     }
 
@@ -1046,309 +1054,349 @@ impl Viewer {
         ui.spacing_mut().interact_size.y = controls::HEIGHT;
         ui.horizontal_wrapped(|ui| {
             ui.set_row_height(controls::HEIGHT);
-            ui.menu_button(
-                crate::icons::Icon::Menu
-                    .image()
-                    .tint(ui.visuals().text_color()),
-                |ui| {
-                    if ui
-                        .add_enabled(
-                            self.open.is_some(),
-                            egui::Button::new("Find in document…").shortcut_text("Ctrl+F"),
-                        )
-                        .clicked()
-                    {
-                        self.request_find();
-                        ui.close();
-                    }
-                    if ui.button("Print…").clicked() {
-                        self.open_print();
-                        ui.close();
-                    }
-                    ui.add_enabled_ui(self.open.is_some(), |ui| {
-                        ui.menu_button("Mark", |ui| self.mark_menu(ui));
-                    });
-                    if ui
-                        .add_enabled(
-                            self.open.is_some(),
-                            egui::Button::selectable(
-                                self.reviewing_fields(),
-                                "Find tables and form fields…",
-                            ),
-                        )
-                        .on_hover_text(
-                            "Suggest fields for the boxes, lines and tables of a printed form",
-                        )
-                        .clicked()
-                    {
-                        if self.reviewing_fields() {
-                            self.close_detect();
-                        } else {
-                            self.start_detect();
-                        }
-                        ui.close();
-                    }
-                    ui.separator();
-                    if let Some(fv) = self.open.as_ref().and_then(|o| o.form.as_ref())
-                        && ui.selectable_label(fv.highlight, "Fields").clicked()
-                    {
-                        self.toggle_highlight();
-                        ui.close();
-                    }
-                    if ui
-                        .selectable_label(self.inspector.open, "Inspect")
-                        .clicked()
-                    {
-                        self.inspector.open = !self.inspector.open;
-                        ui.close();
-                    }
-                    if ui.selectable_label(self.colors.open, "Colours").clicked() {
-                        self.toggle_colors();
-                        ui.close();
-                    }
-                    if ui.button("Rotate pages left").clicked() {
-                        self.rotate_pages(-1);
-                        ui.close();
-                    }
-                    if ui.button("Rotate pages right").clicked() {
-                        self.rotate_pages(1);
-                        ui.close();
-                    }
-                    let orienting = self.open.as_ref().is_some_and(|o| o.orienting.is_some());
-                    if ui
-                        .add_enabled(!orienting, egui::Button::new("Auto-orient pages"))
-                        .clicked()
-                    {
-                        self.auto_orient();
-                        ui.close();
-                    }
-                    ui.separator();
-                    if ui
-                        .add(
-                            egui::Button::image_and_text(
-                                crate::icons::Icon::Settings.image(),
-                                "Settings…",
-                            )
-                            .image_tint_follows_text_color(true),
-                        )
-                        .clicked()
-                    {
-                        self.window = Some(Window::Settings);
-                        ui.close();
-                    }
-                    if ui.button("About Atelier").clicked() {
-                        self.window = Some(Window::About);
-                        ui.close();
-                    }
-                },
-            );
-            if ui
-                .add(
-                    crate::icons::Icon::Sidebar
-                        .button()
-                        .selected(self.settings.sidebar),
-                )
-                .on_hover_text("Page pictures and outline (F4)")
-                .clicked()
-            {
-                self.toggle_sidebar();
+            crate::chrome::traffic_light_space(ui, self.traffic_light_width());
+            // The menu bar has these on macOS.
+            if !self.native_menu_bar() {
+                self.main_menu(ui);
             }
-            let (open, recent) = controls::split_button(
-                ui,
-                "Open",
-                controls::Icon::Open,
-                self.settings.toolbar_display[0],
-                "Recent files",
-            );
-            if open.on_hover_text("Open a PDF (Ctrl+O)").clicked() {
-                self.pick_file();
-            }
-            egui::Popup::menu(&recent).show(|ui| {
-                if let Some(path) = self.recent_menu(ui) {
-                    self.open_recent(&path);
-                }
-            });
-            ui.add_enabled_ui(self.open.is_some(), |ui| {
-                let (save, options) = controls::split_button(
-                    ui,
-                    "Save",
-                    controls::Icon::Save,
-                    self.settings.toolbar_display[1],
-                    "Save options",
-                );
-                if save.on_hover_text("Save changes (Ctrl+S)").clicked() {
-                    self.save(SaveTo::Overwrite);
-                }
-                egui::Popup::menu(&options).show(|ui| {
-                    if ui
-                        .add(egui::Button::new("Save").shortcut_text("Ctrl+S"))
-                        .on_hover_text("Save over the file it was opened from")
-                        .clicked()
-                    {
-                        self.save(SaveTo::Overwrite);
-                        ui.close();
-                    }
-                    if ui
-                        .add(egui::Button::new("Save as…").shortcut_text("Ctrl+Shift+S"))
-                        .clicked()
-                    {
-                        self.save(SaveTo::As);
-                        ui.close();
-                    }
-                    if ui.button("Encrypt a copy…").clicked() {
-                        self.open_security(false);
-                        ui.close();
-                    }
-                    if ui.button("Sign with certificate…").clicked() {
-                        self.open_security(true);
-                        ui.close();
-                    }
-                    if ui.button("Save a copy…").clicked() {
-                        self.save(SaveTo::Copy);
-                        ui.close();
-                    }
-                });
-            });
-            ui.separator();
-            let enabled = self.open.is_some();
-            ui.add_enabled_ui(enabled, |ui| {
-                let centre = self.view_size / 2.0;
-                if crate::icons::button(ui, crate::icons::Icon::Minus, "Zoom out")
-                    .on_hover_text("Zoom out (Ctrl+−)")
-                    .clicked()
-                {
-                    self.zoom_by(0.8, centre);
-                }
-                let zoom = ui
-                    .add(
-                        egui::TextEdit::singleline(&mut self.zoom_input)
-                            .id_salt("custom-zoom")
-                            .desired_width(54.0)
-                            .align(egui::Align2::CENTER_CENTER),
-                    )
-                    .on_hover_text("Enter a zoom from 10% to 800%, then press Enter");
-                if zoom.lost_focus() {
-                    if ui.input(|i| i.key_pressed(Key::Enter)) {
-                        if let Some(value) = controls::parse_zoom(&self.zoom_input) {
-                            self.zoom_mode = ZoomMode::Custom;
-                            self.set_zoom(value, centre);
-                        } else {
-                            self.notice = Some("Enter a zoom between 10% and 800%.".into());
-                        }
-                    }
-                    self.zoom_input = format!("{:.0}%", self.zoom() * 100.0);
-                } else if !zoom.has_focus() {
-                    self.zoom_input = format!("{:.0}%", self.zoom() * 100.0);
-                }
-                if crate::icons::button(ui, crate::icons::Icon::Plus, "Zoom in")
-                    .on_hover_text("Zoom in (Ctrl+=)")
-                    .clicked()
-                {
-                    self.zoom_by(1.25, centre);
-                }
-                if controls::toolbar_button(
-                    ui,
-                    "Fit width",
-                    controls::Icon::FitWidth,
-                    self.settings.toolbar_display[2],
-                    self.zoom_mode == ZoomMode::FitWidth,
-                )
-                .clicked()
-                {
-                    self.zoom_mode = ZoomMode::FitWidth;
-                    self.apply_fit();
-                }
-                if controls::toolbar_button(
-                    ui,
-                    "Fit page",
-                    controls::Icon::FitPage,
-                    self.settings.toolbar_display[3],
-                    self.zoom_mode == ZoomMode::FitPage,
-                )
-                .clicked()
-                {
-                    self.zoom_mode = ZoomMode::FitPage;
-                    self.apply_fit();
-                }
-            });
-            let facing = self.open.as_ref().is_some_and(|o| o.layout.facing_pages());
-            let facing_button = ui
-                .add_enabled_ui(self.open.is_some() && !self.organize.grid, |ui| {
-                    controls::toolbar_button(
-                        ui,
-                        "Side by side",
-                        controls::Icon::SideBySide,
-                        self.settings.toolbar_display[4],
-                        facing,
-                    )
-                })
-                .inner;
-            if facing_button
-                .on_hover_text("Show two pages side by side")
-                .clicked()
-            {
-                let page = self.current_page();
-                if let Some(o) = &mut self.open {
-                    o.layout.set_facing_pages(!facing);
-                }
-                self.apply_fit();
-                self.go_to_page(page);
-            }
-            let organize_button = ui
-                .add_enabled_ui(self.open.is_some(), |ui| {
-                    controls::toolbar_button(
-                        ui,
-                        "Organize",
-                        controls::Icon::Organize,
-                        self.settings.toolbar_display[5],
-                        self.organize.grid,
-                    )
-                })
-                .inner;
-            if organize_button
-                .on_hover_text("Rearrange pages in a grid")
-                .clicked()
-            {
-                self.toggle_page_grid();
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                crate::chrome::window_buttons(ui);
+            self.toolbar_buttons(ui);
+        });
+    }
+
+    /// The menu behind the button at the start of the toolbar.
+    fn main_menu(&mut self, ui: &mut egui::Ui) {
+        ui.menu_button(
+            crate::icons::Icon::Menu
+                .image()
+                .tint(ui.visuals().text_color()),
+            |ui| {
                 if ui
-                    .add(
-                        crate::icons::Icon::SidebarRight
-                            .button()
-                            .selected(self.inspector.open),
+                    .add_enabled(
+                        self.open.is_some(),
+                        egui::Button::new("Find in document…").shortcut_text("Ctrl+F"),
                     )
-                    .on_hover_text("Toggle inspector sidebar")
+                    .clicked()
+                {
+                    self.request_find();
+                    ui.close();
+                }
+                if ui.button("Print…").clicked() {
+                    self.open_print();
+                    ui.close();
+                }
+                ui.add_enabled_ui(self.open.is_some(), |ui| {
+                    ui.menu_button("Mark", |ui| self.mark_menu(ui));
+                });
+                if ui
+                    .add_enabled(
+                        self.open.is_some(),
+                        egui::Button::selectable(
+                            self.reviewing_fields(),
+                            "Find tables and form fields…",
+                        ),
+                    )
+                    .on_hover_text(
+                        "Suggest fields for the boxes, lines and tables of a printed form",
+                    )
+                    .clicked()
+                {
+                    if self.reviewing_fields() {
+                        self.close_detect();
+                    } else {
+                        self.start_detect();
+                    }
+                    ui.close();
+                }
+                ui.separator();
+                if let Some(fv) = self.open.as_ref().and_then(|o| o.form.as_ref())
+                    && ui.selectable_label(fv.highlight, "Fields").clicked()
+                {
+                    self.toggle_highlight();
+                    ui.close();
+                }
+                if ui
+                    .selectable_label(self.inspector.open, "Inspect")
                     .clicked()
                 {
                     self.inspector.open = !self.inspector.open;
+                    ui.close();
                 }
+                if ui.selectable_label(self.colors.open, "Colours").clicked() {
+                    self.toggle_colors();
+                    ui.close();
+                }
+                if ui.button("Rotate pages left").clicked() {
+                    self.rotate_pages(-1);
+                    ui.close();
+                }
+                if ui.button("Rotate pages right").clicked() {
+                    self.rotate_pages(1);
+                    ui.close();
+                }
+                let orienting = self.open.as_ref().is_some_and(|o| o.orienting.is_some());
                 if ui
-                    .add(
-                        crate::icons::Icon::Comments
-                            .button()
-                            .selected(self.annotate.comments_open),
-                    )
-                    .on_hover_text("Toggle comments pane")
+                    .add_enabled(!orienting, egui::Button::new("Auto-orient pages"))
                     .clicked()
                 {
-                    self.annotate.toggle_comments();
+                    self.auto_orient();
+                    ui.close();
                 }
-                crate::chrome::drag_space(ui);
-                if let Some(o) = &self.open
-                    && !o.warnings.is_empty()
+                ui.separator();
+                if ui
+                    .add(
+                        egui::Button::image_and_text(
+                            crate::icons::Icon::Settings.image(),
+                            "Settings…",
+                        )
+                        .image_tint_follows_text_color(true),
+                    )
+                    .clicked()
                 {
-                    let label = format!("⚠ {}", o.warnings.len());
-                    if ui
-                        .selectable_label(self.show_warnings, label)
-                        .on_hover_text("Problems found while reading this file")
-                        .clicked()
-                    {
-                        self.show_warnings = !self.show_warnings;
-                    }
+                    self.window = Some(Window::Settings);
+                    ui.close();
+                }
+                if ui.button("About Atelier").clicked() {
+                    self.window = Some(Window::About);
+                    ui.close();
+                }
+            },
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    fn native_menu_bar(&self) -> bool {
+        self.mac.has_menu_bar()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn native_menu_bar(&self) -> bool {
+        false
+    }
+
+    #[cfg(target_os = "macos")]
+    fn traffic_light_width(&self) -> f32 {
+        self.mac.traffic_light_width
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn traffic_light_width(&self) -> f32 {
+        0.0
+    }
+
+    /// Shows or hides the second page beside each page.
+    fn toggle_facing(&mut self) {
+        let facing = self.open.as_ref().is_some_and(|o| o.layout.facing_pages());
+        let page = self.current_page();
+        if let Some(o) = &mut self.open {
+            o.layout.set_facing_pages(!facing);
+        }
+        self.apply_fit();
+        self.go_to_page(page);
+    }
+
+    /// The toolbar's buttons after the menu.
+    fn toolbar_buttons(&mut self, ui: &mut egui::Ui) {
+        if ui
+            .add(
+                crate::icons::Icon::Sidebar
+                    .button()
+                    .selected(self.settings.sidebar),
+            )
+            .on_hover_text("Page pictures and outline (F4)")
+            .clicked()
+        {
+            self.toggle_sidebar();
+        }
+        let (open, recent) = controls::split_button(
+            ui,
+            "Open",
+            controls::Icon::Open,
+            self.settings.toolbar_display[0],
+            "Recent files",
+        );
+        if open.on_hover_text("Open a PDF (Ctrl+O)").clicked() {
+            self.pick_file();
+        }
+        egui::Popup::menu(&recent).show(|ui| {
+            if let Some(path) = self.recent_menu(ui) {
+                self.open_recent(&path);
+            }
+        });
+        ui.add_enabled_ui(self.open.is_some(), |ui| {
+            let (save, options) = controls::split_button(
+                ui,
+                "Save",
+                controls::Icon::Save,
+                self.settings.toolbar_display[1],
+                "Save options",
+            );
+            if save.on_hover_text("Save changes (Ctrl+S)").clicked() {
+                self.save(SaveTo::Overwrite);
+            }
+            egui::Popup::menu(&options).show(|ui| {
+                if ui
+                    .add(egui::Button::new("Save").shortcut_text("Ctrl+S"))
+                    .on_hover_text("Save over the file it was opened from")
+                    .clicked()
+                {
+                    self.save(SaveTo::Overwrite);
+                    ui.close();
+                }
+                if ui
+                    .add(egui::Button::new("Save as…").shortcut_text("Ctrl+Shift+S"))
+                    .clicked()
+                {
+                    self.save(SaveTo::As);
+                    ui.close();
+                }
+                if ui.button("Encrypt a copy…").clicked() {
+                    self.open_security(false);
+                    ui.close();
+                }
+                if ui.button("Sign with certificate…").clicked() {
+                    self.open_security(true);
+                    ui.close();
+                }
+                if ui.button("Save a copy…").clicked() {
+                    self.save(SaveTo::Copy);
+                    ui.close();
                 }
             });
+        });
+        ui.separator();
+        let enabled = self.open.is_some();
+        ui.add_enabled_ui(enabled, |ui| {
+            let centre = self.view_size / 2.0;
+            if crate::icons::button(ui, crate::icons::Icon::Minus, "Zoom out")
+                .on_hover_text("Zoom out (Ctrl+−)")
+                .clicked()
+            {
+                self.zoom_by(0.8, centre);
+            }
+            let zoom = ui
+                .add(
+                    egui::TextEdit::singleline(&mut self.zoom_input)
+                        .id_salt("custom-zoom")
+                        .desired_width(54.0)
+                        .align(egui::Align2::CENTER_CENTER),
+                )
+                .on_hover_text("Enter a zoom from 10% to 800%, then press Enter");
+            if zoom.lost_focus() {
+                if ui.input(|i| i.key_pressed(Key::Enter)) {
+                    if let Some(value) = controls::parse_zoom(&self.zoom_input) {
+                        self.zoom_mode = ZoomMode::Custom;
+                        self.set_zoom(value, centre);
+                    } else {
+                        self.notice = Some("Enter a zoom between 10% and 800%.".into());
+                    }
+                }
+                self.zoom_input = format!("{:.0}%", self.zoom() * 100.0);
+            } else if !zoom.has_focus() {
+                self.zoom_input = format!("{:.0}%", self.zoom() * 100.0);
+            }
+            if crate::icons::button(ui, crate::icons::Icon::Plus, "Zoom in")
+                .on_hover_text("Zoom in (Ctrl+=)")
+                .clicked()
+            {
+                self.zoom_by(1.25, centre);
+            }
+            if controls::toolbar_button(
+                ui,
+                "Fit width",
+                controls::Icon::FitWidth,
+                self.settings.toolbar_display[2],
+                self.zoom_mode == ZoomMode::FitWidth,
+            )
+            .clicked()
+            {
+                self.zoom_mode = ZoomMode::FitWidth;
+                self.apply_fit();
+            }
+            if controls::toolbar_button(
+                ui,
+                "Fit page",
+                controls::Icon::FitPage,
+                self.settings.toolbar_display[3],
+                self.zoom_mode == ZoomMode::FitPage,
+            )
+            .clicked()
+            {
+                self.zoom_mode = ZoomMode::FitPage;
+                self.apply_fit();
+            }
+        });
+        let facing = self.open.as_ref().is_some_and(|o| o.layout.facing_pages());
+        let facing_button = ui
+            .add_enabled_ui(self.open.is_some() && !self.organize.grid, |ui| {
+                controls::toolbar_button(
+                    ui,
+                    "Side by side",
+                    controls::Icon::SideBySide,
+                    self.settings.toolbar_display[4],
+                    facing,
+                )
+            })
+            .inner;
+        if facing_button
+            .on_hover_text("Show two pages side by side")
+            .clicked()
+        {
+            self.toggle_facing();
+        }
+        let organize_button = ui
+            .add_enabled_ui(self.open.is_some(), |ui| {
+                controls::toolbar_button(
+                    ui,
+                    "Organize",
+                    controls::Icon::Organize,
+                    self.settings.toolbar_display[5],
+                    self.organize.grid,
+                )
+            })
+            .inner;
+        if organize_button
+            .on_hover_text("Rearrange pages in a grid")
+            .clicked()
+        {
+            self.toggle_page_grid();
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            crate::chrome::window_buttons(ui);
+            if ui
+                .add(
+                    crate::icons::Icon::SidebarRight
+                        .button()
+                        .selected(self.inspector.open),
+                )
+                .on_hover_text("Toggle inspector sidebar")
+                .clicked()
+            {
+                self.inspector.open = !self.inspector.open;
+            }
+            if ui
+                .add(
+                    crate::icons::Icon::Comments
+                        .button()
+                        .selected(self.annotate.comments_open),
+                )
+                .on_hover_text("Toggle comments pane")
+                .clicked()
+            {
+                self.annotate.toggle_comments();
+            }
+            crate::chrome::drag_space(ui);
+            if let Some(o) = &self.open
+                && !o.warnings.is_empty()
+            {
+                let label = format!("⚠ {}", o.warnings.len());
+                if ui
+                    .selectable_label(self.show_warnings, label)
+                    .on_hover_text("Problems found while reading this file")
+                    .clicked()
+                {
+                    self.show_warnings = !self.show_warnings;
+                }
+            }
         });
     }
 
@@ -1913,8 +1961,15 @@ impl Viewer {
 }
 
 impl eframe::App for Viewer {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    #[cfg(target_os = "macos")]
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        self.mac_input(raw_input);
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        #[cfg(target_os = "macos")]
+        self.mac_frame();
         let dropped = ctx.input(|i| i.raw.dropped_files.first().cloned());
         if let Some(f) = dropped {
             match f.bytes() {
@@ -1938,11 +1993,18 @@ impl eframe::App for Viewer {
             self.keyboard();
         }
 
+        let mut title_bar = egui::Rangef::new(0.0, 0.0);
         egui::Panel::top("toolbar").show(ui, |ui| {
             ui.add_space(2.0);
+            let top = ui.cursor().top();
+            title_bar = egui::Rangef::new(top, top + controls::HEIGHT);
             self.toolbar(ui);
             ui.add_space(2.0);
         });
+        #[cfg(target_os = "macos")]
+        self.place_traffic_lights(frame, title_bar);
+        #[cfg(not(target_os = "macos"))]
+        let _ = (frame, title_bar);
         self.organize_window(&ctx);
         self.tab_bar(ui);
         self.update_banner(ui);

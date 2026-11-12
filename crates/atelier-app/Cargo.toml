@@ -31,8 +31,22 @@ rfd = "0.17"
 arboard = { version = "3.6", default-features = false }
 image = "0.25.10"
 
-[lints]
-workspace = true
+# The workspace forbids unsafe code; this crate only denies it, so the one
+# module that talks to AppKit (`macos.rs`) can allow it.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
 
 [target."cfg(windows)".dependencies]
 winreg = "0.55"
+
+[target."cfg(target_os = \"macos\")".dependencies]
+# The menu bar.
+muda = { version = "0.21", default-features = false }
+# Finder's open-document events, which winit does not pass on.
+objc2 = "0.6"
+# To measure the traffic lights through eframe.
+raw-window-handle = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSAppleEventDescriptor", "NSAppleEventManager", "NSNotification", "NSString", "NSURL", "NSObject"] }

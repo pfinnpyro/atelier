@@ -1,17 +1,44 @@
-//! Platform window chrome: macOS retains traffic lights; Linux retains the
-//! compositor's decoration behavior. Windows has a client-drawn titlebar with
-//! native viewport commands. ATELIER_NATIVE_TITLEBAR opts out everywhere.
+//! Platform window chrome: on macOS the toolbar fills the title bar, with
+//! the native traffic lights at its start; Linux retains the compositor's
+//! decoration behavior. Windows has a client-drawn titlebar with native
+//! viewport commands. ATELIER_NATIVE_TITLEBAR opts out everywhere.
 use eframe::egui::{self, CursorIcon, ResizeDirection, Sense, Vec2, ViewportCommand};
 
-pub fn custom_windows() -> bool {
-    cfg!(target_os = "windows") && std::env::var_os("ATELIER_NATIVE_TITLEBAR").is_none()
+fn native_titlebar() -> bool {
+    std::env::var_os("ATELIER_NATIVE_TITLEBAR").is_some()
 }
+
+pub fn custom_windows() -> bool {
+    cfg!(target_os = "windows") && !native_titlebar()
+}
+
+/// The window content runs under a transparent macOS title bar, so the
+/// toolbar is the title bar.
+pub fn integrated_mac() -> bool {
+    cfg!(target_os = "macos") && !native_titlebar()
+}
+
 pub fn viewport(builder: egui::ViewportBuilder) -> egui::ViewportBuilder {
     if custom_windows() {
         builder.with_decorations(false)
+    } else if integrated_mac() {
+        builder
+            .with_fullsize_content_view(true)
+            .with_titlebar_shown(false)
+            .with_title_shown(false)
     } else {
         builder
     }
+}
+
+/// Where the toolbar starts, past the traffic lights. They are hidden in
+/// full screen, so nothing is kept for them there.
+pub fn traffic_light_space(ui: &mut egui::Ui, width: f32) {
+    if !integrated_mac() || ui.input(|i| i.viewport().fullscreen.unwrap_or(false)) {
+        return;
+    }
+    let height = ui.spacing().interact_size.y;
+    drag_area(ui, Vec2::new(width - ui.spacing().item_spacing.x, height));
 }
 
 pub fn window_buttons(ui: &mut egui::Ui) {
@@ -49,13 +76,16 @@ pub fn window_buttons(ui: &mut egui::Ui) {
 }
 
 pub fn drag_space(ui: &mut egui::Ui) {
-    if !custom_windows() {
+    if !custom_windows() && !integrated_mac() {
         return;
     }
-    let (_, response) = ui.allocate_exact_size(
-        Vec2::new(ui.available_width().max(0.0), 28.0),
-        Sense::click_and_drag(),
-    );
+    drag_area(ui, Vec2::new(ui.available_width().max(0.0), 28.0));
+}
+
+/// Space that moves the window when dragged and zooms it when double
+/// clicked, as a title bar does.
+fn drag_area(ui: &mut egui::Ui, size: Vec2) {
+    let (_, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
     if response.double_clicked() {
         let maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
         ui.ctx()
