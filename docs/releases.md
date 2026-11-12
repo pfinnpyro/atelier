@@ -1,9 +1,9 @@
 # Releases and GitHub updates
 
-## Current preview: 1.1.0-beta.4
+## Current preview: 1.1.0-beta.5
 
-The `prerelease` branch and `v1.1.0-beta.4` tag identify the review flight.
-Notes are in `release-notes-1.1.0-beta.4.md`; the earlier previews are `v1.1.0-beta.3` (`release-notes-1.1.0-beta.3.md`), `v1.1.0-beta.2` (`release-notes-1.1.0-beta.2.md`) and
+The `prerelease` branch and `v1.1.0-beta.5` tag identify the review flight.
+Notes are in `release-notes-1.1.0-beta.5.md`; the earlier previews are `v1.1.0-beta.4` (`release-notes-1.1.0-beta.4.md`), `v1.1.0-beta.3` (`release-notes-1.1.0-beta.3.md`), `v1.1.0-beta.2` (`release-notes-1.1.0-beta.2.md`) and
 `v1.1.0-beta.1` (`release-notes-1.1.0-beta.1.md`). The package workflow reads the
 matching version-specific notes file and attaches Windows x64 installer,
 portable binaries, macOS ARM64 app, Linux x64/ARM64 archives, and the combined
@@ -26,7 +26,7 @@ and Linux until a validated module is wired up there. Both variants build into t
 ## First official release: 1.0.0
 
 The first stable release is **1.0.0**; the current workspace version is
-**1.1.0-beta.4**. Previous 0.x versions are development releases. Release notes are in `release-notes-1.0.0.md`.
+**1.1.0-beta.5**. Previous 0.x versions are development releases. Release notes are in `release-notes-1.0.0.md`.
 
 Shared RustRover configurations live in `.run/`:
 
@@ -237,7 +237,7 @@ draft first; published releases and their assets must remain immutable.
 | Channel | Version/tag | GitHub status | Audience |
 | --- | --- | --- | --- |
 | Stable | `1.0.0` / `v1.0.0` | Published release | Default |
-| Preview | `1.1.0-beta.4` / `v1.1.0-beta.4` | Pre-release | Opt-in testers |
+| Preview | `1.1.0-beta.5` / `v1.1.0-beta.5` | Pre-release | Opt-in testers |
 
 The in-app setting already persists Stable or Preview. Stable selects newer
 stable versions; Preview selects the newest version across both channels using
