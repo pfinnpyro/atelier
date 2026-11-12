@@ -96,6 +96,11 @@ fn size_of(release: &Release) -> u64 {
             .unwrap_or(1)
             .max(1);
     }
+    if let Some(asset) = release.asset("atelier-macos-arm64.zip")
+        && cfg!(target_os = "macos")
+    {
+        return asset.2.max(1);
+    }
     // The program and the installer are much the same size; either names
     // the download well enough for a progress bar.
     release

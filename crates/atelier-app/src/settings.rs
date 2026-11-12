@@ -72,7 +72,8 @@ impl Default for Settings {
             ocr_save: true,
             sidebar: true,
             check_updates: true,
-            preview: false,
+            // Someone running a preview build has chosen previews.
+            preview: crate::update::current().is_preview(),
             check_mark: atelier_form::CheckMark::default(),
         }
     }

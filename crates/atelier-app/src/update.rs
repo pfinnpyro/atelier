@@ -21,6 +21,8 @@ pub const REPO: &str = "pfinnpyro/atelier";
 /// The program for a portable copy, the installer, and the sums.
 const EXE_ASSET: &str = "atelier-windows-x64.exe";
 const SETUP_ASSET: &str = "atelier-setup-windows-x64.exe";
+/// The zipped Atelier.app.
+const MAC_ASSET: &str = "atelier-macos-arm64.zip";
 const SUMS_ASSET: &str = "SHA256SUMS.txt";
 
 /// This program's version.
@@ -132,11 +134,15 @@ impl Release {
 }
 
 /// The newest release on the channel (stable, or with `preview` also
-/// pre-releases) that is newer than `than`.
+/// pre-releases) that is newer than `than`. A preview build on the stable
+/// channel is still offered later previews of the same version, which lead
+/// to the release it is waiting for, though not previews of later versions.
 pub fn newest(releases: &[Release], preview: bool, than: &Version) -> Option<Release> {
     releases
         .iter()
-        .filter(|r| preview || !r.version.is_preview())
+        .filter(|r| {
+            preview || !r.version.is_preview() || (than.is_preview() && r.version.nums == than.nums)
+        })
         .filter(|r| r.version > *than)
         .max_by(|a, b| a.version.cmp(&b.version))
         .cloned()
@@ -149,6 +155,13 @@ pub fn newest_for_platform(releases: &[Release], preview: bool, than: &Version) 
         let compatible: Vec<_> = releases
             .iter()
             .filter(|release| release.asset(name).is_some() && release.asset(SUMS_ASSET).is_some())
+            .cloned()
+            .collect();
+        newest(&compatible, preview, than)
+    } else if cfg!(target_os = "macos") {
+        let compatible: Vec<_> = releases
+            .iter()
+            .filter(|r| r.asset(MAC_ASSET).is_some() && r.asset(SUMS_ASSET).is_some())
             .cloned()
             .collect();
         newest(&compatible, preview, than)
@@ -214,7 +227,120 @@ pub enum Installed {
 
 /// Whether this copy can update itself here.
 pub fn supported() -> bool {
-    cfg!(windows) || linux_managed_root().is_some()
+    cfg!(windows) || linux_managed_root().is_some() || mac_bundle().is_some()
+}
+
+/// The Atelier.app this copy runs from, when it can be replaced: its
+/// folder must be writable, which also rules out a copy macOS runs from a
+/// read-only translocated location because it was never moved out of
+/// Downloads.
+pub fn mac_bundle() -> Option<PathBuf> {
+    static BUNDLE: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    BUNDLE
+        .get_or_init(|| {
+            if !cfg!(target_os = "macos") {
+                return None;
+            }
+            let exe = std::env::current_exe().ok()?;
+            let bundle = exe.parent()?.parent()?.parent()?;
+            if bundle.extension()? != "app" || !bundle.join("Contents/Info.plist").is_file() {
+                return None;
+            }
+            let probe = bundle
+                .parent()?
+                .join(format!(".atelier-update-{}", std::process::id()));
+            fs::write(&probe, b"").ok()?;
+            let _ = fs::remove_file(&probe);
+            Some(bundle.to_path_buf())
+        })
+        .clone()
+}
+
+/// The checksum `sums` lists for `name`.
+fn listed_sum(sums: &str, name: &str) -> Result<String, String> {
+    sums.lines()
+        .filter_map(|l| l.split_once(char::is_whitespace))
+        .find(|(_, n)| n.trim().trim_start_matches('*') == name)
+        .map(|(hash, _)| hash.trim().to_ascii_lowercase())
+        .ok_or_else(|| format!("The checksums do not list {name}."))
+}
+
+/// Replaces Atelier.app with the release's: downloads the zip, checks it,
+/// unpacks it beside the running app and swaps the two bundles. The
+/// running copy keeps working from the old one, set aside as
+/// `Atelier.app.old` until the next start.
+fn install_mac(
+    release: &Release,
+    bundle: &Path,
+    progress: &AtomicU64,
+) -> Result<Installed, String> {
+    let dir = bundle.parent().ok_or("Atelier's folder is unknown.")?;
+    let sums = release
+        .asset(SUMS_ASSET)
+        .ok_or("The release has no checksums, so it was not installed.")?;
+    let want = listed_sum(&fetch_text(&sums.1)?, MAC_ASSET)?;
+    let asset = release
+        .asset(MAC_ASSET)
+        .ok_or_else(|| format!("The release has no {MAC_ASSET}."))?;
+    let zip = std::env::temp_dir().join(format!("atelier-{}.zip", release.version));
+    let _ = fs::remove_file(&zip);
+    fetch_file(&asset.1, &zip, progress)?;
+    let data = fs::read(&zip).map_err(|e| e.to_string())?;
+    if hex(&atelier_crypto::sha256(&data)) != want {
+        let _ = fs::remove_file(&zip);
+        return Err("The download did not match its checksum, so it was thrown away.".into());
+    }
+    // Unpacked on the same volume as the app, so the swap is two renames.
+    let staging = dir.join(format!(".atelier-update-{}", release.version));
+    let _ = fs::remove_dir_all(&staging);
+    let unpacked = Command::new("ditto")
+        .args(["-x", "-k"])
+        .arg(&zip)
+        .arg(&staging)
+        .stdin(Stdio::null())
+        .output();
+    let _ = fs::remove_file(&zip);
+    let fail = |message: String| {
+        let _ = fs::remove_dir_all(&staging);
+        Err(message)
+    };
+    match unpacked {
+        Ok(out) if out.status.success() => {}
+        Ok(out) => {
+            return fail(format!(
+                "Could not unpack the update: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        Err(e) => return fail(format!("Could not start ditto: {e}")),
+    }
+    let new = staging.join("Atelier.app");
+    if !new.join("Contents/MacOS/atelier-viewer").is_file() {
+        return fail("The update has no Atelier.app in it.".into());
+    }
+    let checked = Command::new("codesign")
+        .args(["--verify", "--deep", "--strict"])
+        .arg(&new)
+        .stdin(Stdio::null())
+        .output();
+    if !checked.is_ok_and(|o| o.status.success()) {
+        return fail("The new Atelier.app failed its code signature check.".into());
+    }
+    let old = mac_old_path(bundle);
+    let _ = fs::remove_dir_all(&old);
+    if let Err(e) = fs::rename(bundle, &old) {
+        return fail(format!("Could not set the old version aside: {e}"));
+    }
+    if let Err(e) = fs::rename(&new, bundle) {
+        let _ = fs::rename(&old, bundle);
+        return fail(format!("Could not put the new version in place: {e}"));
+    }
+    let _ = fs::remove_dir_all(&staging);
+    Ok(Installed::Swapped)
+}
+
+fn mac_old_path(bundle: &Path) -> PathBuf {
+    bundle.with_extension("app.old")
 }
 
 /// Downloads and puts `release` in place, counting bytes in `progress`.
@@ -242,8 +368,11 @@ pub fn install(release: &Release, progress: &AtomicU64) -> Result<Installed, Str
         progress.store(asset.2, Ordering::SeqCst);
         return Ok(Installed::Swapped);
     }
+    if let Some(bundle) = mac_bundle() {
+        return install_mac(release, &bundle, progress);
+    }
     if !supported() {
-        return Err("Updating from inside Atelier works on Windows only.".into());
+        return Err("Atelier cannot update itself from where it is installed.".into());
     }
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let dir = exe.parent().ok_or("Atelier's folder is unknown.")?;
@@ -256,12 +385,7 @@ pub fn install(release: &Release, progress: &AtomicU64) -> Result<Installed, Str
     let asset = release
         .asset(asset_name)
         .ok_or_else(|| format!("The release has no {asset_name}."))?;
-    let want = sums
-        .lines()
-        .filter_map(|l| l.split_once(char::is_whitespace))
-        .find(|(_, name)| name.trim().trim_start_matches('*') == asset_name)
-        .map(|(hash, _)| hash.trim().to_ascii_lowercase())
-        .ok_or_else(|| format!("The checksums do not list {asset_name}."))?;
+    let want = listed_sum(&sums, asset_name)?;
     let target = if installed {
         std::env::temp_dir().join(format!("atelier-setup-{}.exe", release.version))
     } else {
@@ -330,6 +454,10 @@ fn old_path(exe: &Path) -> PathBuf {
 
 /// Removes the version an update set aside, once it is no longer running.
 pub fn clean_up() {
+    if let Some(bundle) = mac_bundle() {
+        let _ = fs::remove_dir_all(mac_old_path(&bundle));
+        return;
+    }
     if !cfg!(windows) {
         return;
     }
@@ -340,6 +468,15 @@ pub fn clean_up() {
 
 /// Starts the program again, opening `file`, so this copy can quit.
 pub fn restart(file: Option<&Path>) -> Result<(), String> {
+    if let Some(bundle) = mac_bundle() {
+        // Through Launch Services, so the new copy starts as a proper app.
+        let mut cmd = Command::new("open");
+        cmd.arg("-n").arg(&bundle);
+        if let Some(f) = file {
+            cmd.arg("--args").arg(f);
+        }
+        return cmd.spawn().map(|_| ()).map_err(|e| e.to_string());
+    }
     let exe = linux_managed_root()
         .map(|root| root.join("current/atelier-viewer"))
         .map(Ok)
@@ -471,6 +608,38 @@ mod tests {
             v("1.5.0")
         );
         assert!(newest_for_platform(&packages, false, &v("1.5.0")).is_none());
+    }
+
+    #[test]
+    fn a_preview_build_on_stable_gets_later_previews_of_its_version() {
+        let release = |version| Release {
+            version: v(version),
+            notes: String::new(),
+            page: String::new(),
+            assets: vec![],
+        };
+        let rs = vec![
+            release("1.0.0"),
+            release("1.1.0-beta.3"),
+            release("1.2.0-beta.1"),
+        ];
+        assert_eq!(
+            newest(&rs, false, &v("1.1.0-beta.2")).unwrap().version,
+            v("1.1.0-beta.3")
+        );
+        assert!(newest(&rs, false, &v("1.0.0")).is_none());
+        assert_eq!(
+            newest(&rs, true, &v("1.1.0-beta.2")).unwrap().version,
+            v("1.2.0-beta.1")
+        );
+    }
+
+    #[test]
+    fn finds_listed_sums() {
+        let sums = "abc  atelier-macos-arm64.zip\nDEF *SHA256SUMS.txt\n";
+        assert_eq!(listed_sum(sums, MAC_ASSET).unwrap(), "abc");
+        assert_eq!(listed_sum(sums, SUMS_ASSET).unwrap(), "def");
+        assert!(listed_sum(sums, "missing").is_err());
     }
 
     #[test]
