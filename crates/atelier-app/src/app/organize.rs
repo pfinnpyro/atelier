@@ -234,6 +234,7 @@ impl Viewer {
         let mut move_to = None;
         let mut rotate = false;
         let mut export = false;
+        let mut print = false;
         let mut insert = false;
         let mut split = false;
         ui.add_space(10.0);
@@ -262,6 +263,10 @@ impl Viewer {
                 }
                 rotate = ui.button("Rotate").clicked();
                 export = ui.button("Export…").clicked();
+                print = ui
+                    .button("Print selected…")
+                    .on_hover_text("Print only the selected pages")
+                    .clicked();
             });
             if ui.button("Done").clicked() {
                 self.organize.grid = false;
@@ -507,6 +512,9 @@ impl Viewer {
         if export {
             self.extract_pages(&selected);
         }
+        if print {
+            self.print_pages(&selected);
+        }
         if let Some(page) = go {
             self.organize.grid = false;
             self.go_to_page(page);
@@ -663,6 +671,21 @@ mod tests {
         assert_eq!(viewer.organize.selected, BTreeSet::from([1, 2]));
         assert!(viewer.organize.dragging.is_none());
     }
+    #[test]
+    fn printing_the_selection_opens_the_dialog_on_those_pages() {
+        let mut viewer = merged_viewer(b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 100 200] >> endobj\n4 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >> endobj\n5 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] >> endobj\n%%EOF".to_vec());
+        viewer.print_pages(&[]);
+        assert!(!viewer.print.open);
+        viewer.organize.selected = BTreeSet::from([0, 2]);
+        let selected: Vec<_> = viewer.organize.selected.iter().copied().collect();
+        viewer.print_pages(&selected);
+        assert!(viewer.print.open);
+        assert_eq!(viewer.print_preview_page(), Some(0));
+        viewer.print.open = false;
+        viewer.print_pages(&[1, 2]);
+        assert_eq!(viewer.print_preview_page(), Some(1));
+    }
+
     #[test]
     fn insertion_positions_use_document_or_selection_boundaries() {
         let selected = BTreeSet::from([1, 3]);

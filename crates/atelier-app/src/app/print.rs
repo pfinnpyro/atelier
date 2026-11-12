@@ -173,6 +173,19 @@ impl Viewer {
         d.select_printer(i);
     }
 
+    /// Opens the dialog set to print these pages (indexes from 0), as a
+    /// range the person can still change.
+    pub(super) fn print_pages(&mut self, pages: &[usize]) {
+        if pages.is_empty() {
+            return;
+        }
+        self.open_print();
+        if self.print.open {
+            self.print.which = Which::Range;
+            self.print.range = atelier_print::ranges(pages);
+        }
+    }
+
     /// The page the preview wants a picture of.
     pub(super) fn print_preview_page(&self) -> Option<usize> {
         if !self.print.open {
