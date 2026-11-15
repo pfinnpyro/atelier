@@ -34,7 +34,8 @@ pub use fill::FillWarning;
 pub use new_field::{CheckMark, NewField, NewFieldKind};
 pub use pages::PageSlot;
 pub use profile::{
-    Entry, EntryKind, Planned, Profile, Skipped, Standard, field_label, plan, search, wipe_string,
+    DatePart, Entry, EntryKind, NamePart, Planned, Profile, Skipped, Standard, Want, field_label,
+    parse_date, plan, search, wipe_string,
 };
 pub use revisions::{Revision, RevisionChange, RevisionEvent, RevisionState};
 pub use scripts::{

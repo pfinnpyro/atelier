@@ -5,89 +5,15 @@ use eframe::egui::{self, CornerRadius, Response, Stroke, Vec2};
 pub(super) const HEIGHT: f32 = 30.0;
 use crate::settings::ButtonDisplay;
 
-#[derive(Clone, Copy)]
-pub(super) enum Icon {
-    Open,
-    Save,
-    FitWidth,
-    FitPage,
-    SideBySide,
-    Organize,
-}
+/// The toolbar's icons are the app's SVG icons, which stay sharp at any
+/// display scale.
+pub(super) use crate::icons::Icon;
 
 fn icon(ui: &egui::Ui, rect: egui::Rect, kind: Icon, color: egui::Color32) {
-    let r = egui::Rect::from_center_size(rect.center(), Vec2::splat(16.0));
-    let p = ui.painter();
-    let stroke = Stroke::new(1.5, color);
-    let line = |a: [f32; 2], b: [f32; 2]| {
-        p.line_segment(
-            [r.min + Vec2::new(a[0], a[1]), r.min + Vec2::new(b[0], b[1])],
-            stroke,
-        )
-    };
-    match kind {
-        Icon::Open => {
-            p.rect_stroke(
-                r.shrink2(Vec2::new(0.0, 3.0)),
-                2.0,
-                stroke,
-                egui::StrokeKind::Inside,
-            );
-            line([1.0, 4.0], [1.0, 1.0]);
-            line([1.0, 1.0], [7.0, 1.0]);
-            line([7.0, 1.0], [9.0, 4.0]);
-        }
-        Icon::Save => {
-            p.rect_stroke(r, 2.0, stroke, egui::StrokeKind::Inside);
-            p.rect_stroke(
-                r.shrink2(Vec2::new(4.0, 0.0)).with_max_y(r.top() + 6.0),
-                0.0,
-                stroke,
-                egui::StrokeKind::Inside,
-            );
-            p.rect_stroke(
-                egui::Rect::from_min_max(r.min + Vec2::new(4.0, 10.0), r.max - Vec2::new(4.0, 1.0)),
-                0.0,
-                stroke,
-                egui::StrokeKind::Inside,
-            );
-        }
-        Icon::FitWidth => {
-            line([0.0, 1.0], [0.0, 15.0]);
-            line([16.0, 1.0], [16.0, 15.0]);
-            line([3.0, 8.0], [13.0, 8.0]);
-            line([3.0, 8.0], [6.0, 5.0]);
-            line([3.0, 8.0], [6.0, 11.0]);
-            line([13.0, 8.0], [10.0, 5.0]);
-            line([13.0, 8.0], [10.0, 11.0]);
-        }
-        Icon::FitPage => {
-            p.rect_stroke(
-                r.shrink2(Vec2::new(3.0, 0.0)),
-                1.0,
-                stroke,
-                egui::StrokeKind::Inside,
-            );
-            line([6.0, 5.0], [10.0, 5.0]);
-            line([6.0, 8.0], [10.0, 8.0]);
-        }
-        Icon::SideBySide => {
-            p.rect_stroke(r, 1.0, stroke, egui::StrokeKind::Inside);
-            line([8.0, 0.0], [8.0, 16.0]);
-        }
-        Icon::Organize => {
-            for y in [0.0, 9.0] {
-                for x in [0.0, 9.0] {
-                    p.rect_stroke(
-                        egui::Rect::from_min_size(r.min + Vec2::new(x, y), Vec2::splat(6.0)),
-                        1.0,
-                        stroke,
-                        egui::StrokeKind::Inside,
-                    );
-                }
-            }
-        }
-    }
+    kind.image().tint(color).paint_at(
+        ui,
+        egui::Rect::from_center_size(rect.center(), Vec2::splat(16.0)),
+    );
 }
 
 fn content_width(ui: &egui::Ui, label: &str, display: ButtonDisplay) -> f32 {
@@ -253,6 +179,7 @@ pub(super) fn document_tab(
     id: usize,
     label: &str,
     selected: bool,
+    close_tip: &str,
 ) -> (Response, Response) {
     let font = egui::FontId::proportional(13.0);
     let galley = ui
@@ -313,7 +240,7 @@ pub(super) fn document_tab(
             ui,
             egui::Rect::from_center_size(close_rect.center(), Vec2::splat(12.0)),
         );
-    (tab, close.on_hover_text("Close tab (Ctrl+W)"))
+    (tab, close.on_hover_text(close_tip))
 }
 
 pub(super) fn style(ctx: &egui::Context) {

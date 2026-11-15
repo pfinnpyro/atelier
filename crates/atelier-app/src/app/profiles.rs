@@ -173,6 +173,8 @@ pub(super) struct Profiles {
     draft: Option<Draft>,
     plan: Option<Plan>,
     confirm_delete: bool,
+    /// Manage profiles was picked in the filling window.
+    manage: bool,
 }
 
 impl Drop for Profiles {
@@ -191,6 +193,8 @@ struct DocView<'a> {
 
 /// Something the window asks the viewer to do.
 enum Ask {
+    /// Open Settings at the profiles.
+    Manage,
     Fill(Vec<(usize, Value)>, String),
     Detect,
 }
@@ -238,11 +242,10 @@ impl Profiles {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, doc: Option<&DocView<'_>>) -> Option<Ask> {
-        if self.draft.is_some() {
-            self.draft_ui(ui);
-            return None;
-        }
         self.list_ui(ui);
+        if std::mem::take(&mut self.manage) {
+            return Some(Ask::Manage);
+        }
         ui.separator();
         let Some(id) = self.selected.clone() else {
             ui.weak("Pick a profile, or make a new one.");
@@ -262,36 +265,8 @@ impl Profiles {
                 ui.weak("encrypted, unlocked");
             }
         });
-        ui.horizontal(|ui| {
-            if ui.button("Edit…").clicked() {
-                let item = self.store.as_ref().and_then(|s| s.find(&id));
-                self.draft = Some(Draft::new(item));
-                self.problem = None;
-            }
-            if encrypted && ui.button("Lock").clicked() {
-                self.lock_up(ui.ctx());
-            }
-            if ui.button("Delete…").clicked() {
-                self.confirm_delete = true;
-            }
-        });
-        if self.confirm_delete {
-            ui.horizontal(|ui| {
-                ui.label(format!("Delete “{name}” for good?"));
-                if ui.button("Delete").clicked() {
-                    self.plan = None;
-                    if let Some(store) = &mut self.store {
-                        match store.delete(&id) {
-                            Ok(()) => self.select(None),
-                            Err(e) => self.problem = Some(e.to_string()),
-                        }
-                    }
-                    self.confirm_delete = false;
-                }
-                if ui.button("Keep").clicked() {
-                    self.confirm_delete = false;
-                }
-            });
+        if encrypted && ui.button("Lock").clicked() {
+            self.lock_up(ui.ctx());
         }
         if encrypted {
             ui.weak(
@@ -318,9 +293,12 @@ impl Profiles {
                     .desired_width(210.0),
             )
             .on_hover_text("Finds profiles by their name or by anything in them");
-            if ui.button("New profile…").clicked() {
-                self.draft = Some(Draft::new(None));
-                self.problem = None;
+            if ui
+                .button("Manage profiles…")
+                .on_hover_text("Make, edit, duplicate and delete profiles in Settings")
+                .clicked()
+            {
+                self.manage = true;
             }
         });
         let Some(store) = &self.store else { return };
@@ -569,7 +547,15 @@ impl Profiles {
                             draft.focus = false;
                         }
                         ui.end_row();
+                        let mut group = "";
                         for (which, value) in &mut draft.standard {
+                            // The details come in groups, each headed.
+                            if which.group() != group {
+                                group = which.group();
+                                ui.strong(group);
+                                ui.label("");
+                                ui.end_row();
+                            }
                             ui.label(which.label());
                             let edit = if which.multiline() {
                                 egui::TextEdit::multiline(value).desired_rows(3)
@@ -716,6 +702,177 @@ impl Profiles {
     }
 }
 
+impl Profiles {
+    /// The profiles as Settings shows them: a table of name, date made
+    /// and what can be done with each, or the profile being edited.
+    pub(super) fn manage_ui(&mut self, ui: &mut egui::Ui) {
+        use super::controls;
+        use crate::settings::ButtonDisplay;
+        self.store.get_or_insert_with(Store::load);
+        self.lock_idle(ui.ctx());
+        if self.draft.is_some() {
+            self.draft_ui(ui);
+            return;
+        }
+        ui.horizontal(|ui| {
+            ui.heading("Form profiles");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("New profile…").clicked() {
+                    self.draft = Some(Draft::new(None));
+                    self.problem = None;
+                }
+            });
+        });
+        ui.weak(
+            "A profile holds a name, addresses, a phone number and anything else you \
+             fill in often. Fill a form from one with Tools, Fill from a Profile.",
+        );
+        enum Act {
+            Edit,
+            Duplicate,
+            Delete,
+        }
+        let mut act = None;
+        let rows: Vec<(String, String, u64, bool, bool)> = self
+            .store
+            .iter()
+            .flat_map(|s| &s.items)
+            .map(|i| {
+                (
+                    i.id.clone(),
+                    i.name.clone(),
+                    i.created,
+                    i.locked(),
+                    i.encrypted(),
+                )
+            })
+            .collect();
+        if rows.is_empty() {
+            ui.add_space(8.0);
+            ui.weak("No profiles yet.");
+        } else {
+            let name_width = (ui.available_width() - 250.0).max(120.0);
+            egui::Grid::new("profile-table")
+                .num_columns(3)
+                .striped(true)
+                .spacing([16.0, 6.0])
+                .min_row_height(controls::HEIGHT)
+                .show(ui, |ui| {
+                    ui.strong("Profile name");
+                    ui.strong("Date created");
+                    ui.label("");
+                    ui.end_row();
+                    for (id, name, created, locked, encrypted) in &rows {
+                        ui.horizontal(|ui| {
+                            ui.set_width(name_width);
+                            ui.add(egui::Label::new(name).truncate());
+                            if *locked {
+                                ui.weak("locked");
+                            } else if *encrypted {
+                                ui.weak("unlocked");
+                            }
+                        });
+                        ui.label(crate::profiles::date_text(*created));
+                        ui.push_id(id, |ui| {
+                            let (edit, more) = controls::split_button(
+                                ui,
+                                "Edit",
+                                controls::Icon::Settings,
+                                ButtonDisplay::TextOnly,
+                                "Duplicate or delete",
+                            );
+                            if edit.clicked() {
+                                act = Some((id.clone(), Act::Edit));
+                            }
+                            egui::Popup::menu(&more).show(|ui| {
+                                if ui
+                                    .add_enabled(!*locked, egui::Button::new("Duplicate"))
+                                    .on_disabled_hover_text("Unlock the profile first.")
+                                    .clicked()
+                                {
+                                    act = Some((id.clone(), Act::Duplicate));
+                                    ui.close();
+                                }
+                                if ui.button("Delete…").clicked() {
+                                    act = Some((id.clone(), Act::Delete));
+                                    ui.close();
+                                }
+                            });
+                        });
+                        ui.end_row();
+                    }
+                });
+        }
+        if let Some((id, act)) = act {
+            let locked = rows.iter().any(|r| r.0 == id && r.3);
+            self.select(Some(id.clone()));
+            let item = self.store.as_ref().and_then(|s| s.find(&id));
+            match act {
+                // A locked profile asks for its passphrase below first.
+                Act::Edit | Act::Duplicate if locked => {}
+                Act::Edit => {
+                    self.draft = Some(Draft::new(item));
+                    self.problem = None;
+                }
+                Act::Duplicate => {
+                    // A copy is a new profile: it gets a name and, if it
+                    // is to be encrypted, a passphrase of its own.
+                    let mut draft = Draft::new(item);
+                    draft.id = None;
+                    draft.name.push_str(" copy");
+                    draft.was_encrypted = false;
+                    self.draft = Some(draft);
+                    self.problem = None;
+                }
+                Act::Delete => self.confirm_delete = true,
+            }
+        }
+        let Some(id) = self.selected.clone() else {
+            return;
+        };
+        let Some((_, name, _, locked, _)) = rows.iter().find(|r| r.0 == id).cloned() else {
+            return;
+        };
+        if self.confirm_delete {
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label(format!("Delete “{name}” for good?"));
+                if ui.button("Delete").clicked() {
+                    self.plan = None;
+                    if let Some(store) = &mut self.store {
+                        match store.delete(&id) {
+                            Ok(()) => self.select(None),
+                            Err(e) => self.problem = Some(e.to_string()),
+                        }
+                    }
+                    self.confirm_delete = false;
+                }
+                if ui.button("Keep").clicked() {
+                    self.confirm_delete = false;
+                }
+            });
+        } else if locked {
+            ui.separator();
+            self.unlock_ui(ui, &id, &name);
+        }
+        if let Some(problem) = &self.problem {
+            ui.colored_label(ui.visuals().error_fg_color, problem);
+        }
+    }
+
+    /// Settings closed: an edit under way is dropped, and unless the
+    /// filling window still has them in use the profiles lock.
+    pub(super) fn settings_closed(&mut self, ctx: &egui::Context) {
+        if let Some(draft) = self.draft.take() {
+            draft.forget(ctx);
+        }
+        self.confirm_delete = false;
+        if !self.open {
+            self.lock_up(ctx);
+        }
+    }
+}
+
 /// Text cut to fit a column.
 fn short(text: &str, most: usize) -> String {
     if text.chars().count() <= most {
@@ -785,6 +942,10 @@ impl Viewer {
         match ask {
             Some(Ask::Fill(fills, name)) => self.fill_from_profile(fills, &name),
             Some(Ask::Detect) => self.start_detect(),
+            Some(Ask::Manage) => {
+                self.settings_pane = super::settings_window::Pane::Profiles;
+                self.window = Some(super::settings_window::Window::Settings);
+            }
             None => {}
         }
     }
@@ -879,7 +1040,12 @@ mod tests {
         for _ in 0..2 {
             let mut asked = false;
             let mut drawn = ctx.run_ui(egui::RawInput::default(), |ui| {
-                asked = p.ui(ui, doc).is_some();
+                // A profile being written is drawn where Settings shows it.
+                if p.draft.is_some() {
+                    p.manage_ui(ui);
+                } else {
+                    asked = p.ui(ui, doc).is_some();
+                }
             });
             // Nothing is put on a screen, so the font texture goes unused.
             drawn.textures_delta.clear();

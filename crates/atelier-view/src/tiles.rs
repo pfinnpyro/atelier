@@ -143,6 +143,25 @@ impl<T> TileCache<T> {
         }
     }
 
+    /// Changes the memory budget, dropping the oldest tiles if it shrank.
+    /// Tiles used in the current frame stay until the next.
+    pub fn set_budget(&mut self, budget_bytes: usize) {
+        self.budget = budget_bytes;
+        self.evict();
+    }
+
+    /// Keeps only the tiles `keep` says to.
+    pub fn retain(&mut self, mut keep: impl FnMut(&TileKey) -> bool) {
+        let bytes = &mut self.bytes;
+        self.entries.retain(|k, e| {
+            let kept = keep(k);
+            if !kept {
+                *bytes -= e.bytes;
+            }
+            kept
+        });
+    }
+
     /// Starts a new frame; tiles touched in it are kept over older ones.
     pub fn next_frame(&mut self) {
         self.clock += 1;

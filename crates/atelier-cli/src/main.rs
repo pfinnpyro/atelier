@@ -21,6 +21,9 @@ Usage:
   atelier render <file.pdf> <page|all> [--dpi N] [-o out.png]
                                            render pages to PNG (default 150 dpi; with
                                            `all`, -o is a prefix: out-1.png, out-2.png...)
+  atelier bench <file.pdf> [--dpi N] [--pages N] [--threads N]
+                                           time drawing the first pages (default 8) in
+                                           tiles, the way the viewer draws them
   atelier text <file.pdf> [page|all] [--glyphs]
                                            print the text of pages (default all); with
                                            --glyphs, one line per glyph with its box
@@ -99,6 +102,7 @@ fn run(args: &[String]) -> Result<(), String> {
         "stream" => stream(&doc, obj_ref(&args[2..])?, &mut out),
         "content" => content(&doc, &args[2..], &mut out),
         "render" => render(&doc, path, &args[2..], &mut out),
+        "bench" => bench(&doc, &args[2..], &mut out),
         "text" => text(&doc, &args[2..], &mut out),
         "fields" => fields(&doc, &mut out),
         "fill" => fill(&doc, &args[2..], &mut out),
@@ -450,6 +454,82 @@ fn content(doc: &Document, args: &[String], out: &mut Out) -> Result<(), String>
     ))?;
     let data = page.contents(doc).map_err(|e| e.to_string())?;
     out.write_all(&data).map_err(io)
+}
+
+/// Times drawing pages in tiles, as the viewer does: every tile is its
+/// own call to the renderer, spread over worker threads.
+fn bench(doc: &Document, args: &[String], out: &mut Out) -> Result<(), String> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let (mut dpi, mut count, mut threads) = (144.0, 8usize, 1usize);
+    let mut i = 0;
+    while i < args.len() {
+        let value = args.get(i + 1).ok_or("option needs a value")?;
+        match args[i].as_str() {
+            "--dpi" => {
+                dpi = value
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|v| *v > 0.0 && *v <= 2400.0)
+                    .ok_or("--dpi needs a number between 1 and 2400")?;
+            }
+            "--pages" => count = value.parse().map_err(|_| "--pages needs a number")?,
+            "--threads" => {
+                threads = value
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|n| (1..=64).contains(n))
+                    .ok_or("--threads needs a number from 1 to 64")?;
+            }
+            other => return Err(format!("unknown option `{other}`")),
+        }
+        i += 2;
+    }
+    let pages = doc.pages().map_err(|e| e.to_string())?;
+    let scale = dpi / 72.0;
+    let options = RenderOptions {
+        scale,
+        ..RenderOptions::default()
+    };
+    let tile = atelier_view::TILE_SIZE;
+    let mut jobs = Vec::new();
+    for (n, page) in pages.iter().enumerate().take(count) {
+        let (_, w, h) = atelier_render::page_transform(page, scale);
+        for y in (0..h).step_by(tile) {
+            for x in (0..w).step_by(tile) {
+                jobs.push((n, (x, y, tile.min(w - x), tile.min(h - y))));
+            }
+        }
+    }
+    let next = AtomicUsize::new(0);
+    let failed = AtomicUsize::new(0);
+    let start = Instant::now();
+    std::thread::scope(|s| {
+        for _ in 0..threads {
+            s.spawn(|| {
+                while let Some((n, region)) = jobs.get(next.fetch_add(1, Ordering::SeqCst)) {
+                    if atelier_render::render_region(doc, &pages[*n], &options, *region).is_err() {
+                        failed.fetch_add(1, Ordering::SeqCst);
+                    }
+                }
+            });
+        }
+    });
+    let tiled = start.elapsed().as_secs_f64() * 1000.0;
+    let start = Instant::now();
+    for page in pages.iter().take(count) {
+        let _ = render_page(doc, page, &options);
+    }
+    let whole = start.elapsed().as_secs_f64() * 1000.0;
+    writeln!(
+        out,
+        "{} pages at {dpi} dpi: {} tiles in {tiled:.0} ms on {threads} threads \
+         ({:.1} ms a tile, {} failed); whole pages in {whole:.0} ms",
+        pages.len().min(count),
+        jobs.len(),
+        tiled / jobs.len().max(1) as f64,
+        failed.load(Ordering::SeqCst),
+    )
+    .map_err(|e| e.to_string())
 }
 
 fn render(doc: &Document, path: &str, args: &[String], out: &mut Out) -> Result<(), String> {

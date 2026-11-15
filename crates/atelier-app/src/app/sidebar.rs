@@ -208,7 +208,12 @@ impl Viewer {
                     {
                         self.go_to_page(current + 1);
                     }
-                    if crate::icons::button(ui, crate::icons::Icon::Find, "Find (Ctrl+F)").clicked()
+                    if crate::icons::button(
+                        ui,
+                        crate::icons::Icon::Find,
+                        &self.tip("Find", "Mod+F"),
+                    )
+                    .clicked()
                     {
                         self.request_find();
                     }
@@ -229,7 +234,7 @@ impl Viewer {
                                         .desired_width(width)
                                         .hint_text("Search document…"),
                                 );
-                                if self.focus_search {
+                                if self.focus_search && !self.find_bar {
                                     search.request_focus();
                                     self.focus_search = false;
                                 }

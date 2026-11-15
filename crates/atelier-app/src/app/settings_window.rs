@@ -31,32 +31,54 @@ impl Viewer {
             Window::About => "About Atelier",
         };
         let before = self.settings.clone();
-        egui::Window::new(title)
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .default_width(500.0)
-            .default_height(560.0)
-            .frame(egui::Frame::window(&ctx.global_style()).inner_margin(18.0))
-            .vscroll(true)
-            .max_height(620.0)
-            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-            .show(ctx, |ui| match which {
+        // A window of the system's own, with its title bar and controls,
+        // sized to its contents.
+        let size = match which {
+            Window::Settings => egui::vec2(700.0, 480.0),
+            Window::About => egui::vec2(520.0, 440.0),
+        };
+        let builder = egui::ViewportBuilder::default()
+            .with_title(title)
+            .with_inner_size(size)
+            .with_min_inner_size(size)
+            .with_resizable(which == Window::Settings)
+            .with_minimize_button(false)
+            .with_maximize_button(false);
+        let id = egui::ViewportId::from_hash_of(("atelier-window", title));
+        ctx.show_viewport_immediate(id, builder, |ui, _class| {
+            let close = ui.ctx().input(|i| {
+                i.viewport().close_requested()
+                    || (i.key_pressed(egui::Key::Escape) && !ui.ctx().text_edit_focused())
+            });
+            if close {
+                open = false;
+            }
+            egui::CentralPanel::default().show(ui, |ui| match which {
                 Window::Settings => self.settings_ui(ui),
                 Window::About => {
-                    about_ui(ui);
-                    ui.separator();
-                    ui.heading("Updates");
-                    self.updates_ui(ui);
+                    egui::ScrollArea::vertical()
+                        .auto_shrink(false)
+                        .show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            about_ui(ui);
+                            ui.separator();
+                            ui.heading("Updates");
+                            self.updates_ui(ui);
+                        });
                 }
             });
+        });
         if !open {
+            self.profiles.settings_closed(ctx);
             self.window = None;
         }
         if self.settings != before
             && let Err(e) = self.settings.save()
         {
             self.error = Some(format!("Could not save the settings: {e}"));
+        }
+        if self.settings.memory != before.memory {
+            self.apply_budgets();
         }
         if self.settings.ocr && !before.ocr {
             self.read_scans_now();
@@ -120,71 +142,66 @@ impl Viewer {
         }
     }
 
+    /// Settings: the kinds of setting down the side, the chosen kind's
+    /// settings beside them.
     fn settings_ui(&mut self, ui: &mut egui::Ui) {
-        let s = &mut self.settings;
-        ui.heading("Appearance");
-        egui::widgets::global_theme_preference_buttons(ui);
-        s.theme = ui
-            .ctx()
-            .options(|o| match o.theme_preference {
-                egui::ThemePreference::Light => "light",
-                egui::ThemePreference::Dark => "dark",
-                egui::ThemePreference::System => "system",
-            })
-            .into();
-        ui.add_space(14.0);
-        ui.separator();
-        ui.add_space(8.0);
-        ui.heading("Toolbar buttons");
-        ui.horizontal(|ui| {
-            ui.label("Set all");
-            for (mode, label) in [
-                (crate::settings::ButtonDisplay::IconOnly, "Icons"),
-                (
-                    crate::settings::ButtonDisplay::IconAndText,
-                    "Icons and text",
-                ),
-                (crate::settings::ButtonDisplay::TextOnly, "Text"),
-            ] {
-                if ui.button(label).clicked() {
-                    s.toolbar_display.fill(mode);
-                }
-            }
-        });
-        ui.add_space(8.0);
-        egui::Grid::new("toolbar-button-display")
-            .num_columns(2)
-            .spacing([12.0, 6.0])
-            .show(ui, |ui| {
-                for (index, label) in crate::settings::TOOLBAR_ACTIONS.iter().enumerate() {
-                    ui.label(*label);
-                    egui::ComboBox::from_id_salt(("toolbar-display", index))
-                        .selected_text(match s.toolbar_display[index] {
-                            crate::settings::ButtonDisplay::IconOnly => "Icon only",
-                            crate::settings::ButtonDisplay::IconAndText => "Icon and text",
-                            crate::settings::ButtonDisplay::TextOnly => "Text only",
-                        })
-                        .show_ui(ui, |ui| {
-                            for (mode, label) in [
-                                (crate::settings::ButtonDisplay::IconOnly, "Icon only"),
-                                (crate::settings::ButtonDisplay::IconAndText, "Icon and text"),
-                                (crate::settings::ButtonDisplay::TextOnly, "Text only"),
-                            ] {
-                                ui.selectable_value(&mut s.toolbar_display[index], mode, label);
+        // The list keeps its width; the pane takes what the window has
+        // left, so nothing reaches past the window's edge.
+        const LIST: f32 = 170.0;
+        let space = ui.available_size();
+        let gap = ui.spacing().item_spacing.x * 2.0 + 6.0;
+        let (pane, height) = ((space.x - LIST - gap).max(240.0), space.y);
+        ui.horizontal_top(|ui| {
+            ui.allocate_ui_with_layout(
+                egui::vec2(LIST, height),
+                egui::Layout::top_down_justified(egui::Align::Min),
+                |ui| {
+                    ui.set_width(LIST);
+                    ui.spacing_mut().item_spacing.y = 4.0;
+                    for pane in Pane::ALL {
+                        let chosen = self.settings_pane == pane;
+                        let label = egui::Button::selectable(chosen, pane.label())
+                            .min_size(egui::vec2(LIST, 30.0));
+                        if ui.add(label).clicked() {
+                            self.settings_pane = pane;
+                        }
+                    }
+                },
+            );
+            ui.separator();
+            ui.allocate_ui_with_layout(
+                egui::vec2(pane, height),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt("settings-pane")
+                        .max_width(pane)
+                        .max_height(height)
+                        .auto_shrink(false)
+                        .show(ui, |ui| {
+                            // Room for the scroll bar; text wraps inside.
+                            ui.set_width(pane - 14.0);
+                            ui.spacing_mut().item_spacing.y = 9.0;
+                            match self.settings_pane {
+                                Pane::General => self.general_settings(ui),
+                                Pane::Appearance => self.appearance_settings(ui),
+                                Pane::Forms => self.forms_settings(ui),
+                                Pane::Profiles => self.profiles.manage_ui(ui),
+                                Pane::Signatures => {
+                                    ui.heading("Ink signatures");
+                                    self.ink_settings_ui(ui);
+                                }
+                                Pane::Performance => self.performance_settings(ui),
+                                Pane::Updates => self.update_settings(ui),
                             }
                         });
-                    ui.end_row();
-                }
-            });
-        ui.add_space(14.0);
-        ui.separator();
-        ui.add_space(8.0);
-        ui.heading("Review identity");
-        ui.text_edit_singleline(&mut s.review_author)
-            .on_hover_text("Saved as the author of new PDF comments");
-        ui.add_space(14.0);
-        ui.separator();
-        ui.add_space(8.0);
+                },
+            );
+        });
+    }
+
+    fn general_settings(&mut self, ui: &mut egui::Ui) {
+        let s = &mut self.settings;
         ui.heading("Opening files");
         ui.horizontal(|ui| {
             ui.label("Start at");
@@ -199,64 +216,19 @@ impl Viewer {
             "Uses the page's text, or for scans the look of the page. The turns are \
                  saved only if you save the file.",
         );
-        ui.add_space(14.0);
-        ui.separator();
-        ui.add_space(8.0);
-        ui.heading("Forms");
+        section(ui, "Find");
         ui.horizontal(|ui| {
-            ui.label("Ticked check boxes show a");
-            egui::ComboBox::from_id_salt("check-mark")
-                .selected_text(s.check_mark.label())
-                .show_ui(ui, |ui| {
-                    for mark in atelier_form::CheckMark::ALL {
-                        ui.selectable_value(&mut s.check_mark, mark, mark.label());
-                    }
-                });
-        })
-        .response
-        .on_hover_text(
-            "For check boxes Atelier adds. A document can keep a mark of its own, and \
-             each check box can be given another (Find tables and form fields).",
-        );
-        ui.add_space(14.0);
-        ui.separator();
-        ui.add_space(8.0);
-        ui.heading("Scans");
-        ui.checkbox(&mut s.ocr, "Read the text of scans (OCR)")
-            .on_hover_text(
-                "Reads the words in scanned pages so you can search and copy them, \
-                 and uses them to turn the pages upright. Runs on this computer.",
-            );
-        self.ocr_models_ui(ui);
-        let s = &mut self.settings;
-        ui.add_enabled(
-            s.ocr,
-            egui::Checkbox::new(&mut s.ocr_save, "Save the text it reads into the file"),
-        )
-        .on_hover_text(
-            "When you save, the words are added as invisible text, the way scanners \
-                 make searchable PDFs, so other apps can search and copy them too.",
-        );
-        ui.add_space(14.0);
-        ui.separator();
-        ui.add_space(8.0);
-        ui.heading("Updates");
-        let s = &mut self.settings;
-        ui.checkbox(
-            &mut s.check_updates,
-            "Check for updates when Atelier starts",
-        )
-        .on_hover_text("Asks GitHub for the list of releases; nothing else is sent.");
-        ui.horizontal(|ui| {
-            ui.label("Channel");
-            ui.selectable_value(&mut s.preview, false, "Stable");
-            ui.selectable_value(&mut s.preview, true, "Preview")
-                .on_hover_text("Also offer test versions before they are released");
+            ui.label("Find opens");
+            ui.selectable_value(&mut s.find_floating, true, "As a bar over the page");
+            ui.selectable_value(&mut s.find_floating, false, "In the sidebar");
         });
-        ui.add_space(14.0);
-        ui.separator();
-        ui.add_space(8.0);
-        ui.heading("Default app");
+        section(ui, "Review identity");
+        ui.horizontal(|ui| {
+            ui.label("Name on new comments");
+            ui.text_edit_singleline(&mut s.review_author)
+                .on_hover_text("Saved as the author of new PDF comments");
+        });
+        section(ui, "Default app");
         ui.label(default_app::guidance());
         if cfg!(target_os = "macos") {
             ui.hyperlink_to(
@@ -284,11 +256,190 @@ impl Viewer {
                 Err(e) => self.error = Some(e),
             }
         }
-        ui.add_space(14.0);
-        ui.separator();
-        ui.add_space(8.0);
-        ui.heading("Ink signatures");
-        self.ink_settings_ui(ui);
+    }
+
+    fn appearance_settings(&mut self, ui: &mut egui::Ui) {
+        use crate::settings::ButtonDisplay;
+        let s = &mut self.settings;
+        ui.heading("Theme");
+        egui::widgets::global_theme_preference_buttons(ui);
+        s.theme = ui
+            .ctx()
+            .options(|o| match o.theme_preference {
+                egui::ThemePreference::Light => "light",
+                egui::ThemePreference::Dark => "dark",
+                egui::ThemePreference::System => "system",
+            })
+            .into();
+        section(ui, "Keyboard shortcuts");
+        ui.checkbox(&mut s.shortcut_glyphs, "Show shortcuts as key symbols")
+            .on_hover_text("In menus and tips: symbols such as ⇧ and ⌘ rather than key names");
+        ui.weak(format!(
+            "Save As reads {}",
+            crate::commands::shortcut_text("Mod+Shift+S", s.shortcut_glyphs)
+        ));
+        section(ui, "Toolbar buttons");
+        const MODES: [(ButtonDisplay, &str); 3] = [
+            (ButtonDisplay::IconOnly, "Icons"),
+            (ButtonDisplay::IconAndText, "Icons and text"),
+            (ButtonDisplay::TextOnly, "Text"),
+        ];
+        ui.horizontal(|ui| {
+            ui.label("Show all as");
+            let all = s.toolbar_display[0];
+            let same = s.toolbar_display.iter().all(|d| *d == all);
+            for (mode, label) in MODES {
+                if ui.selectable_label(same && all == mode, label).clicked() {
+                    s.toolbar_display.fill(mode);
+                }
+            }
+        });
+        egui::CollapsingHeader::new("Choose for each button")
+            .id_salt("toolbar-each")
+            .show(ui, |ui| {
+                egui::Grid::new("toolbar-button-display")
+                    .num_columns(2)
+                    .spacing([12.0, 6.0])
+                    .show(ui, |ui| {
+                        for (index, label) in crate::settings::TOOLBAR_ACTIONS.iter().enumerate() {
+                            ui.label(*label);
+                            ui.horizontal(|ui| {
+                                for (mode, label) in MODES {
+                                    ui.selectable_value(&mut s.toolbar_display[index], mode, label);
+                                }
+                            });
+                            ui.end_row();
+                        }
+                    });
+            });
+    }
+
+    fn forms_settings(&mut self, ui: &mut egui::Ui) {
+        let s = &mut self.settings;
+        ui.heading("Forms");
+        ui.horizontal(|ui| {
+            ui.label("Ticked check boxes show a");
+            egui::ComboBox::from_id_salt("check-mark")
+                .selected_text(s.check_mark.label())
+                .show_ui(ui, |ui| {
+                    for mark in atelier_form::CheckMark::ALL {
+                        ui.selectable_value(&mut s.check_mark, mark, mark.label());
+                    }
+                });
+        })
+        .response
+        .on_hover_text(
+            "For check boxes Atelier adds. A document can keep a mark of its own, and \
+             each check box can be given another (Find tables and form fields).",
+        );
+        section(ui, "Scans");
+        ui.checkbox(&mut s.ocr, "Read the text of scans (OCR)")
+            .on_hover_text(
+                "Reads the words in scanned pages so you can search and copy them, \
+                 and uses them to turn the pages upright. Runs on this computer.",
+            );
+        self.ocr_models_ui(ui);
+        let s = &mut self.settings;
+        ui.add_enabled(
+            s.ocr,
+            egui::Checkbox::new(&mut s.ocr_save, "Save the text it reads into the file"),
+        )
+        .on_hover_text(
+            "When you save, the words are added as invisible text, the way scanners \
+                 make searchable PDFs, so other apps can search and copy them too.",
+        );
+    }
+
+    fn performance_settings(&mut self, ui: &mut egui::Ui) {
+        use crate::memory::{Budgets, MemoryUse, host_memory};
+        ui.heading("Memory");
+        ui.label(
+            "Drawn pages and decoded images are kept so scrolling and zooming need not \
+             draw them again. More memory keeps more of them.",
+        );
+        ui.horizontal(|ui| {
+            for mode in MemoryUse::ALL {
+                ui.selectable_value(&mut self.settings.memory, mode, mode.label());
+            }
+        });
+        ui.weak(format!(
+            "Now: {}.",
+            Budgets::of(self.settings.memory).describe()
+        ));
+        let found = match host_memory() {
+            Some(bytes) => format!(
+                "Automatic goes by this computer's {:.0} GB of memory.",
+                bytes as f64 / (1u64 << 30) as f64
+            ),
+            None => "Automatic assumes 8 GB of memory on this system.".to_string(),
+        };
+        ui.weak(found);
+        ui.weak(
+            "Files in background tabs keep only a few drawn pages around where you \
+             left them, whatever is chosen here.",
+        );
+    }
+
+    fn update_settings(&mut self, ui: &mut egui::Ui) {
+        let s = &mut self.settings;
+        ui.heading("Updates");
+        ui.checkbox(
+            &mut s.check_updates,
+            "Check for updates when Atelier starts",
+        )
+        .on_hover_text("Asks GitHub for the list of releases; nothing else is sent.");
+        ui.horizontal(|ui| {
+            ui.label("Channel");
+            ui.selectable_value(&mut s.preview, false, "Stable");
+            ui.selectable_value(&mut s.preview, true, "Preview")
+                .on_hover_text("Also offer test versions before they are released");
+        });
+        ui.add_space(4.0);
+        self.updates_ui(ui);
+    }
+}
+
+/// A heading that starts a new group of settings.
+fn section(ui: &mut egui::Ui, title: &str) {
+    ui.add_space(8.0);
+    ui.separator();
+    ui.heading(title);
+}
+
+/// The kinds of setting, listed down the side of Settings.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub(super) enum Pane {
+    #[default]
+    General,
+    Appearance,
+    Forms,
+    Profiles,
+    Signatures,
+    Performance,
+    Updates,
+}
+
+impl Pane {
+    const ALL: [Pane; 7] = [
+        Pane::General,
+        Pane::Appearance,
+        Pane::Forms,
+        Pane::Profiles,
+        Pane::Signatures,
+        Pane::Performance,
+        Pane::Updates,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            Pane::General => "General",
+            Pane::Appearance => "Appearance",
+            Pane::Forms => "Forms and scans",
+            Pane::Profiles => "Form profiles",
+            Pane::Signatures => "Signatures",
+            Pane::Performance => "Performance",
+            Pane::Updates => "Updates",
+        }
     }
 }
 

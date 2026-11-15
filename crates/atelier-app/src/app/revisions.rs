@@ -64,14 +64,14 @@ impl Viewer {
         ui.horizontal(|ui| {
             if ui
                 .add_enabled(undo.is_some(), egui::Button::new("Undo"))
-                .on_hover_text("Undo last tracked edit (Ctrl+Z)")
+                .on_hover_text(self.tip("Undo last tracked edit", "Mod+Z"))
                 .clicked()
             {
                 action = undo.map(|id| (id, RevisionState::Undone));
             }
             if ui
                 .add_enabled(redo.is_some(), egui::Button::new("Redo"))
-                .on_hover_text("Redo tracked edit (Ctrl+Shift+Z)")
+                .on_hover_text(self.tip("Redo tracked edit", "Mod+Shift+Z"))
                 .clicked()
             {
                 action = redo;

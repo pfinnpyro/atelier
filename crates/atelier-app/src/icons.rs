@@ -17,6 +17,17 @@ pub enum Icon {
     Close,
     Sidebar,
     SidebarRight,
+    Open,
+    Save,
+    FitWidth,
+    FitPage,
+    SideBySide,
+    Organize,
+    Update,
+    Info,
+    Warning,
+    Up,
+    Down,
 }
 
 impl Icon {
@@ -36,6 +47,17 @@ impl Icon {
             Self::Close => egui::include_image!("../assets/icons/close.svg"),
             Self::Sidebar => egui::include_image!("../assets/icons/sidebar.svg"),
             Self::SidebarRight => egui::include_image!("../assets/icons/sidebar-right.svg"),
+            Self::Open => egui::include_image!("../assets/icons/open.svg"),
+            Self::Save => egui::include_image!("../assets/icons/save.svg"),
+            Self::FitWidth => egui::include_image!("../assets/icons/fit-width.svg"),
+            Self::FitPage => egui::include_image!("../assets/icons/fit-page.svg"),
+            Self::SideBySide => egui::include_image!("../assets/icons/side-by-side.svg"),
+            Self::Organize => egui::include_image!("../assets/icons/organize.svg"),
+            Self::Update => egui::include_image!("../assets/icons/update.svg"),
+            Self::Info => egui::include_image!("../assets/icons/info.svg"),
+            Self::Warning => egui::include_image!("../assets/icons/warning.svg"),
+            Self::Up => egui::include_image!("../assets/icons/up.svg"),
+            Self::Down => egui::include_image!("../assets/icons/down.svg"),
         };
         let label = match self {
             Self::Settings => "Settings",
@@ -52,6 +74,17 @@ impl Icon {
             Self::Close => "Close",
             Self::Sidebar => "Page pictures and outline",
             Self::SidebarRight => "Inspector sidebar",
+            Self::Open => "Open",
+            Self::Save => "Save",
+            Self::FitWidth => "Fit width",
+            Self::FitPage => "Fit page",
+            Self::SideBySide => "Side by side",
+            Self::Organize => "Organize pages",
+            Self::Update => "Update available",
+            Self::Info => "Notice",
+            Self::Warning => "Problem",
+            Self::Up => "Previous",
+            Self::Down => "Next",
         };
         egui::Image::new(source)
             .alt_text(label)

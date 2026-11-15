@@ -340,6 +340,9 @@ atelier stream <file.pdf> <num> [gen]    write a stream's decoded bytes to stdou
 atelier content <file.pdf> <page>        write a page's decoded content (page from 1)
 atelier render <file.pdf> <page|all> [--dpi N] [-o out.png]
                                          render pages to PNG
+atelier bench <file.pdf> [--dpi N] [--pages N] [--threads N]
+                                         time drawing the first pages in tiles, the
+                                         way the viewer draws them
 atelier text <file.pdf> [page|all] [--glyphs]
                                          print the text of pages; --glyphs prints each
                                          glyph with its box

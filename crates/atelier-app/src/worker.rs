@@ -298,23 +298,59 @@ impl Pool {
                 wake();
                 return;
             };
-            for (i, page) in pages.iter().enumerate() {
-                if current.load(Ordering::SeqCst) != id {
-                    return;
+            // Pages are read on several threads and handed on in page
+            // order, so hits still arrive first page first.
+            let threads = thread::available_parallelism()
+                .map_or(2, |n| n.get().saturating_sub(1))
+                .clamp(1, 6)
+                .min(pages.len().max(1));
+            let next = AtomicUsize::new(0);
+            type Found = (usize, Vec<std::ops::Range<usize>>, Arc<PageText>);
+            let (found_tx, found_rx) = channel::<Found>();
+            thread::scope(|s| {
+                for _ in 0..threads {
+                    let found_tx = found_tx.clone();
+                    let (next, current, doc, ocr, query) = (&next, &current, &doc, &ocr, &query);
+                    s.spawn(move || {
+                        while current.load(Ordering::SeqCst) == id {
+                            let i = next.fetch_add(1, Ordering::SeqCst);
+                            let Some(page) = pages.get(i) else { break };
+                            // A page that panics the reader has no hits.
+                            let read = std::panic::AssertUnwindSafe(|| {
+                                let text = page_text(doc, i, page, ocr);
+                                let hits = find_in_page(&text, i, query)
+                                    .into_iter()
+                                    .map(|m| m.glyphs)
+                                    .collect();
+                                (hits, text)
+                            });
+                            let (hits, text) = std::panic::catch_unwind(read).unwrap_or_default();
+                            if found_tx.send((i, hits, text)).is_err() {
+                                break;
+                            }
+                        }
+                    });
                 }
-                let text = page_text(&doc, i, page, &ocr);
-                let hits = find_in_page(&text, i, &query)
-                    .into_iter()
-                    .map(|m| m.glyphs)
-                    .collect();
-                let _ = tx.send(Done::SearchHits {
-                    generation,
-                    search: id,
-                    page: i,
-                    hits,
-                    text,
-                });
-                wake();
+                drop(found_tx);
+                let mut waiting = std::collections::BTreeMap::new();
+                let mut want = 0;
+                for (i, hits, text) in found_rx {
+                    waiting.insert(i, (hits, text));
+                    while let Some((hits, text)) = waiting.remove(&want) {
+                        let _ = tx.send(Done::SearchHits {
+                            generation,
+                            search: id,
+                            page: want,
+                            hits,
+                            text,
+                        });
+                        want += 1;
+                    }
+                    wake();
+                }
+            });
+            if current.load(Ordering::SeqCst) != id {
+                return;
             }
             let _ = tx.send(Done::SearchEnded {
                 generation,
