@@ -4,10 +4,19 @@ import hashlib
 import json
 import unittest
 from collections import Counter
-import pymupdf as fitz
-from fieldml_applications import APP, DATA, extract
+
+# These checks need pymupdf (tools/fieldml-requirements.txt) and the
+# publishers' PDFs, which tools/fieldml_fetch.py downloads; the release
+# workflow has neither, so they skip there.
+try:
+    import pymupdf as fitz
+    from fieldml_applications import APP, DATA, extract
+    READY = any(APP.glob('*.pdf'))
+except ImportError:
+    READY = False
 
 
+@unittest.skipUnless(READY, 'needs pymupdf and the fetched source PDFs')
 class ApplicationCorpusTests(unittest.TestCase):
     def test_sources_and_families_are_pinned_and_disjoint(self):
         sources=json.loads((DATA/'applications.json').read_text())
