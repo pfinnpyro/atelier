@@ -1,0 +1,21 @@
+Personal first run
+24 classes, 8192 buckets, 4000 forms, 6 epochs, seed 1
+Mixed: 3800 synthetic + 200 replays of 1 public training form(s).
+Mixed training seconds: 0.465
+Model bytes: 786448
+
+synthetic train: fields=42483, baseline=100.00%, mixed=99.98%, macro recall=99.97%, personal=28277/28286, false fills=1/14197
+synthetic validation: fields=5367, baseline=99.48%, mixed=99.52%, macro recall=99.41%, personal=3604/3627, false fills=3/1740
+synthetic test: fields=5358, baseline=99.46%, mixed=99.33%, macro recall=99.03%, personal=3543/3574, false fills=5/1784
+online-visible-labels train: fields=15, baseline=80.00%, mixed=100.00%, macro recall=100.00%, personal=3/3, false fills=0/12
+online-visible-labels validation: fields=48, baseline=66.67%, mixed=72.92%, macro recall=95.58%, personal=6/6, false fills=13/42
+online-visible-labels test: fields=43, baseline=97.67%, mixed=97.67%, macro recall=99.38%, personal=3/3, false fills=1/40
+online-raw-metadata train public-w9: 12/15 correct; personal=0/3; false fills=0
+online-raw-metadata validation public-w7: 41/48 correct; personal=0/6; false fills=1
+online-raw-metadata test public-w4: 40/43 correct; personal=0/3; false fills=0
+
+Visible labels are human annotations, not automatic label extraction. Raw metadata results expose the PDF extraction gap.
+Synthetic splits share a generator grammar; different seeds are not unseen template families.
+Only three public form families: held-out results are diagnostic, not production accuracy.
+Other includes unsupported composites and historical/third-party details: leave blank.
+Predictions are classification outputs, not calibrated fill permissions.

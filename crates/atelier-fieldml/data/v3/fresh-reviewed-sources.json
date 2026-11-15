@@ -1,0 +1,79 @@
+[
+  {
+    "id": "membership-rhadc",
+    "split": "calibration",
+    "url": "https://www.rhadc.bm/wp-content/uploads/2023/02/2022-23-Membership-Application-Package.pdf",
+    "sha256": "24fe6246d57fe22f2d7d4bab8dbe24dcb23cdb9b46149b96f038b4e732c99b83",
+    "bytes": 578585,
+    "target": "individual applicant",
+    "provenance": "Public blank application; no submitted records; split reserved before model evaluation.",
+    "annotated_fields": 44,
+    "coverage": "Reviewed text slots in core applicant, conditional and third-party groups; checkbox choices and unsupported implicit labels excluded."
+  },
+  {
+    "id": "employment-humboldt",
+    "split": "calibration",
+    "url": "https://www.humboldtplaza.com/wp-content/uploads/2025/10/REVISED-EMPLOYMENT-APPLICATION-OCT-2025.docx.pdf",
+    "sha256": "7bc6232d253fd7e4da1d531891fec8553147880061207dc6a553743ac94f0cad",
+    "bytes": 173870,
+    "target": "individual applicant",
+    "provenance": "Public blank application; no submitted records; split reserved before model evaluation.",
+    "annotated_fields": 78,
+    "coverage": "Reviewed text slots in core applicant, conditional and third-party groups; checkbox choices and unsupported implicit labels excluded."
+  },
+  {
+    "id": "rental-dixon",
+    "split": "test",
+    "url": "https://cdngeneral.rentcafe.com/dmslivecafe/3/95881/Rental_Application.pdf",
+    "sha256": "464b67bdcef443e600c2785656db60b73269e12be3a1a7134541c13821504aad",
+    "bytes": 269211,
+    "target": "individual applicant",
+    "provenance": "Public blank application; no submitted records; split reserved before model evaluation.",
+    "annotated_fields": 59,
+    "coverage": "Reviewed text slots in core applicant, conditional and third-party groups; checkbox choices and unsupported implicit labels excluded."
+  },
+  {
+    "id": "camp-vbac",
+    "split": "test",
+    "url": "https://vbac.coursestorm.com/media/attachment/ffc92c00002711f091f30affcdc5a8db/VBAC%2BSummer%2BCamp%2BRegistration.pdf",
+    "sha256": "9f42bf71c6fec6009370c06a80882db0cc2aadbf5f407e5c18699e7c5a117b1e",
+    "bytes": 51337,
+    "target": "first camper",
+    "provenance": "Public blank application; no submitted records; split reserved before model evaluation.",
+    "annotated_fields": 27,
+    "coverage": "Reviewed text slots in core applicant, conditional and third-party groups; checkbox choices and unsupported implicit labels excluded."
+  },
+  {
+    "id": "volunteer-xavier",
+    "split": "test",
+    "url": "https://www.xaviercairns.qld.edu.au/wp-content/uploads/2022/03/New-Volunteer-Application-Form.pdf",
+    "sha256": "2dd3cfc3b5a690f48eb347d48961e6b11afc349d4dd89cdbca41312ebc0d514c",
+    "bytes": 110992,
+    "target": "individual applicant",
+    "provenance": "Public blank application; split reserved before model evaluation.",
+    "annotated_fields": 26,
+    "coverage": "Reviewed text slots in core applicant, conditional and third-party groups; checkbox choices and unsupported implicit labels excluded."
+  },
+  {
+    "id": "membership-jas",
+    "split": "test",
+    "url": "https://www.jas.org.sg/fileboxUser/download/Membership_Application_Form.pdf",
+    "sha256": "21001d9b582f6d6c1dbc15e37afdd5a61cc7010873a80909392616b7996a021e",
+    "bytes": 1023356,
+    "target": "individual applicant",
+    "provenance": "Public blank application; split reserved before model evaluation.",
+    "annotated_fields": 53,
+    "coverage": "Reviewed text slots in core applicant, conditional and third-party groups; checkbox choices and unsupported implicit labels excluded."
+  },
+  {
+    "id": "patient-ecw",
+    "split": "calibration",
+    "url": "https://sa1s3.patientpop.com/assets/docs/333316.pdf",
+    "sha256": "64f19eba1d545b3bffbb4cf406464255cbd54c8ed23b787605c511a79e666a7c",
+    "bytes": 358579,
+    "target": "patient",
+    "provenance": "Public blank patient registration template; reserved for calibration before model evaluation.",
+    "annotated_fields": 35,
+    "coverage": "Reviewed text slots in core applicant, conditional and third-party groups; checkbox choices and unsupported implicit labels excluded."
+  }
+]

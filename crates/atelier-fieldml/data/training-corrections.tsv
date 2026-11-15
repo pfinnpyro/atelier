@@ -1,0 +1,83 @@
+# Complete synthetic training forms with generator-verified classes, selected from first-run TRAIN errors only.
+train	synth-train-3814	f000	FirstName	givenName
+train	synth-train-3814	f001	MiddleInitial	Middle initial
+train	synth-train-3814	f002	LastName	Famil name
+train	synth-train-3814	f003	Other	emergencyContactPhone
+train	synth-train-3814	f004	Other	Emergency_contact
+train	synth-train-3814	f005	AddressLine1	Home Address 1 *
+train	synth-train-3814	f006	AddressLine2	Unit
+train	synth-train-3814	f007	City	City/Town
+train	synth-train-3814	f008	County	Parish
+train	synth-train-3814	f009	State	state/province
+train	synth-train-3814	f010	Zip	postalCode
+train	synth-train-3814	f011	BirthDate	DOB m/dd/yyyy *
+train	synth-train-3815	f000	BirthDate	Birth date *
+train	synth-train-3815	f001	AddressLine1	Residential Address *
+train	synth-train-3815	f002	AddressLine2	APPLICANT APT
+train	synth-train-3815	f003	City	Town *
+train	synth-train-3815	f004	State	state/province
+train	synth-train-3815	f005	Zip	Zip code
+train	synth-train-3815	f006	Other	jobTitle
+train	synth-train-3815	f007	Other	Employer name
+train	synth-train-3815	f008	Email	Electronic mail
+train	synth-train-3815	f009	Other	website
+train	synth-train-3815	f010	Phone	Mobile *
+train	synth-train-3815	f011	FullName	First an last name
+train	synth-train-3867	f000	Other	SSN
+train	synth-train-3867	f001	Other	Street number *
+train	synth-train-3867	f002	NameLastFirst	NAME: LAST, FIRST
+train	synth-train-3867	f003	AddressLine1	Address:
+train	synth-train-3867	f004	AddressLine2	Addres
+train	synth-train-3867	f005	Other	Relationship
+train	synth-train-3870	f000	Other	Member ID
+train	synth-train-3870	f001	Email	Email
+train	synth-train-3870	f002	AddressWhole	Current Addres
+train	synth-train-3870	f003	Phone	Phone
+train	synth-train-3870	f004	LastName	your last name
+train	synth-train-3870	f005	FirstName	Forename
+train	synth-train-3870	f006	MiddleName	Middle name
+train	synth-train-3925	f000	AddressLine1	Address line 1
+train	synth-train-3925	f001	AddressLine2	ADDRESS 2
+train	synth-train-3925	f002	City	City or town
+train	synth-train-3925	f003	State	Province *
+train	synth-train-3925	f004	Zip	ZIPCODE
+train	synth-train-3925	f005	FullName	Your_name
+train	synth-train-3925	f006	BirthDate	Birthday (DD/MM/YYYY)
+train	synth-train-3925	f007	Other	Eployer phone *
+train	synth-train-3925	f008	Other	Supervisor name *
+train	synth-train-3925	f009	Other	Company name
+train	synth-train-3947	f000	Other	EMERGENCY CONTACT RELATIONSHIP
+train	synth-train-3947	f001	BirthDate	D.O.B.
+train	synth-train-3947	f002	Email	emailAddress
+train	synth-train-3947	f003	Phone	Telephon number
+train	synth-train-3947	f004	AddressLine1	Address line 1:
+train	synth-train-3947	f005	AddressLine2	addressLine2
+train	synth-train-3947	f006	AddressOverflow	Address line 3
+train	synth-train-3947	f007	FullName	Legal name
+train	synth-train-3949	f000	FirstName	name (first)
+train	synth-train-3949	f001	MiddleInitial	Middle init.
+train	synth-train-3949	f002	LastName	LAST NAME
+train	synth-train-3949	f003	Other	Social_security_number
+train	synth-train-3949	f004	Other	Gender
+train	synth-train-3949	f005	AddressWhole	addres
+train	synth-train-3952	f000	BirthDate	Applicant's Birthdate YYYY-MM-DD
+train	synth-train-3952	f001	Other	Driver's license number
+train	synth-train-3952	f002	FullName	yourName
+train	synth-train-3952	f003	Email	Electronic_mail
+train	synth-train-3952	f004	Other	Quantity
+train	synth-train-3952	f005	AddressLine1	Your Street Address
+train	synth-train-3952	f006	AddressLine2	Street Address:
+train	synth-train-3952	f007	AddressOverflow	Street Address *
+train	synth-train-3992	f000	Phone	mobile
+train	synth-train-3992	f001	Other	Amount
+train	synth-train-3992	f002	BirthDate	D.O.B. mm/dd/yyyy
+train	synth-train-3992	f003	Other	SPOUSE EMAIL
+train	synth-train-3992	f004	Email	Elecronic_mail
+train	synth-train-3992	f005	FullName	Your_name
+train	synth-train-3992	f006	Other	emergencyContactName
+train	synth-train-3992	f007	Other	emergencyPhone
+train	synth-train-3992	f008	Other	Emergency contact address
+train	synth-train-3992	f009	AddressLine1	address
+train	synth-train-3992	f010	City	Town
+train	synth-train-3992	f011	State	State/Province
+train	synth-train-3992	f012	Zip	Zipcode

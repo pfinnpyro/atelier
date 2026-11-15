@@ -1,0 +1,38 @@
+[
+  {
+    "id": "public-w9",
+    "split": "train",
+    "url": "https://www.irs.gov/pub/irs-pdf/fw9.pdf",
+    "revision": "March 2024",
+    "sha256": "2d420cbb4123dcf1fb82595b2359cfbb5d81f00b9df9d359fcc7af361d093f53",
+    "bytes": 140815,
+    "text_fields": 15,
+    "label_origin": "human transcription with section context",
+    "scope": "individual applicant; text fields only; unsupported details left blank",
+    "provenance": "Public blank U.S. federal government form; no submitted or personal records."
+  },
+  {
+    "id": "public-w7",
+    "split": "validation",
+    "url": "https://www.irs.gov/pub/irs-pdf/fw7.pdf",
+    "revision": "December 2024",
+    "sha256": "0917902b7fd3caaf63a4562fea3d23765fdfd4715f3b2470adb56a930556a943",
+    "bytes": 97654,
+    "text_fields": 48,
+    "label_origin": "human transcription with section context",
+    "scope": "individual applicant; text fields only; unsupported details left blank",
+    "provenance": "Public blank U.S. federal government form; no submitted or personal records."
+  },
+  {
+    "id": "public-w4",
+    "split": "test",
+    "url": "https://www.irs.gov/pub/irs-pdf/fw4.pdf",
+    "revision": "2026",
+    "sha256": "92444d8856ce55d9e25dca8b6d1420634fc68b11e1ab1f760916ea29ddd312b2",
+    "bytes": 208845,
+    "text_fields": 43,
+    "label_origin": "human transcription with section context",
+    "scope": "individual applicant; text fields only; unsupported details left blank",
+    "provenance": "Public blank U.S. federal government form; no submitted or personal records."
+  }
+]

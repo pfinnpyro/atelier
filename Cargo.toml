@@ -41,3 +41,7 @@ opt-level = 2
 # thousands of times, which would take most of a minute unoptimised.
 [profile.dev.package.atelier-crypto]
 opt-level = 2
+
+# Training the field models in their tests is a lot of arithmetic.
+[profile.dev.package.atelier-fieldml]
+opt-level = 2

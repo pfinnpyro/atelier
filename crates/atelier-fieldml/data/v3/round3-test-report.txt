@@ -1,0 +1,48 @@
+V3 test; fixed acceptance cutoff >0.90; minimum 20 accepted fields; all rates above 90%, false-fill and ECE below 10%.
+gold family library-dearborn: accuracy 89.47%; recall 8/10 (80.00%); macro 81.17%; falsefills 2/28 (7.14%); accepted 7/8 precision 87.50%; accepted recall 70.00%; mean accepted confidence 99.37%; ECE 9.51%; hard-negative falsefills 2/17; qualifies false
+gold family sports-laparks: accuracy 96.00%; recall 3/4 (75.00%); macro 80.00%; falsefills 0/21 (0.00%); accepted 2/2 precision 100.00%; accepted recall 50.00%; mean accepted confidence 99.05%; ECE 5.38%; hard-negative falsefills 0/10; qualifies false
+gold family library-kcls: accuracy 77.14%; recall 9/12 (75.00%); macro 75.25%; falsefills 5/23 (21.74%); accepted 6/11 precision 54.55%; accepted recall 50.00%; mean accepted confidence 99.73%; ECE 24.61%; hard-negative falsefills 3/19; qualifies false
+gold family patient-jottful: accuracy 100.00%; recall 8/8 (100.00%); macro 100.00%; falsefills 0/29 (0.00%); accepted 8/8 precision 100.00%; accepted recall 100.00%; mean accepted confidence 99.73%; ECE 0.06%; hard-negative falsefills 0/15; qualifies false
+gold TOTAL: accuracy 90.37%; recall 28/34 (82.35%); macro 77.39%; falsefills 7/101 (6.93%); accepted 23/29 precision 79.31%; accepted recall 67.65%; mean accepted confidence 99.58%; ECE 9.42%; hard-negative falsefills 5/61; qualifies false
+  Other: 94/101
+  FullName: 1/1
+  FirstName: 2/3
+  MiddleName: 1/1
+  MiddleInitial: 1/1
+  LastName: 2/3
+  BirthDate: 2/3
+  BirthMonth: 0/1
+  BirthDay: 0/1
+  BirthYear: 0/1
+  AddressWhole: 1/1
+  AddressLine1: 3/3
+  AddressLine2: 2/2
+  City: 3/3
+  State: 3/3
+  Zip: 3/3
+  Email: 3/3
+  Phone: 1/1
+extracted family library-dearborn: accuracy 63.16%; recall 9/10 (90.00%); macro 86.69%; falsefills 13/28 (46.43%); accepted 9/21 precision 42.86%; accepted recall 90.00%; mean accepted confidence 99.01%; ECE 36.79%; hard-negative falsefills 11/17; qualifies false
+extracted family sports-laparks: accuracy 80.00%; recall 4/4 (100.00%); macro 95.24%; falsefills 5/21 (23.81%); accepted 2/3 precision 66.67%; accepted recall 50.00%; mean accepted confidence 98.01%; ECE 21.67%; hard-negative falsefills 4/10; qualifies false
+extracted family library-kcls: accuracy 37.14%; recall 6/12 (50.00%); macro 48.49%; falsefills 16/23 (69.57%); accepted 4/19 precision 21.05%; accepted recall 33.33%; mean accepted confidence 99.03%; ECE 56.95%; hard-negative falsefills 13/19; qualifies false
+extracted family patient-jottful: accuracy 97.30%; recall 8/8 (100.00%); macro 99.62%; falsefills 1/29 (3.45%); accepted 8/9 precision 88.89%; accepted recall 100.00%; mean accepted confidence 99.75%; ECE 2.64%; hard-negative falsefills 1/15; qualifies false
+extracted TOTAL: accuracy 68.89%; recall 27/34 (79.41%); macro 74.00%; falsefills 35/101 (34.65%); accepted 23/52 precision 44.23%; accepted recall 67.65%; mean accepted confidence 99.09%; ECE 29.26%; hard-negative falsefills 29/61; qualifies false
+  Other: 66/101
+  FullName: 1/1
+  FirstName: 3/3
+  MiddleName: 1/1
+  MiddleInitial: 1/1
+  LastName: 2/3
+  BirthDate: 3/3
+  BirthMonth: 0/1
+  BirthDay: 0/1
+  BirthYear: 0/1
+  AddressWhole: 1/1
+  AddressLine1: 3/3
+  AddressLine2: 2/2
+  City: 2/3
+  State: 3/3
+  Zip: 2/3
+  Email: 2/3
+  Phone: 1/1
+BOTH TRACKS QUALIFY: false

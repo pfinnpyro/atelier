@@ -1,0 +1,50 @@
+[
+  {
+    "id": "dog-stpaul",
+    "split": "test",
+    "url": "https://www.stpaul.gov/sites/default/files/2023-11/Dog%20License%20Application%20Fillable%20version%202023.pdf",
+    "sha256": "5f5f7bd145d6a300c8629396d017561e03563425931af7fa46e3b86d69dc5962",
+    "bytes": 420799,
+    "publisher": "City of Saint Paul, Department of Safety and Inspections",
+    "target": "dog owner",
+    "provenance": "Public blank form; no submitted records. Picked, split and annotated in the v4 kind/group/role format before any model was run on it (v4 holdout, 2026-11-14).",
+    "coverage": "Every native text field once per name, or every printable writing slot with a printed label; checkboxes, circle-one choices and blanks inside sentences excluded.",
+    "annotated_fields": 56
+  },
+  {
+    "id": "emergency-mt",
+    "split": "test",
+    "url": "https://dphhs.mt.gov/assets/ecfsd/childcarelicensing/EmergencyContactForm.pdf",
+    "sha256": "adba8596b97003ccd677f926e07d0ddc23868c7e93e3894b839873544c0a773e",
+    "bytes": 281427,
+    "publisher": "Montana DPHHS Child Care Licensing Bureau",
+    "target": "child in care",
+    "provenance": "Public blank form; no submitted records. Picked, split and annotated in the v4 kind/group/role format before any model was run on it (v4 holdout, 2026-11-14).",
+    "coverage": "Every native text field once per name, or every printable writing slot with a printed label; checkboxes, circle-one choices and blanks inside sentences excluded.",
+    "annotated_fields": 30
+  },
+  {
+    "id": "fitness-dpparks",
+    "split": "test",
+    "url": "https://www.dpparks.org/wp-content/uploads/2025/05/New-Health-Club-Memberships-Form_Fillable.pdf",
+    "sha256": "c56f6cff04ab7fec6a621963dcb943bfd59e6c849d82aa718d53f1824f80418d",
+    "bytes": 310850,
+    "publisher": "Des Plaines Park District (The Health Club)",
+    "target": "household member applying",
+    "provenance": "Public blank form; no submitted records. Picked, split and annotated in the v4 kind/group/role format before any model was run on it (v4 holdout, 2026-11-14).",
+    "coverage": "Every native text field once per name, or every printable writing slot with a printed label; checkboxes, circle-one choices and blanks inside sentences excluded.",
+    "annotated_fields": 46
+  },
+  {
+    "id": "school-philasd",
+    "split": "test",
+    "url": "https://www.philasd.org/centralhs/wp-content/uploads/sites/235/2020/02/EH-40_English.pdf",
+    "sha256": "13f3cee9ab49092e501814f475fd7fa70e4ee0a8481cd4a62c453ed00431b64f",
+    "bytes": 272463,
+    "publisher": "School District of Philadelphia",
+    "target": "student",
+    "provenance": "Public blank form; no submitted records. Picked, split and annotated in the v4 kind/group/role format before any model was run on it (v4 holdout, 2026-11-14).",
+    "coverage": "Every native text field once per name, or every printable writing slot with a printed label; checkboxes, circle-one choices and blanks inside sentences excluded.",
+    "annotated_fields": 90
+  }
+]

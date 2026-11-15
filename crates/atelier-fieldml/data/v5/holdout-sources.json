@@ -1,0 +1,46 @@
+[
+  {
+    "id": "employment-bridgeport",
+    "split": "test",
+    "publisher": "City of Bridgeport, West Virginia",
+    "title": "City of Bridgeport Application for Employment (fillable)",
+    "url": "https://www.bridgeportwv.gov/document_center_uploads/pg_employment-application-fillable.pdf",
+    "sha256": "cce781f8e7e978a5a7f1d50cecc78510f71ca3f3848dc5b22c39eeee2e1dc7f6",
+    "retrieved": "2026-11-14",
+    "provenance": "Public municipal employment application; picked for five repeated employer blocks, schools, military service and a references table.",
+    "annotated_fields": 108
+  },
+  {
+    "id": "youth-bartlett",
+    "split": "test",
+    "publisher": "Bartlett Park District (Illinois)",
+    "title": "Youth Sport League Registration Form (fillable)",
+    "url": "https://bartlettparks.org/wp-content/uploads/2025/04/youth-sport-form-blank-fillable-2-26-25.pdf",
+    "sha256": "ff02e6b3e1baa7e122c1c19c80cf8385a7f2483c7169adca346d33ad426e305c",
+    "retrieved": "2026-11-14",
+    "provenance": "Public park district registration; picked for a minor subject in a participant table, parents, a volunteer and a card holder.",
+    "annotated_fields": 54
+  },
+  {
+    "id": "parking-charleston",
+    "split": "test",
+    "publisher": "City of Charleston, West Virginia, Traffic, Parking and Transportation Department",
+    "title": "Resident Parking Permit Application (fillable)",
+    "url": "https://charlestonwv.gov/sites/default/files/documents/2017-11/Residential%20Parking%20Application%202018.pdf",
+    "sha256": "656d1ba26b9960f72d2ec569e2e33d89b84f0930a55389b19019ededc50afe0a",
+    "retrieved": "2026-11-14",
+    "provenance": "Public municipal permit form; picked for vehicles (owned things) beside the resident's details.",
+    "annotated_fields": 19
+  },
+  {
+    "id": "adoption-columbia",
+    "split": "test",
+    "publisher": "Columbia County Sheriff's Office (Oregon), Animal Control",
+    "title": "Adoption Application (fillable, 2024)",
+    "url": "https://sheriff.columbiacountyor.gov/media/Animal%20Control/Adoption%20Application%20-%20Fillable%20-2024.pdf",
+    "sha256": "f9ad375ddd95799cb0ce22f90e020f3bf4d03dc9919a178fb34afbdb7fd0af3c",
+    "retrieved": "2026-11-14",
+    "provenance": "Public county animal adoption form; picked for a table of current pets (animal names) and a previous address.",
+    "annotated_fields": 47
+  }
+]

@@ -1,0 +1,48 @@
+{
+  "frozen_utc": "2026-11-13T20:54:25.261132+00:00",
+  "training_seed": 1,
+  "epochs_per_head": 20,
+  "training_forms": 6480,
+  "component_buckets": 8192,
+  "ownership_buckets": 8192,
+  "acceptance_cutoff": 0.9,
+  "calibration_only_softens": true,
+  "minimum_accepted_fields": 20,
+  "training_source_ids": [
+    "employment",
+    "adoption-vet",
+    "volunteer-freedom",
+    "membership-rotary",
+    "scholarship-sd91",
+    "patient-ripley",
+    "camp-pearce",
+    "i9"
+  ],
+  "calibration_source_ids": [
+    "membership-rhadc",
+    "employment-humboldt",
+    "patient-ecw"
+  ],
+  "test_source_ids": [
+    "volunteer-xavier",
+    "camp-vbac",
+    "rental-dixon",
+    "membership-jas"
+  ],
+  "model_sha256": "300824972caabafb4739e580d18ac4ab75bfce42489863e4fa85bedf2ba76ffc",
+  "source_sha256": {
+    "crates/atelier-fieldml/src/personal.rs": "28fe6efca0b54e86d12b2af3eea288907581a4a76c8a18c761256a615f636e63",
+    "crates/atelier-fieldml/src/synth.rs": "90b1347184a8776778ba5833f6b7a7a24d2d3cf46f717dbb2059fb098a9600f5",
+    "tools/fieldml_labels.py": "8fd7d7cdfceb9f4794766ddae4108a63dd44013372c349d0b17f5822ecc2830e",
+    "tools/fieldml_v3_fresh.py": "b88255cc57eb9ee2d99c00bfb4a69970c4162a7942bd3702c116dd700d5bc545",
+    "crates/atelier-fieldml/examples/personal_v3.rs": "55227590be9336060adb9cdf1c9466a35751584a5a109491a67ddeb17d971ff8",
+    "crates/atelier-fieldml/examples/qualify_v3.rs": "2e5ca747f8c597739e044d5d1d2bfc6c6311c7fef5db76aa594d664633c2e8ed"
+  },
+  "datasets": {
+    "development-gold.tsv": "2d1dd5720d20e60e192731c453df9eea3eab3f34da57d669a07f9058179be296",
+    "development-extracted.tsv": "94fe90bc6f225ead7845f35690766be4b9bcc6464e0a564b24c1146f01932070",
+    "fresh-gold.tsv": "0d4c12476e2535c79154a410d3f8bb883a72eea3c27bdd48cede56da0b7a7152",
+    "fresh-extracted.tsv": "d47f37d4e91bac0d4d48b9ee9df2eb955d7c12ccfa4343ad11ca6ed5caf69095",
+    "fresh-reviewed-sources.json": "21ba2cec19b77c51523c37e45f3ae46f7c068ada122dd9ced7897722a10623b8"
+  }
+}

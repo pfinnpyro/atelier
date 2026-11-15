@@ -1,0 +1,1165 @@
+# P form page width height | F form field page x0 y0 x1 y1 | T form page x0 y0 x1 y1 size bold text | S form page x0 y0 x1 y1 filled stroked | L form page x0 y0 x1 y1
+F	employment-bridgeport	Last	1	77.64	157.56	180.96	182.40
+F	employment-bridgeport	First	1	185.64	157.56	288.96	182.40
+F	employment-bridgeport	Middle	1	293.64	157.56	358.68	182.40
+F	employment-bridgeport	Soc Sec No	1	425.16	157.56	567.60	182.40
+F	employment-bridgeport	Other Names Used if applicable	1	194.76	194.64	561.84	217.80
+F	employment-bridgeport	Street	1	82.56	219.60	333.36	244.44
+F	employment-bridgeport	City	1	339.48	219.60	465.00	244.44
+F	employment-bridgeport	State	1	471.12	219.60	502.44	244.44
+F	employment-bridgeport	Zip	1	508.56	219.60	566.64	244.44
+F	employment-bridgeport	Primary	1	94.20	257.40	232.80	282.24
+F	employment-bridgeport	Secondary	1	257.40	257.40	396.12	282.24
+F	employment-bridgeport	Other	1	420.84	257.40	559.56	282.24
+F	employment-bridgeport	Best time to call	1	118.56	295.32	239.40	320.16
+F	employment-bridgeport	Email	1	334.56	295.56	553.68	320.40
+F	employment-bridgeport	Position desired	1	37.08	371.88	237.84	388.32
+F	employment-bridgeport	Date available to work	1	239.40	371.88	413.28	388.32
+F	employment-bridgeport	Desired Salary	1	414.84	371.88	575.04	388.32
+F	employment-bridgeport	Text1	1	238.02	473.74	575.98	499.97
+F	employment-bridgeport	High School	1	37.08	561.80	296.28	575.16
+F	employment-bridgeport	Location	1	37.08	588.01	296.28	602.52
+F	employment-bridgeport	Type of degreediplomacertificate	1	297.84	589.16	575.04	602.52
+F	employment-bridgeport	School	1	37.08	630.06	296.28	643.80
+F	employment-bridgeport	From	1	297.84	630.06	350.28	643.80
+F	employment-bridgeport	To	1	351.84	629.67	440.16	643.80
+F	employment-bridgeport	Location_2	1	37.08	657.03	296.28	671.16
+F	employment-bridgeport	Type of degreediplomacertificate_2	1	297.84	656.65	575.04	671.16
+F	employment-bridgeport	School_2	1	37.08	697.16	296.28	712.44
+F	employment-bridgeport	From_2	1	297.84	697.54	350.28	712.44
+F	employment-bridgeport	To_2	1	351.84	697.93	440.16	712.44
+F	employment-bridgeport	Location_3	1	37.08	726.06	296.28	739.80
+F	employment-bridgeport	Type of degreediplomacertificate_3	1	298.23	726.06	575.42	739.80
+F	employment-bridgeport	Summarize specific skills and qualifications acquired from employment or other experiences that are related to the position for which you are applying	2	37.68	142.80	574.44	198.84
+F	employment-bridgeport	Company Name Address	2	37.68	238.20	187.68	280.92
+F	employment-bridgeport	From_3	2	223.44	239.76	321.96	252.24
+F	employment-bridgeport	Starting Title Salary	2	334.44	238.20	448.68	280.92
+F	employment-bridgeport	Final Title Salary	2	451.44	238.20	574.44	280.92
+F	employment-bridgeport	To_3	2	211.08	266.64	320.64	279.12
+F	employment-bridgeport	Company Phone	2	190.20	292.92	331.92	321.72
+F	employment-bridgeport	Reason for leaving this employer	2	334.20	292.92	574.68	321.72
+F	employment-bridgeport	May we contact for reference YES NO	2	37.08	305.88	188.28	321.72
+F	employment-bridgeport	Company Name Address_2	2	37.68	401.40	187.68	444.12
+F	employment-bridgeport	Starting Title Salary_2	2	334.44	401.40	448.68	444.12
+F	employment-bridgeport	Final Title Salary_2	2	451.44	401.40	574.44	444.12
+F	employment-bridgeport	From_4	2	223.44	402.96	321.96	415.44
+F	employment-bridgeport	To_4	2	211.08	429.84	320.64	442.32
+F	employment-bridgeport	Company Phone_2	2	190.20	456.00	331.92	484.80
+F	employment-bridgeport	Reason for leaving this employer_2	2	334.20	456.00	574.68	484.80
+F	employment-bridgeport	May we contact for reference YES NO_2	2	37.08	468.96	188.28	484.80
+F	employment-bridgeport	Summarize job responsibilitiesRow1_2	2	36.96	496.21	575.16	539.48
+F	employment-bridgeport	Company Name Address_3	2	37.68	564.48	187.68	607.20
+F	employment-bridgeport	From_5	2	223.44	566.04	321.96	578.52
+F	employment-bridgeport	Starting Title Salary_3	2	334.44	564.48	448.68	607.20
+F	employment-bridgeport	Final Title Salary_3	2	451.44	564.48	574.44	607.20
+F	employment-bridgeport	To_5	2	211.08	592.92	320.64	605.40
+F	employment-bridgeport	Company Phone_3	2	190.20	619.20	331.92	648.00
+F	employment-bridgeport	Reason for leaving this employer_3	2	334.20	619.20	574.68	648.00
+F	employment-bridgeport	May we contact for reference YES NO_3	2	37.08	632.16	188.28	648.00
+F	employment-bridgeport	Summarize job responsibilities	2	37.68	659.52	574.44	702.24
+F	employment-bridgeport	Company Name Address_4	3	37.68	128.88	187.68	171.48
+F	employment-bridgeport	From_6	3	223.44	130.44	321.96	142.92
+F	employment-bridgeport	Starting Title Salary_4	3	334.44	128.88	448.68	171.48
+F	employment-bridgeport	Final Title Salary_4	3	451.44	128.88	574.44	171.48
+F	employment-bridgeport	To_6	3	211.08	157.20	320.64	169.68
+F	employment-bridgeport	Company Phone_4	3	190.20	183.48	331.92	212.28
+F	employment-bridgeport	Reason for leaving this employer_4	3	334.20	183.48	574.68	212.28
+F	employment-bridgeport	May we contact for reference YES NO_4	3	37.08	196.44	188.28	212.28
+F	employment-bridgeport	Summarize job responsibilitiesRow1_3	3	36.96	224.85	575.16	266.58
+F	employment-bridgeport	Company Name Address_5	3	37.68	291.96	187.68	334.68
+F	employment-bridgeport	Starting Title Salary_5	3	334.44	291.96	448.68	334.68
+F	employment-bridgeport	Final Title Salary_5	3	451.44	291.96	574.44	334.68
+F	employment-bridgeport	From_7	3	223.44	293.52	321.96	306.00
+F	employment-bridgeport	To_7	3	211.08	320.40	320.64	332.88
+F	employment-bridgeport	Company Phone_5	3	190.20	346.68	331.92	375.48
+F	employment-bridgeport	Reason for leaving this employer_5	3	334.20	346.68	574.68	375.48
+F	employment-bridgeport	May we contact for reference YES NO_5	3	37.08	359.64	188.28	375.48
+F	employment-bridgeport	Summarize job responsibilitiesRow1_4	3	36.96	387.16	575.16	429.77
+F	employment-bridgeport	Branch of Service	3	37.08	482.40	296.28	498.84
+F	employment-bridgeport	Rank Type of Service	3	297.84	482.40	575.04	498.84
+F	employment-bridgeport	undefined_4	3	70.68	511.92	147.36	524.28
+F	employment-bridgeport	undefined_5	3	173.88	511.80	250.68	524.28
+F	employment-bridgeport	Training experience received	3	258.00	510.36	574.44	552.96
+F	employment-bridgeport	Dates From To	3	37.44	525.96	255.48	552.96
+F	employment-bridgeport	NameRow1	3	37.32	609.60	147.60	635.52
+F	employment-bridgeport	CompanyTitleRow1	3	149.64	609.60	282.60	635.52
+F	employment-bridgeport	PhoneRow1	3	284.64	609.60	386.04	635.52
+F	employment-bridgeport	EmailRow1	3	388.08	609.60	503.04	635.52
+F	employment-bridgeport	Years KnownRow1	3	505.08	609.60	574.80	635.52
+F	employment-bridgeport	NameRow2	3	37.32	636.96	147.60	662.88
+F	employment-bridgeport	CompanyTitleRow2	3	149.64	636.96	282.60	662.88
+F	employment-bridgeport	PhoneRow2	3	284.64	636.96	386.04	662.88
+F	employment-bridgeport	EmailRow2	3	388.08	636.96	503.04	662.88
+F	employment-bridgeport	Years KnownRow2	3	505.08	636.96	574.80	662.88
+F	employment-bridgeport	NameRow3	3	37.32	664.32	147.60	690.24
+F	employment-bridgeport	CompanyTitleRow3	3	149.64	664.32	282.60	690.24
+F	employment-bridgeport	PhoneRow3	3	284.64	664.32	386.04	690.24
+F	employment-bridgeport	EmailRow3	3	388.08	664.32	503.04	690.24
+F	employment-bridgeport	Years KnownRow3	3	505.08	664.32	574.80	690.24
+F	employment-bridgeport	NameRow4	3	37.32	691.68	147.60	717.60
+F	employment-bridgeport	CompanyTitleRow4	3	149.64	691.68	282.60	717.60
+F	employment-bridgeport	PhoneRow4	3	284.64	691.68	386.04	717.60
+F	employment-bridgeport	EmailRow4	3	388.08	691.68	503.04	717.60
+F	employment-bridgeport	Years KnownRow4	3	505.08	691.68	574.80	717.60
+F	employment-bridgeport	NameRow5	3	37.32	719.04	147.60	744.96
+F	employment-bridgeport	CompanyTitleRow5	3	149.64	719.04	282.60	744.96
+F	employment-bridgeport	PhoneRow5	3	284.64	719.04	386.04	744.96
+F	employment-bridgeport	EmailRow5	3	388.08	719.04	503.04	744.96
+F	employment-bridgeport	Years KnownRow5	3	505.08	719.04	574.80	744.96
+F	employment-bridgeport	Date	4	418.08	410.04	544.08	435.96
+P	employment-bridgeport	1	612.00	792.00
+T	employment-bridgeport	1	253.68	90.53	361.81	110.01	16.0	0	City of Bridgeport
+T	employment-bridgeport	1	222.72	109.97	392.77	129.45	16.0	0	Application for Employment
+T	employment-bridgeport	1	41.64	142.37	141.10	157.69	11.0	1	Personal Information
+T	employment-bridgeport	1	41.64	169.87	569.98	184.64	11.0	0	Name: ____________________________________________________ Soc. Sec. No. __________________________
+T	employment-bridgeport	1	77.64	183.61	99.72	195.65	9.0	0	(Last)
+T	employment-bridgeport	1	185.64	183.61	209.03	195.65	9.0	0	(First)
+T	employment-bridgeport	1	293.64	183.61	326.88	195.65	9.0	0	(Middle)
+T	employment-bridgeport	1	41.64	205.27	564.22	220.04	11.0	0	Other Names Used (if applicable): ___________________________________________________________________
+T	employment-bridgeport	1	41.64	232.14	569.04	246.92	11.0	0	Address: ________________________________________________________ ____________________________ _______ _____________
+T	employment-bridgeport	1	185.65	245.88	210.00	257.93	9.0	0	Street
+T	employment-bridgeport	1	365.65	245.88	418.33	257.93	9.0	0	City
+T	employment-bridgeport	1	437.65	245.88	497.28	257.93	9.0	0	State
+T	employment-bridgeport	1	509.65	245.88	545.05	257.93	9.0	0	Zip
+T	employment-bridgeport	1	41.64	269.95	561.83	284.72	11.0	0	Telephone: _______________________________ _______________________________ _______________________________
+T	employment-bridgeport	1	141.63	283.68	178.07	295.73	9.0	0	Primary
+T	employment-bridgeport	1	293.64	283.68	352.08	295.73	9.0	0	Secondary
+T	employment-bridgeport	1	451.93	283.68	503.64	295.73	9.0	0	Other
+T	employment-bridgeport	1	41.64	307.87	239.44	322.64	11.0	0	Best time to call: ___________________________
+T	employment-bridgeport	1	304.68	307.87	556.05	322.64	11.0	0	Email: ________________________________________
+T	employment-bridgeport	1	41.64	346.49	149.14	361.81	11.0	1	Additional Information
+T	employment-bridgeport	1	41.64	360.55	118.90	375.32	11.0	0	Position desired:
+T	employment-bridgeport	1	243.84	360.55	349.54	375.32	11.0	0	Date available to work:
+T	employment-bridgeport	1	419.40	360.55	488.38	375.32	11.0	0	Desired Salary:
+T	employment-bridgeport	1	41.64	387.91	177.94	402.68	11.0	0	Type of employment desired:
+T	employment-bridgeport	1	41.64	401.95	205.39	416.72	11.0	0	Full-time Part-time Seasonal
+T	employment-bridgeport	1	243.84	387.91	395.49	402.68	11.0	0	Have you ever been employed by
+T	employment-bridgeport	1	243.84	401.95	411.33	416.72	11.0	0	the City of Bridgeport? YES NO
+T	employment-bridgeport	1	419.40	387.91	544.27	402.68	11.0	0	If you are under 18 and it is
+T	employment-bridgeport	1	419.40	401.35	566.97	416.12	11.0	0	required, can you furnish a work
+T	employment-bridgeport	1	419.40	415.39	554.62	430.16	11.0	0	permit? YES NO N/A
+T	employment-bridgeport	1	41.64	429.31	235.15	444.08	11.0	0	I certify that I am a U.S. citizen, permanent
+T	employment-bridgeport	1	41.64	442.75	199.62	457.52	11.0	0	resident, or a foreign national with
+T	employment-bridgeport	1	41.64	456.19	234.94	470.96	11.0	0	authorization to work in the United States.
+T	employment-bridgeport	1	105.72	470.23	171.44	485.00	11.0	0	YES NO
+T	employment-bridgeport	1	243.84	429.31	555.34	444.08	11.0	0	Have you ever plead guilty, no contest, or been convicted of a crime?
+T	employment-bridgeport	1	243.84	442.75	395.50	457.13	11.0	0	(Traffic violations not applicable.)
+T	employment-bridgeport	1	243.84	456.80	404.96	471.57	11.0	0	YES NO If Yes, please explain:
+T	employment-bridgeport	1	243.84	497.29	564.35	509.33	9.0	0	Answering yes to this question does not constitute automatic bar to employment. Date
+T	employment-bridgeport	1	243.84	506.23	554.86	521.00	9.0	0	of offense, seriousness & nature of the violation, & rehabilitation will be considered.
+T	employment-bridgeport	1	41.64	533.33	89.62	548.65	11.0	1	Education
+T	employment-bridgeport	1	41.64	547.39	99.58	562.16	11.0	0	High School:
+T	employment-bridgeport	1	302.40	547.99	446.50	562.76	11.0	0	Graduate or GED? YES NO
+T	employment-bridgeport	1	41.64	574.75	85.18	589.52	11.0	0	Location:
+T	employment-bridgeport	1	302.40	574.75	464.86	589.52	11.0	0	Type of degree/diploma/certificate:
+T	employment-bridgeport	1	41.64	616.03	76.66	630.80	11.0	0	School:
+T	employment-bridgeport	1	302.40	616.03	331.30	630.80	11.0	0	From:
+T	employment-bridgeport	1	356.40	616.03	373.06	630.80	11.0	0	To:
+T	employment-bridgeport	1	446.28	616.63	556.66	631.40	11.0	0	Graduate? YES NO
+T	employment-bridgeport	1	41.64	643.39	85.18	658.16	11.0	0	Location:
+T	employment-bridgeport	1	302.40	643.39	464.86	658.16	11.0	0	Type of degree/diploma/certificate:
+T	employment-bridgeport	1	41.64	684.67	76.66	699.44	11.0	0	School:
+T	employment-bridgeport	1	302.40	684.67	331.30	699.44	11.0	0	From:
+T	employment-bridgeport	1	356.40	684.67	373.06	699.44	11.0	0	To:
+T	employment-bridgeport	1	446.28	685.27	556.66	700.04	11.0	0	Graduate? YES NO
+T	employment-bridgeport	1	41.64	712.03	85.18	726.80	11.0	0	Location:
+T	employment-bridgeport	1	302.40	712.03	464.86	726.80	11.0	0	Type of degree/diploma/certificate:
+S	employment-bridgeport	1	36.48	143.40	575.52	156.84	1	0
+S	employment-bridgeport	1	41.64	143.40	570.36	156.84	1	0
+L	employment-bridgeport	1	36.48	142.92	575.52	143.40
+L	employment-bridgeport	1	36.00	143.40	36.48	156.84
+L	employment-bridgeport	1	575.52	143.40	576.00	156.84
+L	employment-bridgeport	1	36.48	156.84	575.52	157.32
+L	employment-bridgeport	1	36.00	157.32	36.48	333.12
+L	employment-bridgeport	1	36.48	333.12	575.52	333.60
+L	employment-bridgeport	1	575.52	157.32	576.00	333.12
+S	employment-bridgeport	1	36.48	347.52	575.52	360.96	1	0
+S	employment-bridgeport	1	41.64	347.52	570.36	360.96	1	0
+L	employment-bridgeport	1	36.48	347.04	575.52	347.52
+L	employment-bridgeport	1	36.00	347.52	36.48	360.96
+L	employment-bridgeport	1	575.52	347.52	576.00	360.96
+L	employment-bridgeport	1	36.48	360.96	238.32	361.44
+L	employment-bridgeport	1	238.80	360.96	413.76	361.44
+L	employment-bridgeport	1	414.24	360.96	575.52	361.44
+L	employment-bridgeport	1	36.00	361.44	36.48	388.32
+L	employment-bridgeport	1	238.32	361.44	238.80	388.32
+L	employment-bridgeport	1	413.76	361.44	414.24	388.32
+L	employment-bridgeport	1	575.52	361.44	576.00	388.32
+L	employment-bridgeport	1	36.48	388.32	238.32	388.80
+L	employment-bridgeport	1	238.80	388.32	413.76	388.80
+L	employment-bridgeport	1	414.24	388.32	575.52	388.80
+L	employment-bridgeport	1	36.00	388.80	36.48	429.72
+L	employment-bridgeport	1	238.32	388.80	238.80	429.72
+L	employment-bridgeport	1	413.76	388.80	414.24	429.72
+L	employment-bridgeport	1	575.52	388.80	576.00	429.72
+L	employment-bridgeport	1	36.48	429.72	238.32	430.20
+L	employment-bridgeport	1	238.80	429.72	413.76	430.20
+L	employment-bridgeport	1	414.24	429.72	575.52	430.20
+L	employment-bridgeport	1	36.00	430.20	36.48	519.96
+L	employment-bridgeport	1	36.48	519.96	238.32	520.44
+L	employment-bridgeport	1	238.32	430.20	238.80	519.96
+L	employment-bridgeport	1	238.80	519.96	575.52	520.44
+L	employment-bridgeport	1	575.52	430.20	576.00	519.96
+S	employment-bridgeport	1	36.48	534.36	575.52	547.80	1	0
+S	employment-bridgeport	1	41.64	534.36	570.36	547.80	1	0
+L	employment-bridgeport	1	36.48	533.88	575.52	534.36
+L	employment-bridgeport	1	36.00	534.36	36.48	547.80
+L	employment-bridgeport	1	575.52	534.36	576.00	547.80
+L	employment-bridgeport	1	36.48	547.80	296.76	548.28
+L	employment-bridgeport	1	297.24	547.80	575.52	548.28
+L	employment-bridgeport	1	36.00	548.28	36.48	575.16
+L	employment-bridgeport	1	296.76	548.28	297.24	575.16
+L	employment-bridgeport	1	575.52	548.28	576.00	575.16
+L	employment-bridgeport	1	36.48	575.16	296.76	575.64
+L	employment-bridgeport	1	297.24	575.16	575.52	575.64
+L	employment-bridgeport	1	36.00	575.64	36.48	602.52
+L	employment-bridgeport	1	296.76	575.64	297.24	602.52
+L	employment-bridgeport	1	575.52	575.64	576.00	602.52
+S	employment-bridgeport	1	36.48	603.00	575.52	616.44	1	0
+S	employment-bridgeport	1	41.64	603.00	570.36	616.44	1	0
+L	employment-bridgeport	1	36.48	602.52	296.76	603.00
+L	employment-bridgeport	1	297.24	602.52	575.52	603.00
+L	employment-bridgeport	1	36.00	603.00	36.48	616.44
+L	employment-bridgeport	1	575.52	603.00	576.00	616.44
+L	employment-bridgeport	1	36.48	616.44	296.76	616.92
+L	employment-bridgeport	1	297.24	616.44	350.76	616.92
+L	employment-bridgeport	1	351.24	616.44	440.64	616.92
+L	employment-bridgeport	1	441.12	616.44	575.52	616.92
+L	employment-bridgeport	1	36.00	616.92	36.48	643.80
+L	employment-bridgeport	1	296.76	616.92	297.24	643.80
+L	employment-bridgeport	1	350.76	616.92	351.24	643.80
+L	employment-bridgeport	1	440.64	616.92	441.12	643.80
+L	employment-bridgeport	1	575.52	616.92	576.00	643.80
+L	employment-bridgeport	1	36.48	643.80	296.76	644.28
+L	employment-bridgeport	1	297.24	643.80	350.76	644.28
+L	employment-bridgeport	1	351.24	643.80	440.64	644.28
+L	employment-bridgeport	1	441.12	643.80	575.52	644.28
+L	employment-bridgeport	1	36.00	644.28	36.48	671.16
+L	employment-bridgeport	1	296.76	644.28	297.24	671.16
+L	employment-bridgeport	1	575.52	644.28	576.00	671.16
+S	employment-bridgeport	1	36.48	671.64	575.52	685.08	1	0
+S	employment-bridgeport	1	41.64	671.64	570.36	685.08	1	0
+L	employment-bridgeport	1	36.48	671.16	296.76	671.64
+L	employment-bridgeport	1	297.24	671.16	575.52	671.64
+L	employment-bridgeport	1	36.00	671.64	36.48	685.08
+L	employment-bridgeport	1	575.52	671.64	576.00	685.08
+L	employment-bridgeport	1	36.48	685.08	296.76	685.56
+L	employment-bridgeport	1	297.24	685.08	350.76	685.56
+L	employment-bridgeport	1	351.24	685.08	440.64	685.56
+L	employment-bridgeport	1	441.12	685.08	575.52	685.56
+L	employment-bridgeport	1	36.00	685.56	36.48	712.44
+L	employment-bridgeport	1	296.76	685.56	297.24	712.44
+L	employment-bridgeport	1	350.76	685.56	351.24	712.44
+L	employment-bridgeport	1	440.64	685.56	441.12	712.44
+L	employment-bridgeport	1	575.52	685.56	576.00	712.44
+L	employment-bridgeport	1	36.48	712.44	296.76	712.92
+L	employment-bridgeport	1	297.24	712.44	350.76	712.92
+L	employment-bridgeport	1	351.24	712.44	440.64	712.92
+L	employment-bridgeport	1	441.12	712.44	575.52	712.92
+L	employment-bridgeport	1	36.00	712.92	36.48	739.80
+L	employment-bridgeport	1	296.76	712.92	297.24	739.80
+L	employment-bridgeport	1	575.52	712.92	576.00	739.80
+S	employment-bridgeport	1	36.48	740.28	575.52	753.72	1	0
+S	employment-bridgeport	1	41.64	740.28	570.36	753.72	1	0
+L	employment-bridgeport	1	36.48	739.80	296.76	740.28
+L	employment-bridgeport	1	297.24	739.80	575.52	740.28
+L	employment-bridgeport	1	36.00	740.28	36.48	753.72
+L	employment-bridgeport	1	36.48	753.72	575.52	754.20
+L	employment-bridgeport	1	575.52	740.28	576.00	753.72
+S	employment-bridgeport	1	39.79	404.91	49.08	416.52	0	1
+S	employment-bridgeport	1	94.34	404.38	103.63	415.99	0	1
+S	employment-bridgeport	1	150.57	404.00	159.87	415.61	0	1
+S	employment-bridgeport	1	346.61	403.61	355.91	415.22	0	1
+S	employment-bridgeport	1	379.17	403.82	388.47	415.43	0	1
+S	employment-bridgeport	1	460.62	416.32	469.91	427.93	0	1
+S	employment-bridgeport	1	491.57	416.08	500.87	428.07	0	1
+S	employment-bridgeport	1	523.92	415.31	533.60	427.69	0	1
+S	employment-bridgeport	1	98.71	470.77	111.48	485.08	0	1
+S	employment-bridgeport	1	141.13	471.98	153.90	486.28	0	1
+S	employment-bridgeport	1	239.35	458.88	252.11	473.19	0	1
+S	employment-bridgeport	1	270.16	458.88	283.31	473.19	0	1
+S	employment-bridgeport	1	386.42	548.96	398.42	561.34	0	1
+S	employment-bridgeport	1	417.29	549.59	429.28	561.96	0	1
+S	employment-bridgeport	1	497.01	618.14	509.01	630.52	0	1
+S	employment-bridgeport	1	527.26	618.74	539.26	631.11	0	1
+S	employment-bridgeport	1	497.40	687.86	509.39	700.23	0	1
+S	employment-bridgeport	1	527.44	687.86	539.43	700.23	0	1
+P	employment-bridgeport	2	612.00	792.00
+T	employment-bridgeport	2	41.64	103.37	146.14	118.69	11.0	1	Skills & Qualifications:
+T	employment-bridgeport	2	41.64	117.43	552.82	131.81	11.0	0	Summarize specific skills and qualifications acquired from employment or other experiences that are related to the
+T	employment-bridgeport	2	41.64	130.87	203.13	145.25	11.0	0	position for which you are applying.
+T	employment-bridgeport	2	41.64	212.21	137.74	227.53	11.0	1	Employment History
+T	employment-bridgeport	2	51.24	226.27	176.38	241.04	11.0	0	Company Name & Address:
+T	employment-bridgeport	2	223.20	226.27	301.18	241.04	11.0	0	Dates Employed:
+T	employment-bridgeport	2	194.40	239.71	324.45	254.48	11.0	0	From: __________________
+T	employment-bridgeport	2	194.40	266.59	323.14	281.36	11.0	0	To: ____________________
+T	employment-bridgeport	2	341.76	226.27	443.72	241.04	11.0	0	Starting Title & Salary:
+T	employment-bridgeport	2	470.04	226.27	558.10	241.04	11.0	0	Final Title & Salary:
+T	employment-bridgeport	2	41.64	280.51	182.02	295.28	11.0	0	May we contact for reference?
+T	employment-bridgeport	2	41.64	294.55	104.97	309.32	11.0	0	YES NO
+T	employment-bridgeport	2	194.40	280.51	281.02	295.28	11.0	0	Company Phone #:
+T	employment-bridgeport	2	338.40	280.51	490.06	295.28	11.0	0	Reason for leaving this employer:
+T	employment-bridgeport	2	41.64	321.31	183.34	336.08	11.0	0	Summarize job responsibilities:
+T	employment-bridgeport	2	51.24	389.47	176.38	404.24	11.0	0	Company Name & Address:
+T	employment-bridgeport	2	223.20	389.47	301.18	404.24	11.0	0	Dates Employed:
+T	employment-bridgeport	2	194.40	402.91	324.45	417.68	11.0	0	From: __________________
+T	employment-bridgeport	2	194.40	429.79	323.14	444.56	11.0	0	To: ____________________
+T	employment-bridgeport	2	341.76	389.47	443.72	404.24	11.0	0	Starting Title & Salary:
+T	employment-bridgeport	2	470.04	389.47	558.10	404.24	11.0	0	Final Title & Salary:
+T	employment-bridgeport	2	41.64	443.71	182.02	458.48	11.0	0	May we contact for reference?
+T	employment-bridgeport	2	41.64	457.63	104.97	472.40	11.0	0	YES NO
+T	employment-bridgeport	2	194.40	443.71	281.02	458.48	11.0	0	Company Phone #:
+T	employment-bridgeport	2	338.40	443.71	490.06	458.48	11.0	0	Reason for leaving this employer:
+T	employment-bridgeport	2	41.64	484.51	183.34	499.28	11.0	0	Summarize job responsibilities:
+T	employment-bridgeport	2	51.24	552.55	176.38	567.32	11.0	0	Company Name & Address:
+T	employment-bridgeport	2	223.20	552.55	301.18	567.32	11.0	0	Dates Employed:
+T	employment-bridgeport	2	194.40	565.99	324.45	580.76	11.0	0	From: __________________
+T	employment-bridgeport	2	194.40	592.87	323.14	607.64	11.0	0	To: ____________________
+T	employment-bridgeport	2	341.76	552.55	443.72	567.32	11.0	0	Starting Title & Salary:
+T	employment-bridgeport	2	470.04	552.55	558.10	567.32	11.0	0	Final Title & Salary:
+T	employment-bridgeport	2	41.64	606.79	182.02	621.56	11.0	0	May we contact for reference?
+T	employment-bridgeport	2	41.64	620.83	104.97	635.60	11.0	0	YES NO
+T	employment-bridgeport	2	194.40	606.79	281.02	621.56	11.0	0	Company Phone #:
+T	employment-bridgeport	2	338.40	606.79	490.06	621.56	11.0	0	Reason for leaving this employer:
+T	employment-bridgeport	2	41.64	647.59	183.34	662.36	11.0	0	Summarize job responsibilities:
+S	employment-bridgeport	2	36.48	104.40	575.52	117.84	1	0
+S	employment-bridgeport	2	41.64	104.40	570.36	117.84	1	0
+L	employment-bridgeport	2	36.48	103.92	575.52	104.40
+L	employment-bridgeport	2	36.00	104.40	36.48	117.84
+L	employment-bridgeport	2	575.52	104.40	576.00	117.84
+L	employment-bridgeport	2	36.48	117.84	575.52	118.32
+L	employment-bridgeport	2	36.00	118.32	36.48	198.84
+L	employment-bridgeport	2	36.48	198.84	575.52	199.32
+L	employment-bridgeport	2	575.52	118.32	576.00	198.84
+S	employment-bridgeport	2	36.48	213.24	575.52	226.68	1	0
+S	employment-bridgeport	2	41.64	213.24	570.36	226.68	1	0
+L	employment-bridgeport	2	36.48	212.76	575.52	213.24
+L	employment-bridgeport	2	36.00	213.24	36.48	226.68
+L	employment-bridgeport	2	575.52	213.24	576.00	226.68
+L	employment-bridgeport	2	36.48	226.68	188.76	227.16
+L	employment-bridgeport	2	189.24	226.68	332.76	227.16
+L	employment-bridgeport	2	333.24	226.68	449.76	227.16
+L	employment-bridgeport	2	450.24	226.68	575.52	227.16
+L	employment-bridgeport	2	36.00	227.16	36.48	280.92
+L	employment-bridgeport	2	188.76	227.16	189.24	280.92
+L	employment-bridgeport	2	332.76	227.16	333.24	280.92
+L	employment-bridgeport	2	449.76	227.16	450.24	280.92
+L	employment-bridgeport	2	575.52	227.16	576.00	280.92
+L	employment-bridgeport	2	36.48	280.92	188.76	281.40
+L	employment-bridgeport	2	189.24	280.92	332.76	281.40
+L	employment-bridgeport	2	333.24	280.92	449.76	281.40
+L	employment-bridgeport	2	450.24	280.92	575.52	281.40
+L	employment-bridgeport	2	36.00	281.40	36.48	321.72
+L	employment-bridgeport	2	188.76	281.40	189.24	321.72
+L	employment-bridgeport	2	332.76	281.40	333.24	321.72
+L	employment-bridgeport	2	575.52	281.40	576.00	321.72
+L	employment-bridgeport	2	36.48	321.72	188.76	322.20
+L	employment-bridgeport	2	189.24	321.72	332.76	322.20
+L	employment-bridgeport	2	333.24	321.72	575.52	322.20
+L	employment-bridgeport	2	36.00	322.20	36.48	375.96
+L	employment-bridgeport	2	575.52	322.20	576.00	375.96
+S	employment-bridgeport	2	36.48	376.44	575.52	389.88	1	0
+S	employment-bridgeport	2	41.64	376.44	570.36	389.88	1	0
+L	employment-bridgeport	2	36.48	375.96	575.52	376.44
+L	employment-bridgeport	2	36.00	376.44	36.48	389.88
+L	employment-bridgeport	2	575.52	376.44	576.00	389.88
+L	employment-bridgeport	2	36.48	389.88	188.76	390.36
+L	employment-bridgeport	2	189.24	389.88	332.76	390.36
+L	employment-bridgeport	2	333.24	389.88	449.76	390.36
+L	employment-bridgeport	2	450.24	389.88	575.52	390.36
+L	employment-bridgeport	2	36.00	390.36	36.48	444.12
+L	employment-bridgeport	2	188.76	390.36	189.24	444.12
+L	employment-bridgeport	2	332.76	390.36	333.24	444.12
+L	employment-bridgeport	2	449.76	390.36	450.24	444.12
+L	employment-bridgeport	2	575.52	390.36	576.00	444.12
+L	employment-bridgeport	2	36.48	444.12	188.76	444.60
+L	employment-bridgeport	2	189.24	444.12	332.76	444.60
+L	employment-bridgeport	2	333.24	444.12	449.76	444.60
+L	employment-bridgeport	2	450.24	444.12	575.52	444.60
+L	employment-bridgeport	2	36.00	444.60	36.48	484.80
+L	employment-bridgeport	2	188.76	444.60	189.24	484.80
+L	employment-bridgeport	2	332.76	444.60	333.24	484.80
+L	employment-bridgeport	2	575.52	444.60	576.00	484.80
+L	employment-bridgeport	2	36.48	484.80	188.76	485.28
+L	employment-bridgeport	2	189.24	484.80	332.76	485.28
+L	employment-bridgeport	2	333.24	484.80	575.52	485.28
+L	employment-bridgeport	2	36.00	485.28	36.48	539.04
+L	employment-bridgeport	2	575.52	485.28	576.00	539.04
+S	employment-bridgeport	2	36.48	539.52	575.52	552.96	1	0
+S	employment-bridgeport	2	41.64	539.52	570.36	552.96	1	0
+L	employment-bridgeport	2	36.48	539.04	575.52	539.52
+L	employment-bridgeport	2	36.00	539.52	36.48	552.96
+L	employment-bridgeport	2	575.52	539.52	576.00	552.96
+L	employment-bridgeport	2	36.48	552.96	188.76	553.44
+L	employment-bridgeport	2	189.24	552.96	332.76	553.44
+L	employment-bridgeport	2	333.24	552.96	449.76	553.44
+L	employment-bridgeport	2	450.24	552.96	575.52	553.44
+L	employment-bridgeport	2	36.00	553.44	36.48	607.20
+L	employment-bridgeport	2	188.76	553.44	189.24	607.20
+L	employment-bridgeport	2	332.76	553.44	333.24	607.20
+L	employment-bridgeport	2	449.76	553.44	450.24	607.20
+L	employment-bridgeport	2	575.52	553.44	576.00	607.20
+L	employment-bridgeport	2	36.48	607.20	188.76	607.68
+L	employment-bridgeport	2	189.24	607.20	332.76	607.68
+L	employment-bridgeport	2	333.24	607.20	449.76	607.68
+L	employment-bridgeport	2	450.24	607.20	575.52	607.68
+L	employment-bridgeport	2	36.00	607.68	36.48	648.00
+L	employment-bridgeport	2	188.76	607.68	189.24	648.00
+L	employment-bridgeport	2	332.76	607.68	333.24	648.00
+L	employment-bridgeport	2	575.52	607.68	576.00	648.00
+L	employment-bridgeport	2	36.48	648.00	188.76	648.48
+L	employment-bridgeport	2	189.24	648.00	332.76	648.48
+L	employment-bridgeport	2	333.24	648.00	575.52	648.48
+L	employment-bridgeport	2	36.00	648.48	36.48	702.24
+L	employment-bridgeport	2	575.52	648.48	576.00	702.24
+L	employment-bridgeport	2	36.96	702.24	575.52	702.72
+P	employment-bridgeport	3	612.00	792.00
+T	employment-bridgeport	3	51.24	116.95	176.38	131.72	11.0	0	Company Name & Address:
+T	employment-bridgeport	3	223.20	116.95	301.18	131.72	11.0	0	Dates Employed:
+T	employment-bridgeport	3	194.40	130.39	324.45	145.16	11.0	0	From: __________________
+T	employment-bridgeport	3	194.40	157.15	323.14	171.92	11.0	0	To: ____________________
+T	employment-bridgeport	3	341.76	116.95	443.72	131.72	11.0	0	Starting Title & Salary:
+T	employment-bridgeport	3	470.04	116.95	558.10	131.72	11.0	0	Final Title & Salary:
+T	employment-bridgeport	3	41.64	171.07	182.02	185.84	11.0	0	May we contact for reference?
+T	employment-bridgeport	3	41.64	185.11	104.97	199.88	11.0	0	YES NO
+T	employment-bridgeport	3	194.40	171.07	281.02	185.84	11.0	0	Company Phone #:
+T	employment-bridgeport	3	338.40	171.07	490.06	185.84	11.0	0	Reason for leaving this employer:
+T	employment-bridgeport	3	41.64	211.87	183.34	226.64	11.0	0	Summarize job responsibilities:
+T	employment-bridgeport	3	51.24	280.03	176.38	294.80	11.0	0	Company Name & Address:
+T	employment-bridgeport	3	223.20	280.03	301.18	294.80	11.0	0	Dates Employed:
+T	employment-bridgeport	3	194.40	293.47	324.45	308.24	11.0	0	From: __________________
+T	employment-bridgeport	3	194.40	320.35	323.14	335.12	11.0	0	To: ____________________
+T	employment-bridgeport	3	341.76	280.03	443.72	294.80	11.0	0	Starting Title & Salary:
+T	employment-bridgeport	3	470.04	280.03	558.10	294.80	11.0	0	Final Title & Salary:
+T	employment-bridgeport	3	41.64	334.27	182.02	349.04	11.0	0	May we contact for reference?
+T	employment-bridgeport	3	41.64	348.31	104.97	363.08	11.0	0	YES NO
+T	employment-bridgeport	3	194.40	334.27	281.02	349.04	11.0	0	Company Phone #:
+T	employment-bridgeport	3	338.40	334.27	490.06	349.04	11.0	0	Reason for leaving this employer:
+T	employment-bridgeport	3	41.64	375.07	183.34	389.84	11.0	0	Summarize job responsibilities:
+T	employment-bridgeport	3	41.64	457.01	136.18	472.33	11.0	1	U.S. Military Service
+T	employment-bridgeport	3	41.64	471.07	124.52	485.84	11.0	0	Branch of Service:
+T	employment-bridgeport	3	302.40	471.07	410.02	485.84	11.0	0	Rank & Type of Service:
+T	employment-bridgeport	3	133.56	498.43	161.50	513.20	11.0	0	Dates
+T	employment-bridgeport	3	41.64	511.75	253.06	526.52	11.0	0	From: ______________ To: ______________
+T	employment-bridgeport	3	261.84	498.43	405.94	513.20	11.0	0	Training & experience received:
+T	employment-bridgeport	3	41.64	579.77	486.22	595.09	11.0	1	References (Please provide at least three references. Ensure three are not previous supervisors. No relatives please.)
+T	employment-bridgeport	3	78.72	593.69	108.34	609.01	11.0	1	Name
+T	employment-bridgeport	3	181.92	593.69	252.46	609.01	11.0	1	Company/Title
+T	employment-bridgeport	3	320.52	593.69	352.18	609.01	11.0	1	Phone
+T	employment-bridgeport	3	432.84	593.69	460.54	609.01	11.0	1	Email
+T	employment-bridgeport	3	510.12	593.69	572.02	609.01	11.0	1	Years Known
+S	employment-bridgeport	3	36.48	103.92	575.52	117.36	1	0
+S	employment-bridgeport	3	41.64	103.92	570.36	117.36	1	0
+L	employment-bridgeport	3	36.00	103.92	36.48	117.36
+L	employment-bridgeport	3	575.52	103.92	576.00	117.36
+L	employment-bridgeport	3	36.48	117.36	188.76	117.84
+L	employment-bridgeport	3	189.24	117.36	332.76	117.84
+L	employment-bridgeport	3	333.24	117.36	449.76	117.84
+L	employment-bridgeport	3	450.24	117.36	575.52	117.84
+L	employment-bridgeport	3	36.00	117.84	36.48	171.48
+L	employment-bridgeport	3	188.76	117.84	189.24	171.48
+L	employment-bridgeport	3	332.76	117.84	333.24	171.48
+L	employment-bridgeport	3	449.76	117.84	450.24	171.48
+L	employment-bridgeport	3	575.52	117.84	576.00	171.48
+L	employment-bridgeport	3	36.48	171.48	188.76	171.96
+L	employment-bridgeport	3	189.24	171.48	332.76	171.96
+L	employment-bridgeport	3	333.24	171.48	449.76	171.96
+L	employment-bridgeport	3	450.24	171.48	575.52	171.96
+L	employment-bridgeport	3	36.00	171.96	36.48	212.28
+L	employment-bridgeport	3	188.76	171.96	189.24	212.28
+L	employment-bridgeport	3	332.76	171.96	333.24	212.28
+L	employment-bridgeport	3	575.52	171.96	576.00	212.28
+L	employment-bridgeport	3	36.48	212.28	188.76	212.76
+L	employment-bridgeport	3	189.24	212.28	332.76	212.76
+L	employment-bridgeport	3	333.24	212.28	575.52	212.76
+L	employment-bridgeport	3	36.00	212.76	36.48	266.52
+L	employment-bridgeport	3	575.52	212.76	576.00	266.52
+S	employment-bridgeport	3	36.48	267.00	575.52	280.44	1	0
+S	employment-bridgeport	3	41.64	267.00	570.36	280.44	1	0
+L	employment-bridgeport	3	36.48	266.52	575.52	267.00
+L	employment-bridgeport	3	36.00	267.00	36.48	280.44
+L	employment-bridgeport	3	575.52	267.00	576.00	280.44
+L	employment-bridgeport	3	36.48	280.44	188.76	280.92
+L	employment-bridgeport	3	189.24	280.44	332.76	280.92
+L	employment-bridgeport	3	333.24	280.44	449.76	280.92
+L	employment-bridgeport	3	450.24	280.44	575.52	280.92
+L	employment-bridgeport	3	36.00	280.92	36.48	334.68
+L	employment-bridgeport	3	188.76	280.92	189.24	334.68
+L	employment-bridgeport	3	332.76	280.92	333.24	334.68
+L	employment-bridgeport	3	449.76	280.92	450.24	334.68
+L	employment-bridgeport	3	575.52	280.92	576.00	334.68
+L	employment-bridgeport	3	36.48	334.68	188.76	335.16
+L	employment-bridgeport	3	189.24	334.68	332.76	335.16
+L	employment-bridgeport	3	333.24	334.68	449.76	335.16
+L	employment-bridgeport	3	450.24	334.68	575.52	335.16
+L	employment-bridgeport	3	36.00	335.16	36.48	375.48
+L	employment-bridgeport	3	188.76	335.16	189.24	375.48
+L	employment-bridgeport	3	332.76	335.16	333.24	375.48
+L	employment-bridgeport	3	575.52	335.16	576.00	375.48
+L	employment-bridgeport	3	36.48	375.48	188.76	375.96
+L	employment-bridgeport	3	189.24	375.48	332.76	375.96
+L	employment-bridgeport	3	333.24	375.48	575.52	375.96
+L	employment-bridgeport	3	36.00	375.96	36.48	429.60
+L	employment-bridgeport	3	575.52	375.96	576.00	429.60
+S	employment-bridgeport	3	36.48	430.20	575.52	443.52	1	0
+S	employment-bridgeport	3	41.64	430.20	570.36	443.52	1	0
+L	employment-bridgeport	3	36.48	429.60	575.52	430.08
+L	employment-bridgeport	3	36.00	430.08	36.48	443.64
+L	employment-bridgeport	3	36.48	443.64	575.52	444.12
+L	employment-bridgeport	3	575.52	430.08	576.00	443.64
+S	employment-bridgeport	3	36.48	458.04	575.52	471.48	1	0
+S	employment-bridgeport	3	41.64	458.04	570.36	471.48	1	0
+L	employment-bridgeport	3	36.48	457.44	575.52	457.92
+L	employment-bridgeport	3	36.00	457.92	36.48	471.48
+L	employment-bridgeport	3	575.52	457.92	576.00	471.48
+L	employment-bridgeport	3	36.48	471.48	296.76	471.96
+L	employment-bridgeport	3	297.24	471.48	575.52	471.96
+L	employment-bridgeport	3	36.00	471.96	36.48	498.84
+L	employment-bridgeport	3	296.76	471.96	297.24	498.84
+L	employment-bridgeport	3	575.52	471.96	576.00	498.84
+L	employment-bridgeport	3	36.48	498.84	256.32	499.32
+L	employment-bridgeport	3	256.80	498.84	296.76	499.32
+L	employment-bridgeport	3	297.24	498.84	575.52	499.32
+L	employment-bridgeport	3	36.00	499.32	36.48	552.96
+L	employment-bridgeport	3	36.48	552.96	256.32	553.44
+L	employment-bridgeport	3	256.32	499.32	256.80	552.96
+L	employment-bridgeport	3	256.80	552.96	575.52	553.44
+L	employment-bridgeport	3	575.52	499.32	576.00	552.96
+S	employment-bridgeport	3	36.48	580.80	575.52	594.24	1	0
+S	employment-bridgeport	3	41.64	580.80	570.36	594.24	1	0
+L	employment-bridgeport	3	36.48	580.32	575.52	580.80
+L	employment-bridgeport	3	36.00	580.80	36.48	594.24
+L	employment-bridgeport	3	575.52	580.80	576.00	594.24
+L	employment-bridgeport	3	36.48	594.24	148.32	594.72
+L	employment-bridgeport	3	148.80	594.24	283.32	594.72
+L	employment-bridgeport	3	283.80	594.24	386.76	594.72
+L	employment-bridgeport	3	387.24	594.24	503.76	594.72
+L	employment-bridgeport	3	504.24	594.24	575.52	594.72
+L	employment-bridgeport	3	36.00	594.72	36.48	608.16
+L	employment-bridgeport	3	148.32	594.72	148.80	608.16
+L	employment-bridgeport	3	283.32	594.72	283.80	608.16
+L	employment-bridgeport	3	386.76	594.72	387.24	608.16
+L	employment-bridgeport	3	503.76	594.72	504.24	608.16
+L	employment-bridgeport	3	575.52	594.72	576.00	608.16
+L	employment-bridgeport	3	36.48	608.16	148.32	608.64
+L	employment-bridgeport	3	148.80	608.16	283.32	608.64
+L	employment-bridgeport	3	283.80	608.16	386.76	608.64
+L	employment-bridgeport	3	387.24	608.16	503.76	608.64
+L	employment-bridgeport	3	504.24	608.16	575.52	608.64
+L	employment-bridgeport	3	36.00	608.64	36.48	635.52
+L	employment-bridgeport	3	148.32	608.64	148.80	635.52
+L	employment-bridgeport	3	283.32	608.64	283.80	635.52
+L	employment-bridgeport	3	386.76	608.64	387.24	635.52
+L	employment-bridgeport	3	503.76	608.64	504.24	635.52
+L	employment-bridgeport	3	575.52	608.64	576.00	635.52
+L	employment-bridgeport	3	36.48	635.52	148.32	636.00
+L	employment-bridgeport	3	148.80	635.52	283.32	636.00
+L	employment-bridgeport	3	283.80	635.52	386.76	636.00
+L	employment-bridgeport	3	387.24	635.52	503.76	636.00
+L	employment-bridgeport	3	504.24	635.52	575.52	636.00
+L	employment-bridgeport	3	36.00	636.00	36.48	662.88
+L	employment-bridgeport	3	148.32	636.00	148.80	662.88
+L	employment-bridgeport	3	283.32	636.00	283.80	662.88
+L	employment-bridgeport	3	386.76	636.00	387.24	662.88
+L	employment-bridgeport	3	503.76	636.00	504.24	662.88
+L	employment-bridgeport	3	575.52	636.00	576.00	662.88
+L	employment-bridgeport	3	36.48	662.88	148.32	663.36
+L	employment-bridgeport	3	148.80	662.88	283.32	663.36
+L	employment-bridgeport	3	283.80	662.88	386.76	663.36
+L	employment-bridgeport	3	387.24	662.88	503.76	663.36
+L	employment-bridgeport	3	504.24	662.88	575.52	663.36
+L	employment-bridgeport	3	36.00	663.36	36.48	690.24
+L	employment-bridgeport	3	148.32	663.36	148.80	690.24
+L	employment-bridgeport	3	283.32	663.36	283.80	690.24
+L	employment-bridgeport	3	386.76	663.36	387.24	690.24
+L	employment-bridgeport	3	503.76	663.36	504.24	690.24
+L	employment-bridgeport	3	575.52	663.36	576.00	690.24
+L	employment-bridgeport	3	36.48	690.24	148.32	690.72
+L	employment-bridgeport	3	148.80	690.24	283.32	690.72
+L	employment-bridgeport	3	283.80	690.24	386.76	690.72
+L	employment-bridgeport	3	387.24	690.24	503.76	690.72
+L	employment-bridgeport	3	504.24	690.24	575.52	690.72
+L	employment-bridgeport	3	36.00	690.72	36.48	717.60
+L	employment-bridgeport	3	148.32	690.72	148.80	717.60
+L	employment-bridgeport	3	283.32	690.72	283.80	717.60
+L	employment-bridgeport	3	386.76	690.72	387.24	717.60
+L	employment-bridgeport	3	503.76	690.72	504.24	717.60
+L	employment-bridgeport	3	575.52	690.72	576.00	717.60
+L	employment-bridgeport	3	36.48	717.60	148.32	718.08
+L	employment-bridgeport	3	148.80	717.60	283.32	718.08
+L	employment-bridgeport	3	283.80	717.60	386.76	718.08
+L	employment-bridgeport	3	387.24	717.60	503.76	718.08
+L	employment-bridgeport	3	504.24	717.60	575.52	718.08
+L	employment-bridgeport	3	36.00	718.08	36.48	744.96
+L	employment-bridgeport	3	36.48	744.96	148.32	745.44
+L	employment-bridgeport	3	148.32	718.08	148.80	744.96
+L	employment-bridgeport	3	148.80	744.96	283.32	745.44
+L	employment-bridgeport	3	283.32	718.08	283.80	744.96
+L	employment-bridgeport	3	283.80	744.96	386.76	745.44
+L	employment-bridgeport	3	386.76	718.08	387.24	744.96
+L	employment-bridgeport	3	387.24	744.96	503.76	745.44
+L	employment-bridgeport	3	503.76	718.08	504.24	744.96
+L	employment-bridgeport	3	504.24	744.96	575.52	745.44
+L	employment-bridgeport	3	575.52	718.08	576.00	744.96
+P	employment-bridgeport	4	612.00	792.00
+T	employment-bridgeport	4	41.64	113.93	138.22	129.25	11.0	1	Applicant Statement
+T	employment-bridgeport	4	41.64	127.99	530.06	142.76	11.0	0	The facts set forth above in my application for employment are true and complete. I understand that false or
+T	employment-bridgeport	4	41.64	141.43	548.42	156.20	11.0	0	misleading statements or omission of information on this application or any other employment form may lead to
+T	employment-bridgeport	4	41.64	154.87	540.28	169.64	11.0	0	dismissal or denial of employment. The City of Bridgeport is hereby authorized to make any investigation of my
+T	employment-bridgeport	4	41.64	168.30	560.79	183.08	11.0	0	personal history, financial, criminal, credit and motor vehicle records through any investigative or credit agencies or
+T	employment-bridgeport	4	41.64	181.63	557.29	196.40	11.0	0	bureaus of your choice. You are also authorized to administer personality profile tests and verify my background. A
+T	employment-bridgeport	4	41.64	195.07	539.61	209.84	11.0	0	criminal record or sentence is not an automatic disqualification for employment. I agree to submit to a medical
+T	employment-bridgeport	4	41.64	208.50	313.65	223.27	11.0	0	evaluation and a drug and alcohol test prior to employment.
+T	employment-bridgeport	4	41.64	221.95	550.10	236.72	11.0	0	In making this application for employment, I also understand that an investigative consumer report may be made
+T	employment-bridgeport	4	41.64	235.39	562.40	250.16	11.0	0	whereby information is obtained through personal interviews with my neighbors, friends, or others with whom I am
+T	employment-bridgeport	4	41.63	248.82	553.16	263.60	11.0	0	acquainted. This inquiry includes information as to my character, general reputation, personal characteristics, and
+T	employment-bridgeport	4	41.63	262.26	554.65	277.03	11.0	0	mode of living. In exchange for the consideration of my employment application by this company, I hereby release
+T	employment-bridgeport	4	41.63	275.70	546.54	290.47	11.0	0	and forever discharge the City of Bridgeport (including its directors, officers, employees and agents) and my past
+T	employment-bridgeport	4	41.63	289.13	565.69	303.90	11.0	0	and/or present employers (their directors, officers, employees and agents) from any liabilities which may result from
+T	employment-bridgeport	4	41.63	302.57	556.28	317.34	11.0	0	an investigation of my past and/or present employment or from the disclosure of such information. I authorize the
+T	employment-bridgeport	4	41.63	315.89	564.96	330.66	11.0	0	use of any information in this application to verify my statements, and I authorize the past employers, all references,
+T	employment-bridgeport	4	41.63	329.33	537.04	344.10	11.0	0	and any other persons to answer all questions asked concerning my ability, character, reputation and previous
+T	employment-bridgeport	4	41.63	342.76	135.80	357.54	11.0	0	employment record.
+T	employment-bridgeport	4	41.63	356.20	552.19	370.97	11.0	0	I understand that if my application is accepted, employment with the City of Bridgeport is always employment “at
+T	employment-bridgeport	4	41.62	369.63	542.50	384.41	11.0	0	will.” I further understand that my “at will” employment may be terminated at any time by myself or the City of
+T	employment-bridgeport	4	41.62	383.07	521.16	397.84	11.0	0	Bridgeport and includes no guarantee, contract or promise of employment for any specific length of time. I
+T	employment-bridgeport	4	41.62	396.51	401.48	411.28	11.0	0	understand that the first year of employment is a new hire probationary period.
+T	employment-bridgeport	4	67.89	423.38	546.43	438.15	11.0	0	Signature: ________________________________________________ Date: _______________________
+T	employment-bridgeport	4	41.62	463.57	565.27	477.95	11.0	0	The City of Bridgeport is an equal opportunity employer and does not discriminate in employment on account of race,
+T	employment-bridgeport	4	41.62	477.01	564.80	491.38	11.0	0	color, religion, sex, national origin, citizenship status, age, marital status, physical or mental disability, military status
+T	employment-bridgeport	4	41.62	490.45	558.55	504.82	11.0	0	or unfavorable discharge from military service. We comply with all applicable laws governing employment practices
+T	employment-bridgeport	4	41.62	503.88	314.00	518.26	11.0	0	and do not discriminate on the basis of any unlawful criteria.
+T	employment-bridgeport	4	120.33	409.62	129.13	414.57	3.6	0	SIGN
+S	employment-bridgeport	4	36.48	114.96	575.52	128.40	1	0
+S	employment-bridgeport	4	41.64	114.96	570.36	128.40	1	0
+L	employment-bridgeport	4	36.48	114.48	575.52	114.96
+L	employment-bridgeport	4	36.00	114.96	36.48	128.40
+L	employment-bridgeport	4	575.52	114.96	576.00	128.40
+L	employment-bridgeport	4	36.48	128.40	575.52	128.88
+L	employment-bridgeport	4	36.00	128.88	36.48	531.72
+L	employment-bridgeport	4	36.48	531.72	575.52	532.20
+L	employment-bridgeport	4	575.52	128.88	576.00	531.72
+L	employment-bridgeport	4	116.04	410.04	133.32	410.04
+L	employment-bridgeport	4	116.04	414.36	133.32	414.36
+F	youth-bartlett	Head of Household	1	92.64	140.28	295.08	153.84
+F	youth-bartlett	Address	1	52.08	157.20	295.08	170.76
+F	youth-bartlett	City	1	40.32	174.24	197.88	187.80
+F	youth-bartlett	Zip	1	223.08	174.24	295.08	187.80
+F	youth-bartlett	Email Address	1	79.08	191.16	295.08	204.72
+F	youth-bartlett	Primary Contact Phone	1	112.92	208.20	144.48	221.76
+F	youth-bartlett	undefined	1	151.08	208.20	295.08	221.76
+F	youth-bartlett	undefined_2	1	69.72	225.12	101.28	238.68
+F	youth-bartlett	undefined_3	1	106.08	225.12	295.08	238.68
+F	youth-bartlett	Card Holders Name	1	386.76	237.48	589.80	251.04
+F	youth-bartlett	Fathers Name	1	79.08	242.16	295.08	255.72
+F	youth-bartlett	Expiration	1	352.20	251.76	422.16	265.08
+F	youth-bartlett	CID	1	446.64	251.52	499.08	265.08
+F	youth-bartlett	Mothers Name	1	84.12	259.08	295.56	272.64
+F	youth-bartlett	Amount Charged	1	379.80	265.80	589.80	279.12
+F	youth-bartlett	Name of the person interested in coaching or coordinating	1	22.92	332.28	295.08	345.84
+F	youth-bartlett	Volunteer Email mandatory	1	155.88	349.56	295.32	363.12
+F	youth-bartlett	inclusion into the programs A two week notice is recommended 1	1	317.64	366.84	589.80	380.40
+F	youth-bartlett	cannot be honored	1	103.92	380.76	148.92	391.80
+F	youth-bartlett	inclusion into the programs A two week notice is recommended 2	1	317.64	383.88	589.92	397.44
+F	youth-bartlett	ParticipantRow1	1	24.12	441.60	84.85	458.88
+F	youth-bartlett	GenderRow1	1	84.60	441.60	126.00	458.88
+F	youth-bartlett	Birth DateRow1	1	127.04	441.60	178.15	458.88
+F	youth-bartlett	GradeRow1	1	178.34	441.60	217.08	458.88
+F	youth-bartlett	School Name	1	218.31	440.93	350.59	458.01
+F	youth-bartlett	Uniform SizeRow1	1	351.81	441.40	418.19	458.68
+F	youth-bartlett	Program NameRow1	1	418.41	441.60	509.64	458.88
+F	youth-bartlett	ID NumberRow1	1	510.84	441.60	589.08	458.88
+F	youth-bartlett	ParticipantRow2	1	24.12	459.60	84.46	476.88
+F	youth-bartlett	GenderRow2	1	84.60	459.60	126.00	476.88
+F	youth-bartlett	Birth DateRow2	1	127.04	459.60	178.15	476.88
+F	youth-bartlett	GradeRow2	1	178.72	459.60	217.06	476.88
+F	youth-bartlett	School Name 2	1	217.90	459.64	351.36	476.13
+F	youth-bartlett	Uniform SizeRow2	1	351.81	459.40	417.80	476.68
+F	youth-bartlett	Program NameRow2	1	418.21	459.60	509.64	476.88
+F	youth-bartlett	ID NumberRow2	1	510.84	459.60	589.08	476.88
+F	youth-bartlett	ParticipantRow3	1	24.12	477.60	84.85	494.88
+F	youth-bartlett	GenderRow3	1	84.60	477.60	126.00	494.88
+F	youth-bartlett	Birth DateRow3	1	127.04	477.60	177.96	494.88
+F	youth-bartlett	GradeRow3	1	178.52	477.60	217.06	494.88
+F	youth-bartlett	School Name 3	1	217.91	477.56	350.79	494.44
+F	youth-bartlett	Uniform SizeRow3	1	351.41	477.60	417.60	494.88
+F	youth-bartlett	Program NameRow3	1	418.41	477.60	509.64	494.88
+F	youth-bartlett	ID NumberRow3	1	510.84	477.60	589.08	494.88
+F	youth-bartlett	ParticipantRow4	1	24.12	495.60	84.65	512.52
+F	youth-bartlett	GenderRow4	1	84.60	495.60	126.39	512.52
+F	youth-bartlett	Birth DateRow4	1	127.04	495.60	177.96	512.52
+F	youth-bartlett	GradeRow4	1	178.52	495.60	217.26	512.52
+F	youth-bartlett	School Name 4	1	218.11	495.27	351.38	512.35
+F	youth-bartlett	Uniform SizeRow4	1	351.41	495.40	417.40	512.32
+F	youth-bartlett	Program NameRow4	1	418.80	495.60	509.64	512.52
+F	youth-bartlett	ID NumberRow4	1	510.84	495.60	589.08	512.52
+F	youth-bartlett	warning of risk assumption of risk	1	431.88	715.08	519.12	728.64
+F	youth-bartlett	Date	1	540.48	715.08	589.44	728.64
+P	youth-bartlett	1	612.00	792.00
+T	youth-bartlett	1	28.08	427.09	77.17	439.91	10.0	0	Participant
+T	youth-bartlett	1	88.04	427.09	175.15	439.91	10.0	0	Gender Birth Date
+T	youth-bartlett	1	184.21	427.09	213.04	439.91	10.0	0	Grade
+T	youth-bartlett	1	353.36	427.09	417.24	439.91	10.0	0	Uniform Size*
+T	youth-bartlett	1	426.35	427.09	495.90	439.91	10.0	0	Program Name
+T	youth-bartlett	1	522.23	427.09	577.45	439.91	10.0	0	I.D. Number
+T	youth-bartlett	1	317.62	334.48	548.31	346.02	9.0	0	Please list any medications that need to be dispensed at programs,
+T	youth-bartlett	1	317.62	345.28	539.94	356.82	9.0	0	DOOHUJLHV RU GHVFULEH VSHFLDO PRGLɶFDWLRQV QHHGHG IRU VXFFHVVIXO
+T	youth-bartlett	1	317.62	356.08	545.72	367.62	9.0	0	inclusion into the program(s). A two week notice is recommended.
+T	youth-bartlett	1	317.62	369.76	589.87	382.58	10.0	0	___________________________________________________
+T	youth-bartlett	1	317.62	386.76	589.90	399.58	10.0	0	_____________________________________________________
+T	youth-bartlett	1	382.35	312.63	525.13	326.74	11.0	0	6SHFLDO 0RGLɭFDWLRQV $ ' $
+T	youth-bartlett	1	209.33	606.70	413.49	620.80	11.0	0	Registration/Brochure Waiver & Release
+T	youth-bartlett	1	33.77	113.66	414.22	125.20	9.0	0	I have read, understand, and agree to the registration/cancellation/refund/transfer policies.
+T	youth-bartlett	1	317.55	215.61	351.36	224.58	7.0	0	Card Type:
+T	youth-bartlett	1	317.55	229.61	589.81	238.58	7.0	0	Card Number_________________________________________________________________
+T	youth-bartlett	1	317.55	243.61	589.80	252.58	7.0	0	Card Holder’s Name __________________________________________________________
+T	youth-bartlett	1	317.55	257.61	589.82	266.58	7.0	0	Expiration ____________________ CID# _______________ (3 numbers on back of card)
+T	youth-bartlett	1	317.55	271.61	589.81	280.58	7.0	0	Amount Charged $ ____________________________________________________________
+T	youth-bartlett	1	317.55	285.61	589.80	294.58	7.0	0	Authorized Signature __________________________________________________________
+T	youth-bartlett	1	369.21	215.90	403.38	225.51	7.5	0	American
+T	youth-bartlett	1	369.21	224.90	395.41	234.51	7.5	0	Express
+T	youth-bartlett	1	454.17	215.90	492.89	225.51	7.5	0	Mastercard
+T	youth-bartlett	1	553.17	215.90	582.19	225.51	7.5	0	Discover
+T	youth-bartlett	1	514.78	215.90	529.68	225.51	7.5	0	Visa
+T	youth-bartlett	1	328.46	144.70	350.43	156.24	9.0	0	Cash
+T	youth-bartlett	1	328.46	158.27	352.75	169.80	9.0	0	Check
+T	youth-bartlett	1	328.46	171.42	376.63	182.96	9.0	0	Credit Card
+T	youth-bartlett	1	317.61	194.42	508.84	205.96	9.0	0	Credit card information not required if paying in person
+T	youth-bartlett	1	36.30	526.32	121.87	545.43	14.0	0	*Uniform Size
+T	youth-bartlett	1	39.28	550.35	276.47	563.50	9.5	1	YS YM YL AS AM AL AXL
+T	youth-bartlett	1	13.01	520.79	25.29	749.41	9.5	0	Participant's Last Name______________________________
+T	youth-bartlett	1	32.74	631.36	105.72	638.42	5.5	1	IMPORTANT INFORMATION
+T	youth-bartlett	1	32.74	637.97	294.98	645.02	5.5	0	Bartlett Park District is committed to conducting its recreation programs and activities in a safe manner and holds the safety of
+T	youth-bartlett	1	32.74	644.57	290.52	651.62	5.5	0	participants in high regard. Bartlett Park District continually strives to reduce such risks and insists that all participants follow
+T	youth-bartlett	1	32.74	651.17	276.54	658.22	5.5	0	safety rules and instructions that are designed to protect the participants’ safety. However, participants and parents/
+T	youth-bartlett	1	32.74	657.77	292.33	664.82	5.5	0	guardians of minors registering for the below listed programs/activities must recognize that there is an inherent risk of injury
+T	youth-bartlett	1	32.74	664.37	169.33	671.42	5.5	0	when choosing to participate in recreational activities/programs.
+T	youth-bartlett	1	32.74	677.53	280.60	684.95	5.5	0	<RX DUH VROHO\ UHVSRQVLEOH IRU GHWHUPLQLQJ LI \RX RU \RXU PLQRU FKLOG ZDUG DUH SK\VLFDOO\ ɶW DQG RU VNLOOHG IRU WKH DFWLYLWLHV
+T	youth-bartlett	1	32.74	684.07	289.78	691.12	5.5	0	contemplated by this agreement. It is always advisable, especially if the participant is pregnant, disabled in any way or recently
+T	youth-bartlett	1	32.74	690.57	239.40	697.62	5.5	0	suffered an illness, injury or impairment, to consult a physician before undertaking any physical activity.
+T	youth-bartlett	1	32.74	703.77	82.18	710.82	5.5	1	WARNING OF RISK
+T	youth-bartlett	1	32.74	710.37	286.31	717.42	5.5	0	Recreational activities are intended to challenge and engage the physical, mental and emotional resources of each participant.
+T	youth-bartlett	1	32.74	716.97	293.94	724.02	5.5	0	Despite careful and proper preparation, instruction, medical advice, conditioning and equipment, there is still a risk of serious injury
+T	youth-bartlett	1	32.74	723.57	289.76	730.62	5.5	0	when participating in any recreational activity. Understandably, not all hazards and dangers can be foreseen. Depending on the
+T	youth-bartlett	1	32.74	730.17	294.63	737.22	5.5	0	particular activity, participants must understand that certain risks, dangers and injuries due to inclement weather, slip and falls, poor
+T	youth-bartlett	1	32.74	736.77	293.20	743.82	5.5	0	skill level or conditioning, carelessness, horseplay, unsportsmanlike conduct, premises defects, inadequate or defective equipment,
+T	youth-bartlett	1	32.74	743.33	294.12	750.75	5.5	0	LQDGHTXDWH VXSHUYLVLRQ LQVWUXFWLRQ RU RIɶFLDWLQJ DQG DOO RWKHU FLUFXPVWDQFHV LQKHUHQW WR LQGRRU DQG RXWGRRU UHFUHDWLRQDO DFWLYLWLHV
+T	youth-bartlett	1	32.74	749.97	258.11	757.02	5.5	0	exist. In this regard, it must be recognized that it is impossible for Bartlett Park District to guarantee absolute safety.
+T	youth-bartlett	1	317.12	631.37	485.63	638.42	5.5	1	WAIVER AND RELEASE OF ALL CLAIMS AND ASSUMPTION OF RISK
+T	youth-bartlett	1	317.12	637.97	579.36	645.02	5.5	0	Please read this form carefully and be aware that in signing up and participating in this program/activity, you will be expressly
+T	youth-bartlett	1	317.12	644.57	578.26	651.62	5.5	0	assuming the risk and legal liability and waiving and releasing all claims for injuries, damages or loss which you or your minor
+T	youth-bartlett	1	317.12	651.17	581.06	658.22	5.5	0	child/ward might sustain as a result of participating in any and all activities connected with and associated with these programs
+T	youth-bartlett	1	317.12	657.77	470.16	664.82	5.5	0	(including transportation services and vehicle operations, when provided).
+T	youth-bartlett	1	317.12	670.97	582.20	678.02	5.5	0	I recognize and acknowledge that there are certain risks of physical injury to participants in these programs, and I voluntarily
+T	youth-bartlett	1	317.12	677.57	585.12	684.62	5.5	0	agree to assume the full risk of any and all injuries, damages or loss, regardless of severity, that my minor child/ward or I may
+T	youth-bartlett	1	317.12	684.17	580.42	691.22	5.5	0	sustain as a result of said participation. I further agree to waive and relinquish all claims I or my minor child/ward may have
+T	youth-bartlett	1	317.12	690.77	583.40	697.82	5.5	0	(or accrue to me or my child/ward) as a result of participating in these programs against the Bartlett Park District, including its
+T	youth-bartlett	1	317.12	697.37	409.84	704.42	5.5	0	RIɶFLDOV DJHQWV YROXQWHHUV DQG HPSOR\HHV
+T	youth-bartlett	1	317.12	712.11	407.08	719.80	6.0	0	I have read and fully understand
+T	youth-bartlett	1	317.12	719.31	409.19	727.00	6.0	0	the above important information,
+T	youth-bartlett	1	317.12	726.51	413.01	734.20	6.0	0	warning of risk, assumption of risk
+T	youth-bartlett	1	317.12	733.71	417.99	741.40	6.0	0	and waiver and release of all claims.
+T	youth-bartlett	1	317.12	740.91	413.23	748.60	6.0	0	If registering on-line or via fax, my
+T	youth-bartlett	1	317.12	748.11	411.14	755.80	6.0	0	on-line or facsimile signature shall
+T	youth-bartlett	1	317.12	755.31	421.06	763.00	6.0	0	substitute for and have the same legal
+T	youth-bartlett	1	317.12	762.51	414.03	770.20	6.0	0	effect as an original form signature.
+T	youth-bartlett	1	433.87	730.20	488.23	738.28	6.3	0	Participant’s Name
+T	youth-bartlett	1	542.49	730.20	555.90	738.28	6.3	0	Date
+T	youth-bartlett	1	433.87	755.00	590.10	763.08	6.3	0	Participant’s Signature (18 years or older or Parent/Guardian)
+T	youth-bartlett	1	433.87	762.38	519.61	769.44	5.4	0	Signature is required for participation.
+T	youth-bartlett	1	317.62	538.04	572.77	549.58	9.0	0	Bartlett Park District reserves the right to photograph or videotape
+T	youth-bartlett	1	317.62	548.84	558.55	560.38	9.0	0	participants in Park District programs, facilities or parks for the
+T	youth-bartlett	1	317.62	559.64	575.82	571.17	9.0	0	District’s promotional materials. If you would like to submit a photo
+T	youth-bartlett	1	317.62	570.44	551.96	582.28	9.0	0	for SXEOLFDWLRQ SOHDVH VHQG LW WR marketing#EDUWOHWWSDUNV RUJ
+T	youth-bartlett	1	360.04	158.27	591.52	169.80	9.0	0	Check Refusal Fee: A $25 fee is charged for all returned checks.
+T	youth-bartlett	1	32.80	763.64	281.41	775.92	9.0	0	BARTLETT PARK DISTRICT 630-540-4800 bartlettparks.org
+T	youth-bartlett	1	23.03	406.01	484.85	418.29	9.0	0	Registration forms can be emailed to: guestservices@bartlettparks.org. Please call 630-540-4800 to confirm receipt.
+T	youth-bartlett	1	228.22	426.61	341.01	440.93	10.0	1	Attends (School Name)
+T	youth-bartlett	1	23.97	46.09	414.59	79.30	24.0	1	Youth Sport League Registration Form
+T	youth-bartlett	1	22.87	142.75	285.34	154.89	9.0	0	Primary Contact_____________________________________________
+T	youth-bartlett	1	22.87	159.71	297.37	171.85	9.0	0	Address ______________________________________________________
+T	youth-bartlett	1	22.87	176.68	296.87	188.82	9.0	0	City ___________________________________ Zip ________________
+T	youth-bartlett	1	22.87	193.66	295.33	205.20	9.0	0	E-mail Address ________________________________________________
+T	youth-bartlett	1	22.87	210.62	297.15	222.76	9.0	0	Primary Contact Phone (_______) ________________________________
+T	youth-bartlett	1	22.87	227.59	297.17	239.73	9.0	0	Cell Phone (_______) __________________________________________
+T	youth-bartlett	1	22.87	244.55	297.15	256.70	9.0	0	Father’s Name: ________________________________________________
+T	youth-bartlett	1	22.87	261.52	297.62	273.66	9.0	0	Mother’s Name: _______________________________________________
+T	youth-bartlett	1	22.87	278.12	290.59	290.58	9.0	0	Are you interested in volunteering for your child’s team? (circle)
+T	youth-bartlett	1	97.23	296.20	150.44	308.65	9.0	0	Asst. Coach
+T	youth-bartlett	1	169.27	296.50	299.63	308.96	9.0	0	Team Coordinator (soccer only)
+T	youth-bartlett	1	22.87	319.90	297.50	332.04	9.0	0	Name of the person interested in coaching or coordinating*:
+T	youth-bartlett	1	22.87	335.57	297.03	347.71	9.0	0	____________________________________________________________
+T	youth-bartlett	1	22.87	351.25	295.33	362.79	9.0	0	*Volunteer E-mail (mandatory):_______________________________
+T	youth-bartlett	1	22.87	366.92	282.36	378.45	9.0	0	I understand that carpool, friendship, coach & practice locations
+T	youth-bartlett	1	22.87	382.91	219.62	394.45	9.0	0	cannot be honored. __________ (Initial required.)
+T	youth-bartlett	1	43.79	297.55	74.62	309.09	9.0	0	Coach
+T	youth-bartlett	1	389.00	279.26	393.61	281.85	1.9	0	SIGN
+T	youth-bartlett	1	434.12	739.58	438.73	742.17	1.9	0	SIGN
+S	youth-bartlett	1	23.37	425.68	125.89	440.91	1	0
+S	youth-bartlett	1	125.89	425.68	178.33	440.91	1	0
+S	youth-bartlett	1	178.33	425.68	232.80	440.91	1	0
+S	youth-bartlett	1	232.80	425.68	276.46	440.91	1	0
+S	youth-bartlett	1	276.47	425.68	378.15	440.91	1	0
+S	youth-bartlett	1	378.15	425.68	510.11	440.91	1	0
+S	youth-bartlett	1	510.11	425.68	589.59	440.91	1	0
+L	youth-bartlett	1	22.87	425.68	125.89	425.68
+L	youth-bartlett	1	23.37	426.18	23.37	440.41
+L	youth-bartlett	1	125.89	425.68	178.33	425.68
+L	youth-bartlett	1	84.89	426.18	84.89	440.41
+L	youth-bartlett	1	178.33	425.68	232.80	425.68
+L	youth-bartlett	1	178.33	426.18	178.33	440.41
+L	youth-bartlett	1	232.80	425.68	276.46	425.68
+L	youth-bartlett	1	217.80	426.18	217.80	440.41
+L	youth-bartlett	1	276.46	425.68	378.15	425.68
+L	youth-bartlett	1	351.46	426.18	351.46	440.41
+L	youth-bartlett	1	378.15	425.68	510.11	425.68
+L	youth-bartlett	1	418.15	426.18	418.15	440.41
+L	youth-bartlett	1	510.11	425.68	590.09	425.68
+L	youth-bartlett	1	510.11	426.18	510.11	440.41
+L	youth-bartlett	1	589.59	426.18	589.59	440.41
+L	youth-bartlett	1	22.86	440.91	125.89	440.91
+L	youth-bartlett	1	23.36	441.41	23.36	458.41
+L	youth-bartlett	1	125.89	440.91	178.33	440.91
+L	youth-bartlett	1	84.89	441.41	84.89	458.41
+L	youth-bartlett	1	178.33	440.91	232.80	440.91
+L	youth-bartlett	1	178.33	441.41	178.33	458.41
+L	youth-bartlett	1	232.80	440.91	276.46	440.91
+L	youth-bartlett	1	217.80	441.41	217.80	458.41
+L	youth-bartlett	1	276.46	440.91	378.15	440.91
+L	youth-bartlett	1	351.46	441.41	351.46	458.41
+L	youth-bartlett	1	378.15	440.91	510.11	440.91
+L	youth-bartlett	1	418.15	441.41	418.15	458.41
+L	youth-bartlett	1	510.11	440.91	590.09	440.91
+L	youth-bartlett	1	510.11	441.41	510.11	458.41
+L	youth-bartlett	1	589.59	441.41	589.59	458.41
+L	youth-bartlett	1	22.86	458.91	125.89	458.91
+L	youth-bartlett	1	23.36	459.41	23.36	476.41
+L	youth-bartlett	1	125.89	458.91	178.33	458.91
+L	youth-bartlett	1	84.89	459.41	84.89	476.41
+L	youth-bartlett	1	178.33	458.91	232.80	458.91
+L	youth-bartlett	1	178.33	459.41	178.33	476.41
+L	youth-bartlett	1	232.80	458.91	276.46	458.91
+L	youth-bartlett	1	217.80	459.41	217.80	476.41
+L	youth-bartlett	1	276.46	458.91	378.15	458.91
+L	youth-bartlett	1	351.46	459.41	351.46	476.41
+L	youth-bartlett	1	378.15	458.91	510.10	458.91
+L	youth-bartlett	1	418.15	459.41	418.15	476.41
+L	youth-bartlett	1	510.10	458.91	590.08	458.91
+L	youth-bartlett	1	510.10	459.41	510.10	476.41
+L	youth-bartlett	1	589.58	459.41	589.58	476.41
+L	youth-bartlett	1	22.86	476.91	125.89	476.91
+L	youth-bartlett	1	23.36	477.41	23.36	494.41
+L	youth-bartlett	1	125.89	476.91	178.33	476.91
+L	youth-bartlett	1	84.89	477.41	84.89	494.41
+L	youth-bartlett	1	178.33	476.91	232.80	476.91
+L	youth-bartlett	1	178.33	477.41	178.33	494.41
+L	youth-bartlett	1	232.80	476.91	276.46	476.91
+L	youth-bartlett	1	217.80	477.41	217.80	494.41
+L	youth-bartlett	1	276.46	476.91	378.15	476.91
+L	youth-bartlett	1	351.46	477.41	351.46	494.41
+L	youth-bartlett	1	378.15	476.91	510.10	476.91
+L	youth-bartlett	1	418.15	477.41	418.15	494.41
+L	youth-bartlett	1	510.10	476.91	590.08	476.91
+L	youth-bartlett	1	510.10	477.41	510.10	494.41
+L	youth-bartlett	1	589.58	477.41	589.58	494.41
+L	youth-bartlett	1	22.86	494.91	125.89	494.91
+L	youth-bartlett	1	23.36	495.41	23.36	512.41
+L	youth-bartlett	1	125.89	494.91	178.33	494.91
+L	youth-bartlett	1	84.89	495.41	84.89	512.41
+L	youth-bartlett	1	178.33	494.91	232.80	494.91
+L	youth-bartlett	1	178.33	495.41	178.33	512.41
+L	youth-bartlett	1	232.80	494.91	276.46	494.91
+L	youth-bartlett	1	217.80	495.41	217.80	512.41
+L	youth-bartlett	1	276.46	494.91	378.15	494.91
+L	youth-bartlett	1	351.46	495.41	351.46	512.41
+L	youth-bartlett	1	378.14	494.91	510.10	494.91
+L	youth-bartlett	1	418.14	495.41	418.14	512.41
+L	youth-bartlett	1	510.10	494.91	590.08	494.91
+L	youth-bartlett	1	510.10	495.41	510.10	512.41
+L	youth-bartlett	1	589.58	495.41	589.58	512.41
+L	youth-bartlett	1	22.86	512.91	125.89	512.91
+L	youth-bartlett	1	125.89	512.91	178.33	512.91
+L	youth-bartlett	1	178.33	512.91	232.80	512.91
+L	youth-bartlett	1	232.80	512.91	276.46	512.91
+L	youth-bartlett	1	276.46	512.91	378.15	512.91
+L	youth-bartlett	1	378.14	512.91	510.10	512.91
+L	youth-bartlett	1	510.10	512.91	590.08	512.91
+S	youth-bartlett	1	317.55	310.86	589.62	328.72	1	0
+S	youth-bartlett	1	32.74	604.92	590.09	622.78	1	0
+S	youth-bartlett	1	23.24	115.79	30.33	122.87	0	1
+S	youth-bartlett	1	359.68	217.30	366.77	224.39	0	1
+S	youth-bartlett	1	444.64	217.30	451.73	224.39	0	1
+S	youth-bartlett	1	543.64	217.30	550.73	224.39	0	1
+S	youth-bartlett	1	505.25	217.30	512.34	224.39	0	1
+S	youth-bartlett	1	317.93	146.82	325.02	153.91	0	1
+S	youth-bartlett	1	317.93	159.98	325.02	167.07	0	1
+S	youth-bartlett	1	317.93	173.13	325.02	180.22	0	1
+L	youth-bartlett	1	431.87	729.08	518.99	729.08
+L	youth-bartlett	1	540.49	729.08	589.37	729.08
+L	youth-bartlett	1	431.87	753.88	589.37	753.88
+L	youth-bartlett	1	126.33	426.18	126.33	440.41
+L	youth-bartlett	1	126.33	441.41	126.33	458.41
+L	youth-bartlett	1	126.33	459.41	126.33	476.41
+L	youth-bartlett	1	126.33	477.41	126.33	494.41
+L	youth-bartlett	1	126.33	495.41	126.33	512.41
+S	youth-bartlett	1	80.01	294.20	97.01	310.81	0	1
+S	youth-bartlett	1	154.33	293.33	171.33	310.33	0	1
+L	youth-bartlett	1	386.76	279.48	395.80	279.48
+L	youth-bartlett	1	386.76	281.74	395.80	281.74
+S	youth-bartlett	1	22.62	294.08	39.62	311.08	0	1
+S	youth-bartlett	1	35.02	548.30	52.02	565.30	0	1
+S	youth-bartlett	1	69.90	549.04	86.90	566.04	0	1
+S	youth-bartlett	1	104.05	549.41	121.05	566.41	0	1
+S	youth-bartlett	1	136.71	549.41	153.71	566.41	0	1
+S	youth-bartlett	1	169.00	549.78	186.00	566.78	0	1
+S	youth-bartlett	1	207.59	549.78	224.59	566.78	0	1
+S	youth-bartlett	1	239.88	549.04	256.88	566.04	0	1
+L	youth-bartlett	1	431.88	739.80	440.92	739.80
+L	youth-bartlett	1	431.88	742.06	440.92	742.06
+F	parking-charleston	Name	1	89.04	129.36	549.24	153.24
+F	parking-charleston	Home Address	1	129.36	154.20	547.68	178.08
+F	parking-charleston	City	1	75.96	179.04	327.00	202.92
+F	parking-charleston	State	1	358.32	179.04	400.20	202.92
+F	parking-charleston	Zip Code	1	448.68	179.04	550.32	202.92
+F	parking-charleston	Home Phone	1	129.84	203.88	249.48	227.76
+F	parking-charleston	Work	1	290.76	203.88	404.40	227.76
+F	parking-charleston	Cell	1	436.80	203.88	550.32	227.76
+F	parking-charleston	Vehicle 1 VIN	1	129.00	228.72	398.04	252.60
+F	parking-charleston	License	1	448.44	228.72	550.08	252.60
+F	parking-charleston	Make	1	84.84	253.56	246.48	277.44
+F	parking-charleston	Model	1	284.16	253.56	397.80	277.44
+F	parking-charleston	Color	1	429.72	253.56	549.12	277.44
+F	parking-charleston	Vehicle 2 VIN	1	129.00	278.40	398.04	302.28
+F	parking-charleston	License_2	1	448.44	278.40	550.08	302.28
+F	parking-charleston	undefined	1	84.84	303.24	246.48	327.12
+F	parking-charleston	Model_2	1	284.16	303.24	397.80	327.12
+F	parking-charleston	Color_2	1	429.72	303.24	549.12	327.12
+F	parking-charleston	Date	1	378.00	615.60	553.44	639.48
+P	parking-charleston	1	612.00	792.00
+T	parking-charleston	1	157.55	49.58	330.23	74.57	18.0	1	City of Charleston, WV
+T	parking-charleston	1	157.55	74.91	526.07	99.89	18.0	1	Traffic, Parking and Transportation Department
+T	parking-charleston	1	157.55	100.11	431.26	125.09	18.0	1	Resident Parking Permit Application
+T	parking-charleston	1	54.00	139.33	551.83	155.99	12.0	1	Name _____________________________________________________________________________
+T	parking-charleston	1	54.00	164.17	550.27	180.83	12.0	1	Home Address ______________________________________________________________________
+T	parking-charleston	1	54.00	189.01	552.91	205.67	12.0	1	City __________________________________________ State _______ Zip Code _________________
+T	parking-charleston	1	54.00	213.85	552.91	230.51	12.0	1	Home Phone # ____________________ Work # ___________________ Cell # ___________________
+T	parking-charleston	1	54.00	238.69	552.67	255.35	12.0	1	Vehicle #1 VIN _____________________________________________ License # _________________
+T	parking-charleston	1	54.00	263.53	551.83	280.19	12.0	1	Make ___________________________ Model ___________________ Color ____________________
+T	parking-charleston	1	54.00	288.37	552.67	305.03	12.0	1	Vehicle #2 VIN _____________________________________________ License # _________________
+T	parking-charleston	1	54.00	313.21	551.83	329.87	12.0	1	Make ___________________________ Model ___________________ Color ____________________
+T	parking-charleston	1	90.00	338.05	212.23	354.71	12.0	1	Visitor permit (optional)
+T	parking-charleston	1	131.64	362.81	482.73	378.13	11.0	1	PLEASE READ AND UNDERSTAND THE FOLLOWING RULES AND PROCEDURES
+T	parking-charleston	1	72.00	386.80	560.25	401.06	10.0	0	1. Each Residential unit in the Residential Permit Parking area may obtain a maximum of TWO permits for specific
+T	parking-charleston	1	90.00	401.01	494.97	414.84	10.0	0	vehicles owned by the residents. One additional permit per residential unit may also be obtained.
+T	parking-charleston	1	72.00	423.28	506.72	437.54	10.0	0	2. Each permit is valid for ONE YEAR. The cost for each residential permit is $25.00 per permit annually.
+T	parking-charleston	1	72.00	445.84	551.25	460.10	10.0	1	3. Each Residential area is assigned a COLOR CODED permit. Your permit is valid only for your residential address.
+T	parking-charleston	1	72.00	468.28	431.84	482.54	10.0	1	4. Each resident is required to park in as close proximity to their address as possible.
+T	parking-charleston	1	72.00	490.72	560.25	504.98	10.0	0	5. Any vehicle parking in a Residential Parking area in violation of the terms of the Permit Parking ordinance shall be
+T	parking-charleston	1	90.00	504.94	454.40	518.76	10.0	0	subject to a fine of $75.00 and/or shall be impounded in accordance with section 31-209.
+T	parking-charleston	1	72.00	527.20	560.26	541.46	10.0	0	6. A current utility bill, matching the street address on this application, must be provided to obtain a Residential Permit
+T	parking-charleston	1	90.00	541.41	341.25	555.24	10.0	0	Parking permit. Valid bills may include: gas, electric or water.
+T	parking-charleston	1	54.00	563.57	560.49	578.89	11.0	1	PLEASE NOTE: THE RESIDENTIAL PARKING PERMIT DOES NOT GRANT YOU ACCESS TO PARK IN OTHER
+T	parking-charleston	1	54.00	579.05	195.33	594.37	11.0	1	RESIDENTIAL PARKING AREAS.
+T	parking-charleston	1	54.00	626.95	313.89	641.72	11.0	0	_______________________________________________
+T	parking-charleston	1	378.00	626.95	555.81	641.72	11.0	0	________________________________
+T	parking-charleston	1	54.00	642.31	99.10	657.08	11.0	0	Signature
+T	parking-charleston	1	378.01	642.31	401.75	657.08	11.0	0	Date
+T	parking-charleston	1	54.00	675.58	328.51	691.39	11.0	1	Mail original completed application and payment to:
+T	parking-charleston	1	54.00	691.88	136.06	706.65	11.0	0	City of Charleston
+T	parking-charleston	1	54.00	705.31	116.25	720.08	11.0	0	City Collector
+T	parking-charleston	1	54.00	718.75	179.14	733.52	11.0	0	915 Quarrier Street, Suite 7
+T	parking-charleston	1	54.00	731.92	156.84	746.84	11.0	0	Charleston, WV 25301
+L	parking-charleston	1	454.20	398.40	474.96	399.00
+L	parking-charleston	1	225.00	412.44	316.92	413.04
+L	parking-charleston	1	184.92	434.88	227.16	435.48
+L	parking-charleston	1	389.40	434.88	501.84	435.48
+L	parking-charleston	1	231.72	457.44	292.08	458.04
+L	parking-charleston	1	167.88	516.36	195.84	516.96
+L	parking-charleston	1	129.36	538.80	168.24	539.40
+L	parking-charleston	1	365.16	538.80	437.40	539.40
+L	parking-charleston	1	249.60	552.84	336.48	553.44
+L	parking-charleston	1	54.00	576.24	558.00	576.96
+L	parking-charleston	1	54.00	591.72	192.84	592.44
+S	parking-charleston	1	54.00	337.61	72.75	351.86	0	1
+F	adoption-columbia	Name of the animals that you are interested in	1	287.28	91.92	473.28	111.48
+F	adoption-columbia	Name	1	72.84	119.52	372.96	139.08
+F	adoption-columbia	Phone	1	411.84	119.52	519.84	139.08
+F	adoption-columbia	Email Address	1	117.84	140.16	489.84	159.72
+F	adoption-columbia	Drivers License Number	1	172.56	160.92	292.68	180.48
+F	adoption-columbia	License Expiration Date	1	426.48	160.92	498.48	180.48
+F	adoption-columbia	If yes please explain	1	148.32	202.32	562.32	221.88
+F	adoption-columbia	Address	1	84.84	222.96	546.84	242.52
+F	adoption-columbia	Other	1	336.36	243.72	456.48	263.28
+F	adoption-columbia	Rent If renting have you discussed with your landlord	1	480.12	264.36	564.00	283.92
+F	adoption-columbia	How long have you lived at your current residence	1	300.24	285.12	402.36	304.68
+F	adoption-columbia	If less than 6 monthsprevious address	1	239.04	305.76	574.92	325.32
+F	adoption-columbia	How many people are in your home ages	1	265.20	326.52	361.32	346.08
+F	adoption-columbia	Children	1	419.16	326.52	521.16	346.08
+F	adoption-columbia	Please provide information on where the dog will be when you are not home	1	36.00	388.56	576.00	408.12
+F	adoption-columbia	Please list any current pets	1	36.00	429.96	576.00	449.52
+F	adoption-columbia	Name SpeciesRow1	1	37.08	500.88	119.76	519.12
+F	adoption-columbia	Male or FemaleRow1	1	121.32	500.88	184.92	519.12
+F	adoption-columbia	SpayedNeuteredRow1	1	186.48	500.88	283.56	519.12
+F	adoption-columbia	BreedRow1	1	285.12	500.88	403.08	519.12
+F	adoption-columbia	Current on VaccinesRow1	1	404.64	500.88	500.88	519.12
+F	adoption-columbia	Years ownedRow1	1	502.44	500.88	571.44	519.12
+F	adoption-columbia	Name SpeciesRow2	1	37.20	520.44	119.64	540.72
+F	adoption-columbia	Male or FemaleRow2	1	121.44	520.44	184.80	540.72
+F	adoption-columbia	SpayedNeuteredRow2	1	186.60	520.44	283.44	540.72
+F	adoption-columbia	BreedRow2	1	285.24	520.44	402.96	540.72
+F	adoption-columbia	Current on VaccinesRow2	1	404.76	520.44	500.76	540.72
+F	adoption-columbia	Years ownedRow2	1	502.56	520.44	571.32	540.72
+F	adoption-columbia	Name SpeciesRow3	1	37.20	542.04	119.64	562.44
+F	adoption-columbia	Male or FemaleRow3	1	121.44	542.04	184.80	562.44
+F	adoption-columbia	SpayedNeuteredRow3	1	186.60	542.04	283.44	562.44
+F	adoption-columbia	BreedRow3	1	285.24	542.04	402.96	562.44
+F	adoption-columbia	Current on VaccinesRow3	1	404.76	542.04	500.76	562.44
+F	adoption-columbia	Years ownedRow3	1	502.56	542.04	571.32	562.44
+F	adoption-columbia	Name SpeciesRow4	1	37.20	563.76	119.64	583.20
+F	adoption-columbia	Male or FemaleRow4	1	121.44	563.76	184.80	583.20
+F	adoption-columbia	SpayedNeuteredRow4	1	186.60	563.76	283.44	583.20
+F	adoption-columbia	BreedRow4	1	285.24	563.76	402.96	583.20
+F	adoption-columbia	Current on VaccinesRow4	1	404.76	563.76	500.76	583.20
+F	adoption-columbia	Years ownedRow4	1	502.56	563.76	571.32	583.20
+F	adoption-columbia	Name SpeciesRow5	1	37.20	584.52	119.64	603.96
+F	adoption-columbia	Male or FemaleRow5	1	121.44	584.52	184.80	603.96
+F	adoption-columbia	SpayedNeuteredRow5	1	186.60	584.52	283.44	603.96
+F	adoption-columbia	BreedRow5	1	285.24	584.52	402.96	603.96
+F	adoption-columbia	Current on VaccinesRow5	1	404.76	584.52	500.76	603.96
+F	adoption-columbia	Years ownedRow5	1	502.56	584.52	571.32	603.96
+F	adoption-columbia	Date	1	396.96	723.72	564.96	743.28
+P	adoption-columbia	1	612.00	792.00
+T	adoption-columbia	1	186.72	52.15	357.78	77.06	18.0	1	Adoption Application
+T	adoption-columbia	1	36.00	97.49	476.28	114.10	12.0	1	Name of the animal(s) that you are interested in: _______________________________
+T	adoption-columbia	1	36.00	125.09	522.96	141.70	12.0	1	Name: __________________________________________________Phone: __________________
+T	adoption-columbia	1	36.00	145.73	492.84	162.34	12.0	1	Email Address: ______________________________________________________________
+T	adoption-columbia	1	36.00	166.49	501.60	183.10	12.0	1	Driver’s License Number: ____________________ License Expiration Date: ____________
+T	adoption-columbia	1	36.00	187.13	544.32	203.74	12.0	1	Have you ever been convicted of Animal Abuse, Neglect, and/or Domestic Violence? Yes No
+T	adoption-columbia	1	36.00	207.89	565.32	224.50	12.0	1	If yes, please explain: _____________________________________________________________________
+T	adoption-columbia	1	36.00	228.53	549.84	245.14	12.0	1	Address: _____________________________________________________________________________
+T	adoption-columbia	1	36.00	249.29	459.48	265.90	12.0	0	Do you currently live in: House Apartment Other ____________________
+T	adoption-columbia	1	36.00	269.93	567.00	286.54	12.0	1	Do you currently: Own Rent If renting; have you discussed with your landlord: ______________
+T	adoption-columbia	1	36.00	290.69	405.36	307.30	12.0	1	How long have you lived at your current residence: _________________
+T	adoption-columbia	1	36.00	311.33	577.92	327.94	12.0	1	If less than 6 months-previous address: ________________________________________________________
+T	adoption-columbia	1	36.00	332.09	524.16	348.70	12.0	1	How many people are in your home & ages? ________________ Children? _________________
+T	adoption-columbia	1	36.00	352.73	267.84	369.34	12.0	1	Do you have a fenced in yard? Yes No
+T	adoption-columbia	1	36.00	373.49	389.64	390.10	12.0	1	If no fence how do you intend on confining the dog to your property:
+T	adoption-columbia	1	36.00	394.13	579.00	410.74	12.0	1	__________________________________________________________________________________________
+T	adoption-columbia	1	36.00	414.89	430.56	431.50	12.0	1	Please provide information on where the dog will be when you are not home:
+T	adoption-columbia	1	36.00	435.53	579.00	452.14	12.0	1	__________________________________________________________________________________________
+T	adoption-columbia	1	36.00	456.29	180.12	472.90	12.0	1	Please list any current pets:
+T	adoption-columbia	1	41.64	470.57	87.48	487.18	12.0	1	Name &
+T	adoption-columbia	1	41.64	484.37	81.96	500.98	12.0	1	Species
+T	adoption-columbia	1	125.88	470.57	168.96	487.18	12.0	1	Male or
+T	adoption-columbia	1	125.88	484.37	166.20	500.98	12.0	1	Female
+T	adoption-columbia	1	191.04	470.57	323.16	487.18	12.0	1	Spayed/Neutered Breed
+T	adoption-columbia	1	409.20	470.57	469.68	487.18	12.0	1	Current on
+T	adoption-columbia	1	409.20	484.37	456.48	500.98	12.0	1	Vaccines
+T	adoption-columbia	1	507.00	470.57	538.56	487.18	12.0	1	Years
+T	adoption-columbia	1	507.00	484.37	543.36	500.98	12.0	1	owned
+T	adoption-columbia	1	36.00	603.44	464.25	616.86	10.0	0	I understand that Columbia County cannot anticipate or insure unexpected conduct of any adopted animal.
+T	adoption-columbia	1	36.00	614.85	566.97	628.26	10.0	0	I understand that if the adopted pet does not adequately adjust or is deemed unsuitable for my home that I have 30 days to return the
+T	adoption-columbia	1	36.00	626.37	331.41	639.79	10.0	0	dog to the shelter or be subject to surrender fees if returned after 30 days.
+T	adoption-columbia	1	36.00	637.89	244.53	651.31	10.0	0	I understand that the adoption fee is nonrefundable.
+T	adoption-columbia	1	36.00	649.42	369.21	662.83	10.0	0	I will provide food, water, adequate shelter, and veterinary services at my expense.
+T	adoption-columbia	1	36.00	660.94	564.69	674.36	10.0	0	I understand that Columbia County has not made any guarantees on any adopted animal, and I hereby accept all risk, responsibility,
+T	adoption-columbia	1	36.01	672.46	267.94	685.88	10.0	0	and obligations associated with ownership of this animal.
+T	adoption-columbia	1	36.01	683.87	574.06	697.28	10.0	0	I understand by signing this document under penalty of the law (ORS 162.085) I certify that all the information is true and accurate to
+T	adoption-columbia	1	36.01	695.39	144.34	708.81	10.0	0	the best of my knowledge.
+T	adoption-columbia	1	36.00	729.29	567.96	745.90	12.0	1	Signature: _____________________________________________ Date: ____________________________
+T	adoption-columbia	1	96.24	723.40	102.88	727.14	2.7	0	SIGN
+L	adoption-columbia	1	36.48	471.60	120.24	472.08
+L	adoption-columbia	1	120.72	471.60	185.40	472.08
+L	adoption-columbia	1	185.88	471.60	284.04	472.08
+L	adoption-columbia	1	284.52	471.60	403.56	472.08
+L	adoption-columbia	1	404.04	471.60	501.36	472.08
+L	adoption-columbia	1	501.84	471.60	571.92	472.08
+L	adoption-columbia	1	36.00	472.08	36.48	499.68
+L	adoption-columbia	1	120.24	472.08	120.72	499.68
+L	adoption-columbia	1	185.40	472.08	185.88	499.68
+L	adoption-columbia	1	284.04	472.08	284.52	499.68
+L	adoption-columbia	1	403.56	472.08	404.04	499.68
+L	adoption-columbia	1	501.36	472.08	501.84	499.68
+L	adoption-columbia	1	571.92	472.08	572.40	499.68
+L	adoption-columbia	1	36.48	499.68	120.24	500.16
+L	adoption-columbia	1	120.72	499.68	185.40	500.16
+L	adoption-columbia	1	185.88	499.68	284.04	500.16
+L	adoption-columbia	1	284.52	499.68	403.56	500.16
+L	adoption-columbia	1	404.04	499.68	501.36	500.16
+L	adoption-columbia	1	501.84	499.68	571.92	500.16
+L	adoption-columbia	1	36.00	500.16	36.48	519.12
+L	adoption-columbia	1	120.24	500.16	120.72	519.12
+L	adoption-columbia	1	185.40	500.16	185.88	519.12
+L	adoption-columbia	1	284.04	500.16	284.52	519.12
+L	adoption-columbia	1	403.56	500.16	404.04	519.12
+L	adoption-columbia	1	501.36	500.16	501.84	519.12
+L	adoption-columbia	1	571.92	500.16	572.40	519.12
+L	adoption-columbia	1	36.48	519.12	120.24	519.60
+L	adoption-columbia	1	120.72	519.12	185.40	519.60
+L	adoption-columbia	1	185.88	519.12	284.04	519.60
+L	adoption-columbia	1	284.52	519.12	403.56	519.60
+L	adoption-columbia	1	404.04	519.12	501.36	519.60
+L	adoption-columbia	1	501.84	519.12	571.92	519.60
+L	adoption-columbia	1	36.00	519.60	36.48	540.72
+L	adoption-columbia	1	120.24	519.60	120.72	540.72
+L	adoption-columbia	1	185.40	519.60	185.88	540.72
+L	adoption-columbia	1	284.04	519.60	284.52	540.72
+L	adoption-columbia	1	403.56	519.60	404.04	540.72
+L	adoption-columbia	1	501.36	519.60	501.84	540.72
+L	adoption-columbia	1	571.92	519.60	572.40	540.72
+L	adoption-columbia	1	36.48	540.72	120.24	541.20
+L	adoption-columbia	1	120.72	540.72	185.40	541.20
+L	adoption-columbia	1	185.88	540.72	284.04	541.20
+L	adoption-columbia	1	284.52	540.72	403.56	541.20
+L	adoption-columbia	1	404.04	540.72	501.36	541.20
+L	adoption-columbia	1	501.84	540.72	571.92	541.20
+L	adoption-columbia	1	36.00	541.20	36.48	562.44
+L	adoption-columbia	1	120.24	541.20	120.72	562.44
+L	adoption-columbia	1	185.40	541.20	185.88	562.44
+L	adoption-columbia	1	284.04	541.20	284.52	562.44
+L	adoption-columbia	1	403.56	541.20	404.04	562.44
+L	adoption-columbia	1	501.36	541.20	501.84	562.44
+L	adoption-columbia	1	571.92	541.20	572.40	562.44
+L	adoption-columbia	1	36.48	562.44	120.24	562.92
+L	adoption-columbia	1	120.72	562.44	185.40	562.92
+L	adoption-columbia	1	185.88	562.44	284.04	562.92
+L	adoption-columbia	1	284.52	562.44	403.56	562.92
+L	adoption-columbia	1	404.04	562.44	501.36	562.92
+L	adoption-columbia	1	501.84	562.44	571.92	562.92
+L	adoption-columbia	1	36.00	562.92	36.48	583.20
+L	adoption-columbia	1	120.24	562.92	120.72	583.20
+L	adoption-columbia	1	185.40	562.92	185.88	583.20
+L	adoption-columbia	1	284.04	562.92	284.52	583.20
+L	adoption-columbia	1	403.56	562.92	404.04	583.20
+L	adoption-columbia	1	501.36	562.92	501.84	583.20
+L	adoption-columbia	1	571.92	562.92	572.40	583.20
+L	adoption-columbia	1	36.48	583.20	120.24	583.68
+L	adoption-columbia	1	120.72	583.20	185.40	583.68
+L	adoption-columbia	1	185.88	583.20	284.04	583.68
+L	adoption-columbia	1	284.52	583.20	403.56	583.68
+L	adoption-columbia	1	404.04	583.20	501.36	583.68
+L	adoption-columbia	1	501.84	583.20	571.92	583.68
+L	adoption-columbia	1	36.00	583.68	36.48	603.96
+L	adoption-columbia	1	36.48	603.96	120.24	604.44
+L	adoption-columbia	1	120.24	583.68	120.72	603.96
+L	adoption-columbia	1	120.72	603.96	185.40	604.44
+L	adoption-columbia	1	185.40	583.68	185.88	603.96
+L	adoption-columbia	1	185.88	603.96	284.04	604.44
+L	adoption-columbia	1	284.04	583.68	284.52	603.96
+L	adoption-columbia	1	284.52	603.96	403.56	604.44
+L	adoption-columbia	1	403.56	583.68	404.04	603.96
+L	adoption-columbia	1	404.04	603.96	501.36	604.44
+L	adoption-columbia	1	501.36	583.68	501.84	603.96
+L	adoption-columbia	1	501.84	603.96	571.92	604.44
+L	adoption-columbia	1	571.92	583.68	572.40	603.96
+S	adoption-columbia	1	165.00	253.74	174.00	262.74	0	1
+S	adoption-columbia	1	220.50	253.79	229.50	262.79	0	1
+S	adoption-columbia	1	294.75	253.79	303.75	262.79	0	1
+S	adoption-columbia	1	131.25	275.84	140.25	284.84	0	1
+S	adoption-columbia	1	177.75	275.98	186.75	284.98	0	1
+S	adoption-columbia	1	194.25	354.28	203.25	363.28	0	1
+S	adoption-columbia	1	238.50	354.08	247.50	363.08	0	1
+S	adoption-columbia	1	469.00	188.64	478.00	197.64	0	1
+S	adoption-columbia	1	515.65	188.49	524.65	197.49	0	1
+L	adoption-columbia	1	93.00	723.72	106.04	723.72
+L	adoption-columbia	1	93.00	726.98	106.04	726.98

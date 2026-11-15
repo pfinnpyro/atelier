@@ -1,0 +1,641 @@
+# Review corrections to labels-draft.tsv; `fieldml_v4_labels.py apply` writes labels.tsv.
+# form|field|kind|group|role   ("." keeps the draft value)
+
+# --- library-dearborn
+library-dearborn|Home Street|.|applicant-home|.
+library-dearborn|Home Apt-Suite|.|applicant-home|.
+library-dearborn|Home City|.|applicant-home|.
+library-dearborn|Home State|.|applicant-home|.
+library-dearborn|Home Zip|.|applicant-home|.
+library-dearborn|Preferred Area Code|PhoneArea|.|.
+library-dearborn|Preferred Phone|PhoneLocal|.|.
+library-dearborn|Other Area Code|PhoneArea|.|.
+library-dearborn|Other Phone|PhoneLocal|.|.
+library-dearborn|Driver's License|Other|.|.
+library-dearborn|SS#1|Other|.|.
+library-dearborn|SS#2|Other|.|.
+library-dearborn|SS#3|Other|.|.
+library-dearborn|SS#4|Other|.|.
+library-dearborn|Minor Last Name|.|child-1|.
+library-dearborn|Minor First Name|.|child-1|.
+library-dearborn|Minor Middle Initial|.|child-1|.
+library-dearborn|Minor Date of Birth|.|child-1|.
+library-dearborn|Consent 1|FullName|consent-1|other
+library-dearborn|Consent 1 Relation|.|consent-1|other
+library-dearborn|Consent 2|FullName|consent-2|other
+library-dearborn|Consent 2 Relation|.|consent-2|other
+
+# --- sports-laparks (the player is the applicant)
+sports-laparks|School|Organization|school|provider
+sports-laparks|Name of sibling|.|child-1|.
+sports-laparks|Parent 1|FullName|.|.
+sports-laparks|Parent 2|FullName|.|.
+sports-laparks|Emergency Name 1|.|emergency-1|.
+sports-laparks|Eme Ph 1|.|emergency-1|.
+sports-laparks|Emergency Name 2|.|emergency-2|.
+sports-laparks|Eme Ph 2|.|emergency-2|.
+sports-laparks|Coach phone|Phone|guardian-volunteer|guardian
+
+# --- library-kcls
+library-kcls|p1-069|.|applicant-legal|.
+library-kcls|p1-070|.|applicant-legal|.
+library-kcls|p1-071|.|applicant-legal|.
+library-kcls|p1-077|.|applicant-mailing|.
+library-kcls|p1-078|.|applicant-mailing|.
+library-kcls|p1-079|.|applicant-mailing|.
+library-kcls|p1-080|.|applicant-mailing|.
+library-kcls|p1-081|.|applicant-mailing|.
+library-kcls|p1-082|PhoneArea|.|.
+library-kcls|p1-083|PhonePrefix|.|.
+library-kcls|p1-084|PhoneLine|.|.
+library-kcls|p1-085|PhoneArea|.|.
+library-kcls|p1-086|PhonePrefix|.|.
+library-kcls|p1-087|PhoneLine|.|.
+library-kcls|p1-089|.|guardian-1|.
+library-kcls|p1-090|.|guardian-1|.
+library-kcls|p1-091|.|guardian-2|.
+library-kcls|p1-092|.|guardian-2|.
+library-kcls|p1-093|.|guardian-3|.
+library-kcls|p1-094|.|guardian-3|.
+library-kcls|p1-095|.|guardian-4|.
+library-kcls|p1-096|.|guardian-4|.
+library-kcls|p1-097|FullName|pickup|other
+
+# --- patient-jottful
+patient-jottful|p1-108|.|emergency-1|.
+patient-jottful|p1-109|.|emergency-1|.
+patient-jottful|p1-110|.|emergency-1|.
+patient-jottful|p2-111|Organization|.|.
+patient-jottful|p2-115|Organization|insurance-1|.
+patient-jottful|p2-116|.|policyholder-1|other
+patient-jottful|p2-117|.|insurance-1|.
+patient-jottful|p2-118|.|insurance-1|.
+patient-jottful|p2-119|.|insurance-1|.
+patient-jottful|p2-120|AddressLine1|applicant-billing|.
+patient-jottful|p2-121|.|applicant-billing|applicant-alt
+patient-jottful|p2-122|.|applicant-billing|applicant-alt
+patient-jottful|p2-123|.|applicant-billing|applicant-alt
+patient-jottful|p2-124|Organization|insurance-2|.
+patient-jottful|p2-125|.|policyholder-2|other
+patient-jottful|p2-126|.|insurance-2|.
+patient-jottful|p2-127|.|emergency-2|.
+patient-jottful|p2-128|.|emergency-2|.
+patient-jottful|p3-129|.|emergency-2|.
+patient-jottful|p3-130|.|emergency-2|.
+
+# --- camp-vbac (the camper is the applicant; a parent signs)
+camp-vbac|p1-185|.|guardian-1|.
+camp-vbac|p1-187|.|guardian-1|.
+camp-vbac|p1-189|Phone|guardian-1|.
+camp-vbac|p1-191|.|guardian-1|.
+camp-vbac|p1-193|.|guardian-1|.
+camp-vbac|p1-186|.|guardian-2|.
+camp-vbac|p1-188|.|guardian-2|.
+camp-vbac|p1-190|Phone|guardian-2|.
+camp-vbac|p1-192|.|guardian-2|.
+camp-vbac|p1-194|.|guardian-2|.
+camp-vbac|p1-195|.|emergency-1|.
+camp-vbac|p1-196|.|emergency-1|.
+camp-vbac|p1-197|.|emergency-1|.
+camp-vbac|p1-198|.|pickup-1|other
+camp-vbac|p1-200|.|pickup-1|other
+camp-vbac|p1-202|.|pickup-1|other
+camp-vbac|p1-199|.|pickup-2|other
+camp-vbac|p1-201|.|pickup-2|other
+camp-vbac|p1-203|.|pickup-2|other
+camp-vbac|p2-208|.|guardian-signer|guardian
+camp-vbac|p2-209|.|guardian-signer|guardian
+
+# --- volunteer-xavier
+volunteer-xavier|Preferred Name|Other|.|.
+volunteer-xavier|In case of emergency notify|FullName|emergency-1|.
+volunteer-xavier|Emergency relationship|.|emergency-1|.
+volunteer-xavier|Emergency Telephone Home|.|emergency-1|.
+volunteer-xavier|Emergency Telephone Work|.|emergency-1|.
+volunteer-xavier|Emergency Telephone Mobile|.|emergency-1|.
+volunteer-xavier|Health / Medical Information|.|applicant|applicant
+volunteer-xavier|Relationship with school eg parent grandparent past student neighbour member of Parish community etc|Other|applicant|applicant
+volunteer-xavier|Relevant qualifications skills experience that might assist the school|Other|applicant|applicant
+volunteer-xavier|Are there particular school activities that you would like to assist|Other|applicant|applicant
+volunteer-xavier|Other community or volunteer involvement past or current|Other|.|.
+volunteer-xavier|Is there anything you personally wish to accomplish as a school volunteer|Other|applicant|applicant
+volunteer-xavier|Signature Date|Date|.|.
+
+# --- membership-jas
+membership-jas|p2-277|JobTitle|.|.
+membership-jas|p2-278|Organization|.|.
+membership-jas|p2-280|Zip|.|.
+membership-jas|p2-282|Fax|.|.
+membership-jas|p2-286|Fax|.|.
+membership-jas|p2-287|Phone|.|.
+membership-jas|p3-300|Phone|.|.
+membership-jas|p3-306|.|family-1|other
+membership-jas|p3-307|.|family-1|other
+membership-jas|p3-308|.|family-1|other
+membership-jas|p3-309|.|family-1|other
+membership-jas|p3-310|.|family-2|other
+membership-jas|p3-311|.|family-2|other
+membership-jas|p3-312|.|family-2|other
+membership-jas|p3-313|.|family-2|other
+membership-jas|p3-314|.|family-3|other
+membership-jas|p3-315|.|family-3|other
+membership-jas|p3-316|.|family-3|other
+membership-jas|p3-317|.|family-3|other
+membership-jas|p3-318|.|family-4|other
+membership-jas|p3-319|.|family-4|other
+membership-jas|p3-320|.|family-4|other
+membership-jas|p3-321|.|family-4|other
+
+# --- rental-dixon
+rental-dixon|p1-227|.|landlord-current|provider
+rental-dixon|p1-228|.|landlord-current|provider
+rental-dixon|p1-229|.|applicant-previous|.
+rental-dixon|p1-230|.|applicant-previous|.
+rental-dixon|p1-231|.|applicant-previous|.
+rental-dixon|p1-232|.|applicant-previous|.
+rental-dixon|p1-233|.|landlord-previous|provider
+rental-dixon|p1-234|.|landlord-previous|provider
+rental-dixon|p2-235|FullName|occupants|other
+rental-dixon|p2-236|.|applicant|applicant
+rental-dixon|p2-237|.|applicant|applicant
+rental-dixon|p2-238|.|employer-current|employer
+rental-dixon|p2-239|.|employer-current|employer
+rental-dixon|p2-240|.|employer-current|employer
+rental-dixon|p2-242|.|employer-current|employer
+rental-dixon|p2-243|.|employer-current|employer
+rental-dixon|p2-245|.|employer-current|employer
+rental-dixon|p2-247|FullName|employer-current|employer
+rental-dixon|p2-248|.|employer-current|employer
+rental-dixon|p2-252|Organization|employer-previous-1|employer
+rental-dixon|p2-241|.|employer-previous-1|employer
+rental-dixon|p2-244|.|employer-previous-1|employer
+rental-dixon|p2-246|.|employer-previous-1|employer
+rental-dixon|p2-253|.|employer-previous-1|employer
+rental-dixon|p2-254|Organization|bank|provider
+rental-dixon|p2-255|.|bank|provider
+rental-dixon|p2-256|.|bank|provider
+rental-dixon|p2-257|.|reference-1|reference
+rental-dixon|p2-258|.|reference-2|reference
+rental-dixon|p2-249|.|reference-2|reference
+rental-dixon|p2-259|.|reference-3|reference
+rental-dixon|p2-250|.|reference-3|reference
+rental-dixon|p2-261|.|reference-3|reference
+rental-dixon|p2-260|.|reference-4|reference
+rental-dixon|p2-251|.|reference-4|reference
+rental-dixon|p2-262|.|reference-4|reference
+rental-dixon|p3-263|.|emergency-1|.
+rental-dixon|p3-264|.|emergency-1|.
+rental-dixon|p3-265|.|emergency-1|.
+rental-dixon|p3-266|.|emergency-1|.
+rental-dixon|p3-267|.|emergency-1|.
+rental-dixon|p3-268|.|emergency-1|.
+
+# --- employment-humboldt
+employment-humboldt|p2-058|.|school-1|provider
+employment-humboldt|p2-059|.|school-1|provider
+employment-humboldt|p2-060|.|school-1|provider
+employment-humboldt|p2-061|.|school-1|provider
+employment-humboldt|p2-062|.|school-1|provider
+employment-humboldt|p2-063|Organization|school-2|provider
+employment-humboldt|p2-064|.|school-2|provider
+employment-humboldt|p2-065|.|school-2|provider
+employment-humboldt|p2-066|.|school-2|provider
+employment-humboldt|p2-067|.|school-2|provider
+employment-humboldt|p2-068|Organization|school-3|provider
+employment-humboldt|p2-069|.|school-3|provider
+employment-humboldt|p2-070|.|school-3|provider
+employment-humboldt|p2-071|.|school-3|provider
+employment-humboldt|p2-072|.|school-3|provider
+employment-humboldt|p2-073|.|reference-1|reference
+employment-humboldt|p2-074|.|reference-1|reference
+employment-humboldt|p2-075|.|reference-1|reference
+employment-humboldt|p2-076|.|reference-1|reference
+employment-humboldt|p2-077|.|reference-1|reference
+employment-humboldt|p2-078|.|reference-1|reference
+employment-humboldt|p2-079|.|reference-2|reference
+employment-humboldt|p2-080|.|reference-2|reference
+employment-humboldt|p2-081|.|reference-2|reference
+employment-humboldt|p2-082|.|reference-2|reference
+employment-humboldt|p2-083|.|reference-2|reference
+employment-humboldt|p2-084|.|reference-2|reference
+employment-humboldt|p2-085|.|reference-3|reference
+employment-humboldt|p2-086|.|reference-3|reference
+employment-humboldt|p2-087|.|reference-3|reference
+employment-humboldt|p2-088|.|reference-3|reference
+employment-humboldt|p2-089|.|reference-3|reference
+employment-humboldt|p2-090|.|reference-3|reference
+employment-humboldt|p3-091|.|employer-previous-1|employer
+employment-humboldt|p3-092|.|employer-previous-1|employer
+employment-humboldt|p3-093|.|employer-previous-1|employer
+employment-humboldt|p3-094|FullName|employer-previous-1|employer
+employment-humboldt|p3-095|.|employer-previous-1|employer
+employment-humboldt|p3-096|.|employer-previous-1|employer
+employment-humboldt|p3-097|.|employer-previous-1|employer
+employment-humboldt|p3-098|.|employer-previous-1|employer
+employment-humboldt|p3-099|.|employer-previous-2|employer
+employment-humboldt|p3-100|.|employer-previous-2|employer
+employment-humboldt|p3-101|.|employer-previous-2|employer
+employment-humboldt|p3-102|FullName|employer-previous-2|employer
+employment-humboldt|p3-103|.|employer-previous-2|employer
+employment-humboldt|p3-104|.|employer-previous-2|employer
+employment-humboldt|p3-105|.|employer-previous-2|employer
+employment-humboldt|p3-106|.|employer-previous-2|employer
+employment-humboldt|p3-107|.|employer-previous-3|employer
+employment-humboldt|p3-108|.|employer-previous-3|employer
+employment-humboldt|p3-109|.|employer-previous-3|employer
+employment-humboldt|p3-110|FullName|employer-previous-3|employer
+employment-humboldt|p3-111|.|employer-previous-3|employer
+employment-humboldt|p3-112|.|employer-previous-3|employer
+employment-humboldt|p3-113|.|employer-previous-3|employer
+employment-humboldt|p3-114|.|employer-previous-3|employer
+employment-humboldt|p3-115|.|military|applicant
+employment-humboldt|p3-116|.|military|applicant
+employment-humboldt|p3-117|.|military|applicant
+employment-humboldt|p3-118|.|military|applicant
+employment-humboldt|p3-119|.|military|applicant
+
+# --- membership-rhadc
+membership-rhadc|p1-011|Phone|applicant|applicant
+membership-rhadc|p1-014|AddressLine1|applicant-mailing|applicant-alt
+membership-rhadc|p1-015|.|applicant-mailing|applicant-alt
+membership-rhadc|p1-016|.|applicant-mailing|applicant-alt
+membership-rhadc|p1-017|.|applicant-mailing|applicant-alt
+membership-rhadc|p2-018|.|employer-current|employer
+membership-rhadc|p2-019|.|employer-current|employer
+membership-rhadc|p2-020|.|employer-current|employer
+membership-rhadc|p2-021|.|employer-current|employer
+membership-rhadc|p2-026|.|child-1|child
+membership-rhadc|p2-027|.|child-1|child
+membership-rhadc|p2-028|.|child-2|child
+membership-rhadc|p2-029|.|child-2|child
+membership-rhadc|p2-030|.|child-3|child
+membership-rhadc|p2-031|.|child-3|child
+membership-rhadc|p2-032|FullName|proposer|other
+membership-rhadc|p2-033|FullName|seconder|other
+membership-rhadc|p3-043|.|spouse|spouse
+membership-rhadc|p3-038|.|spouse|spouse
+membership-rhadc|p3-039|.|signer-1|other
+membership-rhadc|p3-040|.|signer-2|other
+membership-rhadc|p3-041|.|signer-3|other
+
+# --- patient-ecw
+patient-ecw|p1-125|.|applicant-preferred|applicant-alt
+patient-ecw|p1-130|Phone|applicant|applicant
+patient-ecw|p1-134|.|guardian-1|guardian
+patient-ecw|p1-135|.|guardian-1|guardian
+patient-ecw|p1-136|.|guardian-1|guardian
+patient-ecw|p1-137|.|guardian-1|guardian
+patient-ecw|p1-138|.|guardian-1|guardian
+patient-ecw|p1-139|.|guardian-1|guardian
+patient-ecw|p1-140|.|guardian-1|guardian
+patient-ecw|p1-141|CityState|guardian-1|guardian
+patient-ecw|p1-142|.|guardian-1|guardian
+patient-ecw|p1-143|.|emergency-1|emergency
+patient-ecw|p1-144|.|emergency-1|emergency
+patient-ecw|p1-145|.|emergency-1|emergency
+patient-ecw|p1-146|.|emergency-1|emergency
+patient-ecw|p1-147|.|emergency-1|emergency
+patient-ecw|p1-148|CityState|emergency-1|emergency
+patient-ecw|p1-149|.|emergency-1|emergency
+patient-ecw|p1-150|.|emergency-1|emergency
+patient-ecw|p1-151|Phone|emergency-1|emergency
+patient-ecw|p1-152|.|emergency-1|emergency
+patient-ecw|p1-156|.|representative|other
+
+# --- adoption-vet
+adoption-vet|OccupaŸon|JobTitle|applicant|applicant
+adoption-vet|How long at this address|Other|applicant|applicant
+adoption-vet|What type of home do you live in single family town home apartment farm etc|Other|applicant|applicant
+adoption-vet|Are these pets up to date on vaccines|Other|applicant|applicant
+adoption-vet|How many children ages|.|applicant|applicant
+adoption-vet|Veterinarians name|.|veterinarian|provider
+adoption-vet|Clinic name|Organization|veterinarian|provider
+adoption-vet|Clinic address|.|veterinarian|provider
+adoption-vet|Clinic phone|.|veterinarian|provider
+adoption-vet|Name|.|reference-1|reference
+adoption-vet|Address_2|.|reference-1|reference
+adoption-vet|Phone|.|reference-1|reference
+adoption-vet|RelaŸonship relaŸve neighbor friend etc|Relationship|reference-1|reference
+adoption-vet|Name_2|.|reference-2|reference
+adoption-vet|Address_3|.|reference-2|reference
+adoption-vet|Phone_2|.|reference-2|reference
+adoption-vet|RelaŸonship relaŸve neighbor friend etc_2|Relationship|reference-2|reference
+
+# --- camp-ymca (participant 1 is the applicant)
+camp-ymca|p1-330|.|child-1|child
+camp-ymca|p2-331|.|guardian-1|.
+camp-ymca|p2-333|.|guardian-1|.
+camp-ymca|p2-335|.|guardian-1|.
+camp-ymca|p2-337|.|guardian-1|.
+camp-ymca|p2-339|.|guardian-1|.
+camp-ymca|p2-341|.|guardian-1|.
+camp-ymca|p2-343|.|guardian-1|.
+camp-ymca|p2-345|.|guardian-1|.
+camp-ymca|p2-332|.|guardian-2|.
+camp-ymca|p2-334|.|guardian-2|.
+camp-ymca|p2-336|.|guardian-2|.
+camp-ymca|p2-338|.|guardian-2|.
+camp-ymca|p2-340|.|guardian-2|.
+camp-ymca|p2-342|.|guardian-2|.
+camp-ymca|p2-344|.|guardian-2|.
+camp-ymca|p2-346|.|guardian-2|.
+camp-ymca|p3-347|FullName|physician|provider
+camp-ymca|p3-348|.|physician|provider
+camp-ymca|p3-349|.|physician|provider
+camp-ymca|p3-350|Organization|hospital|provider
+camp-ymca|p3-351|Organization|insurance-1|provider
+camp-ymca|p3-352|.|insurance-1|provider
+
+# --- camp-pearce
+camp-pearce|p1-314|.|guardian-1|guardian
+camp-pearce|p1-316|.|guardian-1|guardian
+camp-pearce|p1-318|.|guardian-1|guardian
+camp-pearce|p1-320|.|guardian-1|guardian
+camp-pearce|p1-322|BirthDate|guardian-1|guardian
+camp-pearce|p1-315|.|guardian-2|guardian
+camp-pearce|p1-317|.|guardian-2|guardian
+camp-pearce|p1-319|.|guardian-2|guardian
+camp-pearce|p1-321|.|guardian-2|guardian
+camp-pearce|p1-323|BirthDate|guardian-2|guardian
+camp-pearce|p1-324|.|emergency-1|.
+camp-pearce|p1-325|.|emergency-1|.
+camp-pearce|p1-326|.|emergency-1|.
+camp-pearce|p1-327|.|guardian-signer|guardian
+
+# --- employment (Bachman's); a desired position is not the profile's job title
+employment|Text2|Other|applicant|applicant
+employment|Position Applied for|Other|applicant|applicant
+employment|Text22|FullName|relatives|other
+employment|Name of Employer|Organization|employer-1|employer
+employment|Telephone|.|employer-1|employer
+employment|Address|.|employer-1|employer
+employment|Name and Title of Supervisor|.|employer-1|employer
+employment|Reason for leavingMay we contact this employer|Other|employer-1|employer
+employment|Description of your duties and responsibilities|.|employer-1|employer
+employment|Date3_af_date|.|employer-1|employer
+employment|Date3_af_date@p2-24|.|employer-1|employer
+employment|Name when employed if different than present name|.|applicant-former-name|applicant-alt
+employment|Name of Employer_2|Organization|employer-2|employer
+employment|Telephone_2|.|employer-2|employer
+employment|Address_2|.|employer-2|employer
+employment|Name and Title of Supervisor_2|.|employer-2|employer
+employment|Reason for leavingMay we contact this employer_2|Other|employer-2|employer
+employment|Description of your duties and responsibilities_2|.|employer-2|employer
+employment|Date3_af_date@p2-32|.|employer-2|employer
+employment|Date3_af_date@p2-33|.|employer-2|employer
+employment|Name when employed if different than present name_2|.|applicant-former-name|applicant-alt
+employment|Name of Employer_3|Organization|employer-3|employer
+employment|Telephone_3|.|employer-3|employer
+employment|Address_3|.|employer-3|employer
+employment|Name and Title of Supervisor_3|.|employer-3|employer
+employment|Reason for leavingMay we contact this employer_3|Other|employer-3|employer
+employment|Description of your duties and responsibilities_3|.|employer-3|employer
+employment|Date3_af_date@p2-41|.|employer-3|employer
+employment|Date3_af_date@p2-42|.|employer-3|employer
+employment|Name when employed if different than present name_3|.|applicant-former-name|applicant-alt
+employment|Text4|FullName|reference-1|reference
+employment|Phone Number1|.|reference-1|reference
+employment|Address1|.|reference-1|reference
+employment|Years Known1|.|reference-1|reference
+employment|Text4@p2-51|FullName|reference-2|reference
+employment|Phone Number2|.|reference-2|reference
+employment|Address2|.|reference-2|reference
+employment|Years Known2|.|reference-2|reference
+employment|Text4@p2-55|FullName|reference-3|reference
+employment|Phone Number3|.|reference-3|reference
+employment|Address3|.|reference-3|reference
+employment|Years Known3|.|reference-3|reference
+employment|High SchoolSchool Name and Location|Organization|school-1|provider
+employment|Yes  NoDiplomaDegreeCertificate|.|school-1|provider
+employment|Technical CollegeSchool Name and Location|Organization|school-2|provider
+employment|Yes  NoDiplomaDegreeCertificate_2|.|school-2|provider
+employment|UniversitySchool Name and Location|Organization|school-3|provider
+employment|Yes  NoDiplomaDegreeCertificate_3|.|school-3|provider
+employment|Graduate SchoolSchool Name and Location|Organization|school-4|provider
+employment|Yes  NoDiplomaDegreeCertificate_4|.|school-4|provider
+employment|Text5|Signature|applicant|applicant
+employment|Date6_af_date|Date|applicant|applicant
+employment|Date53_af_date|Date|applicant|applicant
+
+# --- membership-rotary
+membership-rotary|untitled5|Date|applicant|applicant
+membership-rotary|untitled6|Other|children|child
+membership-rotary|untitled7|Organization|employer-current|employer
+membership-rotary|untitled8|.|employer-current|employer
+membership-rotary|untitled9|.|employer-current|employer
+membership-rotary|untitled10|.|employer-current|employer
+membership-rotary|untitled11|.|employer-current|employer
+membership-rotary|untitled16|Organization|previous-club|provider
+membership-rotary|untitled17|.|previous-club|provider
+membership-rotary|untitled18|.|previous-club|provider
+
+# --- patient-ripley
+patient-ripley|p1-281|.|guardian-1|guardian
+patient-ripley|p1-282|.|guardian-1|guardian
+patient-ripley|p1-283|MiddleInitial|guardian-1|guardian
+patient-ripley|p1-284|AddressLine1|guardian-1|guardian
+patient-ripley|p1-285|AddressLine2|guardian-1|guardian
+patient-ripley|p1-286|.|guardian-1|guardian
+patient-ripley|p1-287|.|guardian-1|guardian
+patient-ripley|p1-288|.|guardian-1|guardian
+patient-ripley|p1-289|.|guardian-1|guardian
+patient-ripley|p1-298|.|policyholder-1|other
+patient-ripley|p1-299|.|policyholder-1|other
+patient-ripley|p1-300|.|policyholder-employer|other
+patient-ripley|p1-302|AddressLine1|policyholder-employer|other
+patient-ripley|p1-304|.|policyholder-employer|other
+patient-ripley|p1-301|.|insurance-1|provider
+patient-ripley|p1-303|AddressLine1|insurance-1|provider
+patient-ripley|p1-305|.|insurance-1|provider
+
+# --- scholarship-sd91
+scholarship-sd91|p1-266|.|school|provider
+scholarship-sd91|p1-267|.|applicant|applicant
+scholarship-sd91|p1-269|.|guardian-1|guardian
+scholarship-sd91|p1-270|.|guardian-1|guardian
+scholarship-sd91|p1-273|Organization|guardian-1|guardian
+scholarship-sd91|p1-271|Organization|guardian-mother|guardian
+scholarship-sd91|p1-272|Organization|guardian-father|guardian
+scholarship-sd91|p1-274|Organization|post-secondary|provider
+
+# --- volunteer-freedom
+volunteer-freedom|p2-162|.|applicant-former|applicant-alt
+volunteer-freedom|p2-164|.|applicant-other-names|applicant-alt
+volunteer-freedom|p2-165|FullName|applicant-other-names|applicant-alt
+volunteer-freedom|p8-168|.|emergency-1|emergency
+volunteer-freedom|p8-169|.|emergency-1|emergency
+volunteer-freedom|p8-170|.|emergency-1|emergency
+volunteer-freedom|p8-171|.|children|child
+volunteer-freedom|p8-172|Organization|school|provider
+volunteer-freedom|p8-173|.|school|provider
+
+# --- volunteer-turning (birthplace is not the applicant's city)
+volunteer-turning|p1-244|Other|applicant|applicant
+volunteer-turning|p1-247|Phone|applicant|applicant
+
+# --- rental-taylor
+rental-taylor|p1-187|.|landlord-current|provider
+rental-taylor|p1-188|.|landlord-current|provider
+rental-taylor|p1-189|.|landlord-current|provider
+rental-taylor|p1-190|AddressLine1|applicant-previous|applicant-alt
+rental-taylor|p1-191|.|applicant-previous|applicant-alt
+rental-taylor|p1-192|.|applicant-previous|applicant-alt
+rental-taylor|p1-193|.|applicant-previous|applicant-alt
+rental-taylor|p1-194|.|applicant-previous|applicant-alt
+rental-taylor|p1-195|.|applicant-previous|applicant-alt
+rental-taylor|p1-196|.|applicant-previous|applicant-alt
+rental-taylor|p1-197|.|applicant-previous|applicant-alt
+rental-taylor|p1-198|.|landlord-previous|provider
+rental-taylor|p1-199|.|landlord-previous|provider
+rental-taylor|p1-200|.|landlord-previous|provider
+rental-taylor|p1-201|.|employer-current|employer
+rental-taylor|p1-202|.|employer-current|employer
+rental-taylor|p1-203|.|employer-current|employer
+rental-taylor|p1-204|.|employer-current|employer
+rental-taylor|p1-205|FullName|employer-current|employer
+rental-taylor|p1-206|.|employer-current|employer
+rental-taylor|p1-207|.|employer-current|employer
+rental-taylor|p1-208|.|employer-current|employer
+rental-taylor|p1-209|.|employer-current|employer
+rental-taylor|p1-210|.|employer-previous-1|employer
+rental-taylor|p1-211|.|employer-previous-1|employer
+rental-taylor|p1-212|.|employer-previous-1|employer
+rental-taylor|p1-213|.|employer-previous-1|employer
+rental-taylor|p1-214|FullName|employer-previous-1|employer
+rental-taylor|p1-215|.|employer-previous-1|employer
+rental-taylor|p1-216|.|employer-previous-1|employer
+rental-taylor|p1-217|.|employer-previous-1|employer
+rental-taylor|p1-218|.|employer-previous-1|employer
+rental-taylor|p2-220|.|emergency-1|emergency
+rental-taylor|p2-221|.|emergency-1|emergency
+rental-taylor|p2-222|.|emergency-1|emergency
+rental-taylor|p2-223|.|emergency-1|emergency
+rental-taylor|p2-224|.|emergency-1|emergency
+rental-taylor|p2-225|.|emergency-1|emergency
+rental-taylor|p2-226|.|emergency-1|emergency
+rental-taylor|p2-227|.|applicant|applicant
+rental-taylor|p2-228|.|applicant|applicant
+rental-taylor|p2-229|.|applicant|applicant
+rental-taylor|p2-230|.|applicant|applicant
+rental-taylor|p2-231|.|applicant|applicant
+rental-taylor|p2-232|.|applicant|applicant
+rental-taylor|p2-233|.|applicant|applicant
+rental-taylor|p2-234|.|applicant|applicant
+
+# --- i9 (Section 2 and Supplement B are completed by the employer: office)
+i9|Employee Other Last Names Used (if any)|.|applicant-other-names|applicant-alt
+i9|3 A lawful permanent resident Enter USCIS or ANumber|.|applicant|applicant
+i9|USCIS ANumber|Other|applicant|applicant
+i9|Form I94 Admission Number|.|applicant|applicant
+i9|Foreign Passport Number and Country of IssuanceRow1|Other|applicant|applicant
+i9|Today's Date mmddyyy|Date|applicant|applicant
+i9|List B Document 1 Title|Other|employer-review|office
+i9|List C Document Title 1|Other|employer-review|office
+i9|Issuing Authority 1|Other|employer-review|office
+i9|List B Issuing Authority 1|Other|employer-review|office
+i9|List C Issuing Authority 1|Other|employer-review|office
+i9|Document Number 0 (if any)|Other|employer-review|office
+i9|List B Document Number 1|Other|employer-review|office
+i9|List C Document Number 1|Other|employer-review|office
+i9|Expiration Date if any|Date|employer-review|office
+i9|List B Expiration Date 1|Date|employer-review|office
+i9|List C Expiration Date 1|Date|employer-review|office
+i9|Document Title 2 If any|Other|employer-review|office
+i9|Additional Information|Other|employer-review|office
+i9|Issuing Authority_2|Other|employer-review|office
+i9|Document Number If any_2|Other|employer-review|office
+i9|List A.  Document 2. Expiration Date (if any)|Date|employer-review|office
+i9|List A.   Document Title 3.  If any|Other|employer-review|office
+i9|List A. Document 3.  Enter Issuing Authority|Other|employer-review|office
+i9|List A.  Document 3 Number.  If any|Other|employer-review|office
+i9|Document Number if any_3|Other|employer-review|office
+i9|FirstDayEmployed mmddyyyy|Date|employer-review|office
+i9|Last Name First Name and Title of Employer or Authorized Representative|FullName|employer-review|office
+i9|Signature of Employer or AR|.|employer-review|office
+i9|S2 Todays Date mmddyyyy|Date|employer-review|office
+i9|Employers Business or Org Name|Organization|employer-review|office
+i9|Employers Business or Org Address|.|employer-review|office
+i9|Document Title 1|Other|reverification|office
+i9|Signature of Preparer or Translator 0|.|preparer-1|other
+i9|Sig Date mmddyyyy 0|Date|preparer-1|other
+i9|Preparer or Translator Last Name (Family Name) 0|.|preparer-1|other
+i9|PT Middle Initial 0|.|preparer-1|other
+i9|Preparer or Translator Address (Street Number and Name) 0|AddressLine1|preparer-1|other
+i9|Preparer or Translator City or Town 0|.|preparer-1|other
+i9|Zip Code 0|.|preparer-1|other
+i9|Preparer or Translator First Name (Given Name) 0|.|preparer-1|other
+i9|Signature of Preparer or Translator 1|.|preparer-2|other
+i9|Sig Date mmddyyyy 1|Date|preparer-2|other
+i9|Preparer or Translator Last Name (Family Name) 1|.|preparer-2|other
+i9|PT Middle Initial 1|.|preparer-2|other
+i9|Preparer or Translator Address (Street Number and Name) 1|AddressLine1|preparer-2|other
+i9|Preparer or Translator City or Town 1|.|preparer-2|other
+i9|Zip Code 1|.|preparer-2|other
+i9|Preparer or Translator Last Name (Family Name) 1@p3-413|FirstName|preparer-2|other
+i9|Signature of Preparer or Translator 2|.|preparer-3|other
+i9|Sig Date mmddyyyy 2|Date|preparer-3|other
+i9|Preparer or Translator Last Name (Family Name) 2|.|preparer-3|other
+i9|PT Middle Initial 2|.|preparer-3|other
+i9|Preparer or Translator Address (Street Number and Name) 2|AddressLine1|preparer-3|other
+i9|Preparer or Translator City or Town 2|.|preparer-3|other
+i9|Zip Code 2|.|preparer-3|other
+i9|Preparer or Translator First Name (Given Name) 2|.|preparer-3|other
+i9|Signature of Preparer or Translator 3|.|preparer-4|other
+i9|Sig Date mmddyyyy 3|Date|preparer-4|other
+i9|Preparer or Translator Last Name (Family Name) 3|.|preparer-4|other
+i9|PT Middle Initial 3|.|preparer-4|other
+i9|Preparer or Translator Address (Street Number and Name) 3|AddressLine1|preparer-4|other
+i9|Preparer or Translator City or Town 3|.|preparer-4|other
+i9|Zip Code 3|.|preparer-4|other
+i9|Preparer or Translator First Name (Given Name) 3|.|preparer-4|other
+
+# --- naming sweep
+camp-pearce|p1-310|.|school|.
+library-dearborn|Minor Type Name|.|guardian-signer|.
+library-dearborn|Minor Today Date|.|guardian-signer|.
+sports-laparks|Date mm/dd/yyyy|.|guardian-signer|.
+library-kcls|p1-097|.|pickup-1|.
+patient-jottful|p2-111|.|employer-current|.
+patient-jottful|p2-112|.|employer-current|.
+patient-jottful|p2-113|.|employer-current|.
+patient-jottful|p2-114|.|employer-current|.
+membership-jas|p2-278|.|employer-current|.
+membership-jas|p2-279|.|employer-current|.
+membership-jas|p2-280|.|employer-current|.
+membership-jas|p2-281|.|employer-current|.
+membership-jas|p2-282|.|employer-current|.
+employment|Name of Employer|.|employer-current|.
+employment|Telephone|.|employer-current|.
+employment|Address|.|employer-current|.
+employment|Name and Title of Supervisor|.|employer-current|.
+employment|Reason for leavingMay we contact this employer|.|employer-current|.
+employment|Description of your duties and responsibilities|.|employer-current|.
+employment|Name of Employer_2|.|employer-previous-1|.
+employment|Telephone_2|.|employer-previous-1|.
+employment|Address_2|.|employer-previous-1|.
+employment|Name and Title of Supervisor_2|.|employer-previous-1|.
+employment|Reason for leavingMay we contact this employer_2|.|employer-previous-1|.
+employment|Description of your duties and responsibilities_2|.|employer-previous-1|.
+employment|Name of Employer_3|.|employer-previous-2|.
+employment|Telephone_3|.|employer-previous-2|.
+employment|Address_3|.|employer-previous-2|.
+employment|Name and Title of Supervisor_3|.|employer-previous-2|.
+employment|Reason for leavingMay we contact this employer_3|.|employer-previous-2|.
+employment|Description of your duties and responsibilities_3|.|employer-previous-2|.
+employment|Date3_af_date|.|employer-current|.
+employment|Date3_af_date@p2-24|.|employer-current|.
+employment|Date3_af_date@p2-32|.|employer-previous-1|.
+employment|Date3_af_date@p2-33|.|employer-previous-1|.
+employment|Date3_af_date@p2-41|.|employer-previous-2|.
+employment|Date3_af_date@p2-42|.|employer-previous-2|.
+
+# --- labels that ask for someone else's detail of the same type
+rental-taylor|p1-174|Other|.|.
+rental-dixon|p1-220|Other|.|.
+membership-rhadc|p1-011|WorkPhone|.|.
+patient-ecw|p1-130|WorkPhone|.|.
+patient-ecw|p1-151|WorkPhone|.|.
+volunteer-turning|p1-247|WorkPhone|.|.
+volunteer-xavier|Contact Telephone Work|WorkPhone|.|.
+volunteer-xavier|Emergency Telephone Work|WorkPhone|.|.
+patient-ripley|p1-295|WorkPhone|.|.

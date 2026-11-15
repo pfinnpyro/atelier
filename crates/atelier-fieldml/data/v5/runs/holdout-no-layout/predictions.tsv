@@ -1,0 +1,457 @@
+# track	form	field	label	section	kind	said_kind	kind_p	role	said_role	role_p	group	said_group
+gold	employment-bridgeport	Last	Name: (Last)	Personal Information	LastName	LastName	0.998	applicant	applicant	0.987	applicant	0
+gold	employment-bridgeport	First	(First)	Personal Information	FirstName	FirstName	0.997	applicant	applicant	0.987	applicant	0
+gold	employment-bridgeport	Middle	(Middle)	Personal Information	MiddleName	MiddleName	0.852	applicant	applicant	0.987	applicant	0
+gold	employment-bridgeport	Soc Sec No	Soc. Sec. No.	Personal Information	Other	Other	0.685	applicant	applicant	0.987	applicant	0
+gold	employment-bridgeport	Other Names Used if applicable	Other Names Used (if applicable)	Personal Information	FullName	Organization	0.546	applicant-alt	applicant	0.987	applicant-other-names	0
+gold	employment-bridgeport	Street	Address: Street	Personal Information	AddressLine1	AddressLine1	0.998	applicant	applicant	0.987	applicant	0
+gold	employment-bridgeport	City	City	Personal Information	City	City	0.998	applicant	applicant	0.987	applicant	0
+gold	employment-bridgeport	State	State	Personal Information	State	State	0.996	applicant	applicant	0.987	applicant	0
+gold	employment-bridgeport	Zip	Zip	Personal Information	Zip	Zip	0.999	applicant	applicant	0.987	applicant	0
+gold	employment-bridgeport	Primary	Telephone: Primary	Personal Information	Phone	Phone	0.990	applicant	applicant	0.987	applicant	0
+gold	employment-bridgeport	Secondary	Secondary	Personal Information	Phone	Other	0.545	applicant	applicant	0.987	applicant	0
+gold	employment-bridgeport	Other	Other	Personal Information	Phone	Other	0.614	applicant	applicant	0.987	applicant	0
+gold	employment-bridgeport	Best time to call	Best time to call	Personal Information	Other	Other	0.997	applicant	applicant	0.987	applicant	0
+gold	employment-bridgeport	Email	Email	Personal Information	Email	Email	0.996	applicant	applicant	0.987	applicant	0
+gold	employment-bridgeport	Position desired	Position desired	Additional Information	Other	JobTitle	0.540	applicant	applicant	0.838	applicant	0
+gold	employment-bridgeport	Date available to work	Date available to work	Additional Information	Date	Date	0.923	applicant	applicant	0.838	applicant	0
+gold	employment-bridgeport	Desired Salary	Desired Salary	Additional Information	Other	Other	0.997	applicant	applicant	0.838	applicant	0
+gold	employment-bridgeport	Text1	If Yes, please explain	Additional Information	Other	Other	0.993	applicant	applicant	0.838	applicant	0
+gold	employment-bridgeport	High School	High School	Education	Organization	Organization	0.940	provider	provider	0.992	school-1	2
+gold	employment-bridgeport	Location	Location	Education	AddressWhole	Other	0.865	provider	applicant	0.838	school-1	0
+gold	employment-bridgeport	Type of degreediplomacertificate	Type of degree/diploma/certificate	Education	Other	Other	0.999	provider	provider	0.992	school-1	2
+gold	employment-bridgeport	School	School	Education	Organization	Organization	0.983	provider	provider	0.950	school-2	3
+gold	employment-bridgeport	From	From	Education	Other	Other	0.997	provider	provider	0.950	school-2	3
+gold	employment-bridgeport	To	To	Education	Other	Other	0.996	provider	provider	0.950	school-2	3
+gold	employment-bridgeport	Location_2	Location	Education	AddressWhole	Other	0.901	provider	provider	0.950	school-2	3
+gold	employment-bridgeport	Type of degreediplomacertificate_2	Type of degree/diploma/certificate	Education	Other	Other	0.999	provider	provider	0.950	school-2	3
+gold	employment-bridgeport	School_2	School	Education	Organization	Organization	0.982	provider	provider	0.966	school-3	4
+gold	employment-bridgeport	From_2	From	Education	Other	Other	0.997	provider	provider	0.966	school-3	4
+gold	employment-bridgeport	To_2	To	Education	Other	Other	0.996	provider	provider	0.966	school-3	4
+gold	employment-bridgeport	Location_3	Location	Education	AddressWhole	Other	0.874	provider	provider	0.966	school-3	4
+gold	employment-bridgeport	Type of degreediplomacertificate_3	Type of degree/diploma/certificate	Education	Other	Other	0.999	provider	provider	0.966	school-3	4
+gold	employment-bridgeport	Summarize specific skills and qualifications acquired from employment or other experiences that are related to the position for which you are applying	Summarize specific skills and qualifications ...	Skills & Qualifications	Other	Other	0.999	applicant	applicant	0.462	applicant	0
+gold	employment-bridgeport	Company Name  Address	Company Name & Address	Employment History	Organization	AddressWhole	0.770	employer	employer	0.923	employer-1	6
+gold	employment-bridgeport	From_3	Dates Employed: From	Employment History	Other	Other	0.981	employer	employer	0.923	employer-1	6
+gold	employment-bridgeport	Starting Title  Salary	Starting Title & Salary	Employment History	JobTitle	Other	0.500	employer	employer	0.923	employer-1	6
+gold	employment-bridgeport	Final Title  Salary	Final Title & Salary	Employment History	JobTitle	Other	0.749	employer	employer	0.923	employer-1	6
+gold	employment-bridgeport	To_3	To	Employment History	Other	Other	0.985	employer	employer	0.923	employer-1	6
+gold	employment-bridgeport	Company Phone	Company Phone #	Employment History	Phone	Phone	0.990	employer	employer	0.923	employer-1	6
+gold	employment-bridgeport	Reason for leaving this employer	Reason for leaving this employer	Employment History	Other	Other	0.951	employer	employer	0.923	employer-1	6
+gold	employment-bridgeport	May we contact for reference  YES  NO	May we contact for reference?	Employment History	Other	Phone	0.478	employer	employer	0.808	employer-1	7
+gold	employment-bridgeport	Company Name  Address_2	Company Name & Address	Employment History	Organization	AddressWhole	0.739	employer	employer	0.808	employer-2	7
+gold	employment-bridgeport	Starting Title  Salary_2	Starting Title & Salary	Employment History	JobTitle	Other	0.438	employer	employer	0.808	employer-2	7
+gold	employment-bridgeport	Final Title  Salary_2	Final Title & Salary	Employment History	JobTitle	Other	0.518	employer	employer	0.808	employer-2	7
+gold	employment-bridgeport	From_4	Dates Employed: From	Employment History	Other	Other	0.995	employer	employer	0.808	employer-2	7
+gold	employment-bridgeport	To_4	To	Employment History	Other	Other	0.991	employer	employer	0.808	employer-2	7
+gold	employment-bridgeport	Company Phone_2	Company Phone #	Employment History	Phone	Phone	0.991	employer	employer	0.952	employer-2	8
+gold	employment-bridgeport	Reason for leaving this employer_2	Reason for leaving this employer	Employment History	Other	Other	0.954	employer	employer	0.952	employer-2	8
+gold	employment-bridgeport	May we contact for reference  YES  NO_2	May we contact for reference?	Employment History	Other	Other	0.674	employer	employer	0.952	employer-2	8
+gold	employment-bridgeport	Summarize job responsibilitiesRow1_2	Summarize job responsibilities	Employment History	Other	Other	0.986	employer	employer	0.952	employer-2	8
+gold	employment-bridgeport	Company Name  Address_3	Company Name & Address	Employment History	Organization	AddressWhole	0.768	employer	employer	0.952	employer-3	8
+gold	employment-bridgeport	From_5	Dates Employed: From	Employment History	Other	Other	0.991	employer	employer	0.952	employer-3	8
+gold	employment-bridgeport	Starting Title  Salary_3	Starting Title & Salary	Employment History	JobTitle	Other	0.529	employer	employer	0.952	employer-3	8
+gold	employment-bridgeport	Final Title  Salary_3	Final Title & Salary	Employment History	JobTitle	Other	0.749	employer	employer	0.952	employer-3	8
+gold	employment-bridgeport	To_5	To	Employment History	Other	Other	0.985	employer	employer	0.952	employer-3	8
+gold	employment-bridgeport	Company Phone_3	Company Phone #	Employment History	Phone	Phone	0.989	employer	employer	0.947	employer-3	9
+gold	employment-bridgeport	Reason for leaving this employer_3	Reason for leaving this employer	Employment History	Other	Other	0.959	employer	employer	0.947	employer-3	9
+gold	employment-bridgeport	May we contact for reference  YES  NO_3	May we contact for reference?	Employment History	Other	Other	0.674	employer	employer	0.947	employer-3	9
+gold	employment-bridgeport	Summarize job responsibilities	Summarize job responsibilities	Employment History	Other	Other	0.986	employer	employer	0.947	employer-3	9
+gold	employment-bridgeport	Company Name  Address_4	Company Name & Address	Employment History	Organization	AddressWhole	0.768	employer	employer	0.947	employer-4	9
+gold	employment-bridgeport	From_6	Dates Employed: From	Employment History	Other	Other	0.991	employer	employer	0.947	employer-4	9
+gold	employment-bridgeport	Starting Title  Salary_4	Starting Title & Salary	Employment History	JobTitle	Other	0.529	employer	employer	0.947	employer-4	9
+gold	employment-bridgeport	Final Title  Salary_4	Final Title & Salary	Employment History	JobTitle	Other	0.749	employer	employer	0.947	employer-4	9
+gold	employment-bridgeport	To_6	To	Employment History	Other	Other	0.985	employer	employer	0.947	employer-4	9
+gold	employment-bridgeport	Company Phone_4	Company Phone #	Employment History	Phone	Phone	0.989	employer	employer	0.941	employer-4	10
+gold	employment-bridgeport	Reason for leaving this employer_4	Reason for leaving this employer	Employment History	Other	Other	0.959	employer	employer	0.941	employer-4	10
+gold	employment-bridgeport	May we contact for reference  YES  NO_4	May we contact for reference?	Employment History	Other	Other	0.602	employer	employer	0.941	employer-4	10
+gold	employment-bridgeport	Summarize job responsibilitiesRow1_3	Summarize job responsibilities	Employment History	Other	Other	0.986	employer	employer	0.941	employer-4	10
+gold	employment-bridgeport	Company Name  Address_5	Company Name & Address	Employment History	Organization	AddressWhole	0.672	employer	employer	0.941	employer-5	10
+gold	employment-bridgeport	Starting Title  Salary_5	Starting Title & Salary	Employment History	JobTitle	Other	0.479	employer	employer	0.941	employer-5	10
+gold	employment-bridgeport	Final Title  Salary_5	Final Title & Salary	Employment History	JobTitle	Other	0.497	employer	employer	0.941	employer-5	10
+gold	employment-bridgeport	From_7	Dates Employed: From	Employment History	Other	Other	0.995	employer	employer	0.941	employer-5	10
+gold	employment-bridgeport	To_7	To	Employment History	Other	Other	0.991	employer	employer	0.941	employer-5	10
+gold	employment-bridgeport	Company Phone_5	Company Phone #	Employment History	Phone	Phone	0.991	employer	employer	0.785	employer-5	11
+gold	employment-bridgeport	Reason for leaving this employer_5	Reason for leaving this employer	Employment History	Other	Other	0.949	employer	employer	0.785	employer-5	11
+gold	employment-bridgeport	May we contact for reference  YES  NO_5	May we contact for reference?	Employment History	Other	Other	0.625	employer	employer	0.785	employer-5	11
+gold	employment-bridgeport	Summarize job responsibilitiesRow1_4	Summarize job responsibilities	Employment History	Other	Other	0.992	employer	employer	0.785	employer-5	11
+gold	employment-bridgeport	Branch of Service	Branch of Service	U.S. Military Service	Other	Other	0.962	applicant	applicant	0.761	military	0
+gold	employment-bridgeport	Rank  Type of Service	Rank & Type of Service	U.S. Military Service	Other	Other	0.947	applicant	applicant	0.761	military	0
+gold	employment-bridgeport	undefined_4	From	U.S. Military Service	Other	Other	0.990	applicant	applicant	0.761	military	0
+gold	employment-bridgeport	undefined_5	To	U.S. Military Service	Other	Other	0.982	applicant	applicant	0.761	military	0
+gold	employment-bridgeport	Training  experience received	Training & experience received	U.S. Military Service	Other	Other	0.960	applicant	applicant	0.761	military	0
+gold	employment-bridgeport	Dates From To	Dates	U.S. Military Service	Other	Other	0.691	applicant	applicant	0.761	military	0
+gold	employment-bridgeport	NameRow1	Name	References	FullName	FullName	0.967	reference	reference	0.947	reference-1	13
+gold	employment-bridgeport	CompanyTitleRow1	Company/Title	References	Organization	Organization	0.564	reference	reference	0.947	reference-1	13
+gold	employment-bridgeport	PhoneRow1	Phone	References	Phone	Phone	0.998	reference	reference	0.947	reference-1	13
+gold	employment-bridgeport	EmailRow1	Email	References	Email	Email	0.997	reference	reference	0.947	reference-1	13
+gold	employment-bridgeport	Years KnownRow1	Years Known	References	Other	Other	0.986	reference	reference	0.947	reference-1	13
+gold	employment-bridgeport	NameRow2	Name	References	FullName	FullName	0.969	reference	reference	0.903	reference-2	14
+gold	employment-bridgeport	CompanyTitleRow2	Company/Title	References	Organization	Organization	0.570	reference	reference	0.903	reference-2	14
+gold	employment-bridgeport	PhoneRow2	Phone	References	Phone	Phone	0.998	reference	reference	0.903	reference-2	14
+gold	employment-bridgeport	EmailRow2	Email	References	Email	Email	0.997	reference	reference	0.903	reference-2	14
+gold	employment-bridgeport	Years KnownRow2	Years Known	References	Other	Other	0.986	reference	reference	0.903	reference-2	14
+gold	employment-bridgeport	NameRow3	Name	References	FullName	FullName	0.969	reference	reference	0.903	reference-3	15
+gold	employment-bridgeport	CompanyTitleRow3	Company/Title	References	Organization	Organization	0.570	reference	reference	0.903	reference-3	15
+gold	employment-bridgeport	PhoneRow3	Phone	References	Phone	Phone	0.998	reference	reference	0.903	reference-3	15
+gold	employment-bridgeport	EmailRow3	Email	References	Email	Email	0.997	reference	reference	0.903	reference-3	15
+gold	employment-bridgeport	Years KnownRow3	Years Known	References	Other	Other	0.986	reference	reference	0.903	reference-3	15
+gold	employment-bridgeport	NameRow4	Name	References	FullName	FullName	0.969	reference	reference	0.903	reference-4	16
+gold	employment-bridgeport	CompanyTitleRow4	Company/Title	References	Organization	Organization	0.570	reference	reference	0.903	reference-4	16
+gold	employment-bridgeport	PhoneRow4	Phone	References	Phone	Phone	0.998	reference	reference	0.903	reference-4	16
+gold	employment-bridgeport	EmailRow4	Email	References	Email	Email	0.997	reference	reference	0.903	reference-4	16
+gold	employment-bridgeport	Years KnownRow4	Years Known	References	Other	Other	0.986	reference	reference	0.903	reference-4	16
+gold	employment-bridgeport	NameRow5	Name	References	FullName	FullName	0.969	reference	reference	0.903	reference-5	17
+gold	employment-bridgeport	CompanyTitleRow5	Company/Title	References	Organization	Organization	0.570	reference	reference	0.903	reference-5	17
+gold	employment-bridgeport	PhoneRow5	Phone	References	Phone	Phone	0.998	reference	reference	0.903	reference-5	17
+gold	employment-bridgeport	EmailRow5	Email	References	Email	Email	0.998	reference	reference	0.903	reference-5	17
+gold	employment-bridgeport	Years KnownRow5	Years Known	References	Other	Other	0.991	reference	reference	0.903	reference-5	17
+gold	employment-bridgeport	Date	Date	Applicant Statement	Date	Date	0.988	applicant	applicant	0.519	applicant	0
+gold	youth-bartlett	Head of Household	Primary Contact		FullName	FullName	0.401	guardian	applicant	0.952	guardian-primary	0
+gold	youth-bartlett	Address	Address		AddressLine1	AddressLine1	0.916	guardian	applicant	0.952	guardian-primary	0
+gold	youth-bartlett	City	City		City	City	0.992	guardian	applicant	0.952	guardian-primary	0
+gold	youth-bartlett	Zip	Zip		Zip	Zip	0.986	guardian	applicant	0.952	guardian-primary	0
+gold	youth-bartlett	Email Address	E-mail Address		Email	Email	0.999	guardian	applicant	0.952	guardian-primary	0
+gold	youth-bartlett	Primary Contact Phone	Primary Contact Phone (area code)		PhoneArea	PhoneArea	0.928	guardian	applicant	0.952	guardian-primary	0
+gold	youth-bartlett	undefined	Primary Contact Phone		PhoneLocal	Phone	0.782	guardian	applicant	0.952	guardian-primary	0
+gold	youth-bartlett	undefined_2	Cell Phone (area code)		PhoneArea	PhoneArea	0.734	guardian	applicant	0.952	guardian-primary	0
+gold	youth-bartlett	undefined_3	Cell Phone		PhoneLocal	Phone	0.840	guardian	applicant	0.952	guardian-primary	0
+gold	youth-bartlett	Card Holders Name	Card Holder's Name		FullName	FullName	0.994	other	applicant	0.952	cardholder	0
+gold	youth-bartlett	Fathers Name	Father's Name		FullName	FullName	0.980	guardian	applicant	0.952	guardian-father	0
+gold	youth-bartlett	Expiration	Expiration		Other	Other	0.484	other	applicant	0.952	cardholder	0
+gold	youth-bartlett	CID	CID#		Other	Other	0.854	other	applicant	0.952	cardholder	0
+gold	youth-bartlett	Mothers Name	Mother's Name		FullName	FullName	0.986	guardian	applicant	0.952	guardian-mother	0
+gold	youth-bartlett	Amount Charged	Amount Charged $		Other	Other	0.989	other	applicant	0.952	cardholder	0
+gold	youth-bartlett	Name of the person interested in coaching or coordinating	Name of the person interested in coaching or coordinating*		FullName	FullName	0.994	other	applicant	0.952	volunteer	0
+gold	youth-bartlett	Volunteer Email mandatory	*Volunteer E-mail (mandatory)		Email	Email	0.962	other	applicant	0.952	volunteer	0
+gold	youth-bartlett	inclusion into the programs A two week notice is recommended 1	Please list any medications ... (line 1)	Special Modifications/A.D.A	Other	Other	0.979	applicant	applicant	0.448	applicant	0
+gold	youth-bartlett	cannot be honored	I understand that carpool ... cannot be honored. (Initial required.)		Other	Other	0.862	guardian	applicant	0.952	guardian-primary	0
+gold	youth-bartlett	inclusion into the programs A two week notice is recommended 2	Please list any medications ... (line 2)	Special Modifications/A.D.A	Other	Other	0.964	applicant	applicant	0.448	applicant	0
+gold	youth-bartlett	ParticipantRow1	Participant		FullName	BirthDate	0.498	applicant	applicant	0.952	applicant	0
+gold	youth-bartlett	GenderRow1	Gender		Other	Other	0.947	applicant	applicant	0.952	applicant	0
+gold	youth-bartlett	Birth DateRow1	Birth Date		BirthDate	BirthDate	0.974	applicant	applicant	0.952	applicant	0
+gold	youth-bartlett	GradeRow1	Grade		Other	Other	0.976	applicant	applicant	0.952	applicant	0
+gold	youth-bartlett	School Name	Attends (School Name)		Organization	Organization	0.972	applicant	provider	0.895	applicant	2
+gold	youth-bartlett	Uniform SizeRow1	Uniform Size*		Other	Other	0.605	applicant	applicant	0.952	applicant	0
+gold	youth-bartlett	Program NameRow1	Program Name		Other	Organization	0.521	applicant	provider	0.676	applicant	3
+gold	youth-bartlett	ID NumberRow1	I.D. Number		Other	Other	0.843	applicant	applicant	0.952	applicant	0
+gold	youth-bartlett	ParticipantRow2	Participant		FullName	BirthDate	0.547	child	other	0.463	child-2	4
+gold	youth-bartlett	GenderRow2	Gender		Other	Other	0.952	child	applicant	0.952	child-2	0
+gold	youth-bartlett	Birth DateRow2	Birth Date		BirthDate	BirthDate	0.972	child	applicant	0.952	child-2	0
+gold	youth-bartlett	GradeRow2	Grade		Other	Other	0.976	child	applicant	0.952	child-2	0
+gold	youth-bartlett	School Name 2	Attends (School Name)		Organization	Organization	0.972	child	provider	0.864	child-2	5
+gold	youth-bartlett	Uniform SizeRow2	Uniform Size*		Other	Other	0.605	child	applicant	0.952	child-2	0
+gold	youth-bartlett	Program NameRow2	Program Name		Other	Organization	0.521	child	provider	0.633	child-2	6
+gold	youth-bartlett	ID NumberRow2	I.D. Number		Other	Other	0.843	child	applicant	0.952	child-2	0
+gold	youth-bartlett	ParticipantRow3	Participant		FullName	BirthDate	0.547	child	other	0.597	child-3	7
+gold	youth-bartlett	GenderRow3	Gender		Other	Other	0.952	child	applicant	0.952	child-3	0
+gold	youth-bartlett	Birth DateRow3	Birth Date		BirthDate	BirthDate	0.972	child	other	0.566	child-3	8
+gold	youth-bartlett	GradeRow3	Grade		Other	Other	0.976	child	applicant	0.952	child-3	0
+gold	youth-bartlett	School Name 3	Attends (School Name)		Organization	Organization	0.972	child	provider	0.913	child-3	9
+gold	youth-bartlett	Uniform SizeRow3	Uniform Size*		Other	Other	0.605	child	applicant	0.952	child-3	0
+gold	youth-bartlett	Program NameRow3	Program Name		Other	Organization	0.521	child	provider	0.696	child-3	10
+gold	youth-bartlett	ID NumberRow3	I.D. Number		Other	Other	0.843	child	applicant	0.952	child-3	0
+gold	youth-bartlett	ParticipantRow4	Participant		FullName	BirthDate	0.547	child	other	0.491	child-4	11
+gold	youth-bartlett	GenderRow4	Gender		Other	Other	0.952	child	applicant	0.952	child-4	0
+gold	youth-bartlett	Birth DateRow4	Birth Date		BirthDate	BirthDate	0.972	child	other	0.504	child-4	12
+gold	youth-bartlett	GradeRow4	Grade		Other	Other	0.976	child	applicant	0.952	child-4	0
+gold	youth-bartlett	School Name 4	Attends (School Name)		Organization	Organization	0.972	child	provider	0.908	child-4	13
+gold	youth-bartlett	Uniform SizeRow4	Uniform Size*		Other	Other	0.546	child	applicant	0.952	child-4	0
+gold	youth-bartlett	Program NameRow4	Program Name		Other	Organization	0.512	child	provider	0.785	child-4	14
+gold	youth-bartlett	ID NumberRow4	I.D. Number		Other	Other	0.763	child	applicant	0.952	child-4	0
+gold	youth-bartlett	warning of risk assumption of risk	Participant's Name	Registration/Brochure Waiver & Release	FullName	FullName	0.992	applicant	other	0.262	applicant	15
+gold	youth-bartlett	Date	Date	Registration/Brochure Waiver & Release	Date	Date	0.985	applicant	other	0.262	applicant	15
+gold	parking-charleston	Name	Name		FullName	FullName	0.937	applicant	applicant	0.992	applicant	0
+gold	parking-charleston	Home Address	Home Address		AddressLine1	AddressLine1	0.775	applicant	applicant	0.992	applicant	0
+gold	parking-charleston	City	City		City	City	0.998	applicant	applicant	0.992	applicant	0
+gold	parking-charleston	State	State		State	State	0.997	applicant	applicant	0.992	applicant	0
+gold	parking-charleston	Zip Code	Zip Code		Zip	Zip	0.999	applicant	applicant	0.992	applicant	0
+gold	parking-charleston	Home Phone	Home Phone #		Phone	Phone	1.000	applicant	applicant	0.992	applicant	0
+gold	parking-charleston	Work	Work #		WorkPhone	WorkPhone	0.962	applicant	applicant	0.992	applicant	0
+gold	parking-charleston	Cell	Cell #		Phone	Phone	0.990	applicant	applicant	0.511	applicant	0
+gold	parking-charleston	Vehicle 1 VIN	Vehicle #1 VIN		Other	Other	0.896	applicant	applicant	0.511	vehicle-1	0
+gold	parking-charleston	License	License #		Other	Other	0.974	applicant	applicant	0.511	vehicle-1	0
+gold	parking-charleston	Make	Make		Other	Other	0.964	applicant	applicant	0.511	vehicle-1	0
+gold	parking-charleston	Model	Model		Other	Other	0.955	applicant	applicant	0.511	vehicle-1	0
+gold	parking-charleston	Color	Color		Other	Other	0.988	applicant	applicant	0.511	vehicle-1	0
+gold	parking-charleston	Vehicle 2 VIN	Vehicle #2 VIN		Other	Other	0.899	applicant	applicant	0.511	vehicle-2	0
+gold	parking-charleston	License_2	License #		Other	Other	0.976	applicant	applicant	0.511	vehicle-2	0
+gold	parking-charleston	undefined	Make		Other	Other	0.963	applicant	applicant	0.511	vehicle-2	0
+gold	parking-charleston	Model_2	Model		Other	Other	0.964	applicant	applicant	0.511	vehicle-2	0
+gold	parking-charleston	Color_2	Color		Other	Other	0.986	applicant	applicant	0.511	vehicle-2	0
+gold	parking-charleston	Date	Date		Date	Date	0.988	applicant	applicant	0.511	applicant	0
+gold	adoption-columbia	Name of the animals that you are interested in	Name of the animal(s) that you are interested in		Other	Other	0.793	applicant	applicant	0.998	animal-wanted	0
+gold	adoption-columbia	Name	Name		FullName	FullName	0.948	applicant	applicant	0.998	applicant	0
+gold	adoption-columbia	Phone	Phone		Phone	Phone	0.999	applicant	applicant	0.998	applicant	0
+gold	adoption-columbia	Email Address	Email Address		Email	Email	0.998	applicant	applicant	0.998	applicant	0
+gold	adoption-columbia	Drivers License Number	Driver's License Number		Other	Other	0.996	applicant	applicant	0.998	applicant	0
+gold	adoption-columbia	License Expiration Date	License Expiration Date		Date	Date	0.998	applicant	applicant	0.998	applicant	0
+gold	adoption-columbia	If yes please explain	If yes, please explain		Other	Other	0.991	applicant	applicant	0.998	applicant	0
+gold	adoption-columbia	Address	Address		AddressWhole	AddressWhole	0.718	applicant	applicant	0.814	applicant	0
+gold	adoption-columbia	Other	Do you currently live in: Other		Other	Other	0.808	applicant	applicant	0.814	applicant	0
+gold	adoption-columbia	Rent If renting have you discussed with your landlord	If renting; have you discussed with your landlord		Other	Other	0.958	applicant	applicant	0.814	applicant	0
+gold	adoption-columbia	How long have you lived at your current residence	How long have you lived at your current residence		Other	Other	0.991	applicant	applicant	0.814	applicant	0
+gold	adoption-columbia	If less than 6 monthsprevious address	If less than 6 months-previous address		AddressWhole	AddressWhole	0.643	applicant-alt	applicant-alt	0.630	applicant-previous	2
+gold	adoption-columbia	How many people are in your home  ages	How many people are in your home & ages?		Other	Other	0.656	applicant	applicant	0.814	applicant	0
+gold	adoption-columbia	Children	Children?		Other	Other	0.950	applicant	applicant	0.814	applicant	0
+gold	adoption-columbia	Please provide information on where the dog will be when you are not home	If no fence how do you intend on confining the dog to your property		Other	Other	1.000	applicant	applicant	0.814	applicant	0
+gold	adoption-columbia	Please list any current pets	Please provide information on where the dog will be when you are not home		Other	Other	1.000	applicant	applicant	0.814	applicant	0
+gold	adoption-columbia	Name  SpeciesRow1	Name & Species	Please list any current pets	Other	Other	0.688	applicant	applicant	0.546	pet-1	0
+gold	adoption-columbia	Male or FemaleRow1	Male or Female	Please list any current pets	Other	Other	0.841	applicant	applicant	0.546	pet-1	0
+gold	adoption-columbia	SpayedNeuteredRow1	Spayed/Neutered	Please list any current pets	Other	Other	0.990	applicant	applicant	0.546	pet-1	0
+gold	adoption-columbia	BreedRow1	Breed	Please list any current pets	Other	Other	0.998	applicant	applicant	0.546	pet-1	0
+gold	adoption-columbia	Current on VaccinesRow1	Current on Vaccines	Please list any current pets	Other	Other	0.915	applicant	applicant	0.546	pet-1	0
+gold	adoption-columbia	Years ownedRow1	Years owned	Please list any current pets	Other	Other	0.987	applicant	applicant	0.546	pet-1	0
+gold	adoption-columbia	Name  SpeciesRow2	Name & Species	Please list any current pets	Other	Other	0.712	applicant	applicant	0.546	pet-2	0
+gold	adoption-columbia	Male or FemaleRow2	Male or Female	Please list any current pets	Other	Other	0.852	applicant	applicant	0.546	pet-2	0
+gold	adoption-columbia	SpayedNeuteredRow2	Spayed/Neutered	Please list any current pets	Other	Other	0.990	applicant	applicant	0.566	pet-2	0
+gold	adoption-columbia	BreedRow2	Breed	Please list any current pets	Other	Other	0.998	applicant	applicant	0.566	pet-2	0
+gold	adoption-columbia	Current on VaccinesRow2	Current on Vaccines	Please list any current pets	Other	Other	0.915	applicant	applicant	0.566	pet-2	0
+gold	adoption-columbia	Years ownedRow2	Years owned	Please list any current pets	Other	Other	0.987	applicant	applicant	0.566	pet-2	0
+gold	adoption-columbia	Name  SpeciesRow3	Name & Species	Please list any current pets	Other	Other	0.712	applicant	applicant	0.566	pet-3	0
+gold	adoption-columbia	Male or FemaleRow3	Male or Female	Please list any current pets	Other	Other	0.852	applicant	applicant	0.566	pet-3	0
+gold	adoption-columbia	SpayedNeuteredRow3	Spayed/Neutered	Please list any current pets	Other	Other	0.990	applicant	applicant	0.566	pet-3	0
+gold	adoption-columbia	BreedRow3	Breed	Please list any current pets	Other	Other	0.998	applicant	applicant	0.566	pet-3	0
+gold	adoption-columbia	Current on VaccinesRow3	Current on Vaccines	Please list any current pets	Other	Other	0.915	applicant	applicant	0.579	pet-3	0
+gold	adoption-columbia	Years ownedRow3	Years owned	Please list any current pets	Other	Other	0.987	applicant	applicant	0.579	pet-3	0
+gold	adoption-columbia	Name  SpeciesRow4	Name & Species	Please list any current pets	Other	Other	0.712	applicant	applicant	0.579	pet-4	0
+gold	adoption-columbia	Male or FemaleRow4	Male or Female	Please list any current pets	Other	Other	0.852	applicant	applicant	0.579	pet-4	0
+gold	adoption-columbia	SpayedNeuteredRow4	Spayed/Neutered	Please list any current pets	Other	Other	0.990	applicant	applicant	0.579	pet-4	0
+gold	adoption-columbia	BreedRow4	Breed	Please list any current pets	Other	Other	0.998	applicant	applicant	0.579	pet-4	0
+gold	adoption-columbia	Current on VaccinesRow4	Current on Vaccines	Please list any current pets	Other	Other	0.915	applicant	applicant	0.579	pet-4	0
+gold	adoption-columbia	Years ownedRow4	Years owned	Please list any current pets	Other	Other	0.987	applicant	applicant	0.579	pet-4	0
+gold	adoption-columbia	Name  SpeciesRow5	Name & Species	Please list any current pets	Other	Other	0.712	applicant	applicant	0.714	pet-5	0
+gold	adoption-columbia	Male or FemaleRow5	Male or Female	Please list any current pets	Other	Other	0.852	applicant	applicant	0.714	pet-5	0
+gold	adoption-columbia	SpayedNeuteredRow5	Spayed/Neutered	Please list any current pets	Other	Other	0.990	applicant	applicant	0.714	pet-5	0
+gold	adoption-columbia	BreedRow5	Breed	Please list any current pets	Other	Other	0.997	applicant	applicant	0.714	pet-5	0
+gold	adoption-columbia	Current on VaccinesRow5	Current on Vaccines	Please list any current pets	Other	Other	0.898	applicant	applicant	0.714	pet-5	0
+gold	adoption-columbia	Years ownedRow5	Years owned	Please list any current pets	Other	Other	0.989	applicant	applicant	0.714	pet-5	0
+gold	adoption-columbia	Date	Date		Date	Date	0.989	applicant	applicant	0.714	applicant	0
+extracted	employment-bridgeport	Last	Last	Personal Information	LastName	LastName	0.994	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	First	(First)	Personal Information	FirstName	FirstName	0.995	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	Middle	(Middle)	Personal Information	MiddleName	MiddleName	0.912	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	Soc Sec No	Soc. Sec. No	Personal Information	Other	Other	0.667	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	Other Names Used if applicable	Other Names Used (if applicable	Personal Information	FullName	Other	0.517	applicant-alt	applicant	0.994	applicant-other-names	0
+extracted	employment-bridgeport	Street	Street	Personal Information	AddressLine1	AddressLine1	0.980	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	City	City	Personal Information	City	City	0.996	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	State	State	Personal Information	State	State	0.993	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	Zip	Zip	Personal Information	Zip	Zip	0.997	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	Primary	Primary	Personal Information	Phone	Other	0.612	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	Secondary	Secondary	Personal Information	Phone	Other	0.624	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	Other	Other	Personal Information	Phone	Other	0.618	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	Best time to call	Best time to call	Personal Information	Other	Other	0.998	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	Email	Email	Personal Information	Email	Email	0.993	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	Position desired	Position desired	Personal Information	Other	Other	0.679	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	Date available to work	Date available to work	Personal Information	Date	Date	0.927	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	Desired Salary	Desired Salary	Personal Information	Other	Other	0.998	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	Text1	YES NO If Yes, please explain	Personal Information	Other	Other	0.993	applicant	applicant	0.994	applicant	0
+extracted	employment-bridgeport	High School	High School	Education	Organization	Organization	0.940	provider	provider	0.876	school-1	1
+extracted	employment-bridgeport	Location	Location	Education	AddressWhole	Other	0.865	provider	provider	0.876	school-1	1
+extracted	employment-bridgeport	Type of degreediplomacertificate	Type of degree/diploma/certificate	Education	Other	Other	0.999	provider	provider	0.876	school-1	1
+extracted	employment-bridgeport	School	School	Education	Organization	Organization	0.983	provider	provider	0.938	school-2	2
+extracted	employment-bridgeport	From	From	Education	Other	Other	0.997	provider	provider	0.938	school-2	2
+extracted	employment-bridgeport	To	To	Education	Other	Other	0.996	provider	provider	0.938	school-2	2
+extracted	employment-bridgeport	Location_2	Location	Education	AddressWhole	Other	0.901	provider	provider	0.938	school-2	2
+extracted	employment-bridgeport	Type of degreediplomacertificate_2	Type of degree/diploma/certificate	Education	Other	Other	0.999	provider	provider	0.938	school-2	2
+extracted	employment-bridgeport	School_2	School	Education	Organization	Organization	0.982	provider	provider	0.923	school-3	3
+extracted	employment-bridgeport	From_2	From	Education	Other	Other	0.997	provider	provider	0.923	school-3	3
+extracted	employment-bridgeport	To_2	To	Education	Other	Other	0.996	provider	provider	0.923	school-3	3
+extracted	employment-bridgeport	Location_3	Location	Education	AddressWhole	Other	0.874	provider	provider	0.923	school-3	3
+extracted	employment-bridgeport	Type of degreediplomacertificate_3	Type of degree/diploma/certificate	Education	Other	Other	0.999	provider	provider	0.923	school-3	3
+extracted	employment-bridgeport	Summarize specific skills and qualifications acquired from employment or other experiences that are related to the position for which you are applying	Summarize specific skills and qualifications acquired from employment or other experiences that are related to the position for which you are applying.		Other	Other	1.000	applicant	employer	0.516	applicant	4
+extracted	employment-bridgeport	Company Name  Address	Company Name & Address	Employment History	Organization	AddressWhole	0.771	employer	employer	0.892	employer-1	5
+extracted	employment-bridgeport	From_3	From	Employment History	Other	Other	0.983	employer	employer	0.892	employer-1	5
+extracted	employment-bridgeport	Starting Title  Salary	Starting Title & Salary	Employment History	JobTitle	Other	0.489	employer	employer	0.892	employer-1	5
+extracted	employment-bridgeport	Final Title  Salary	Final Title & Salary	Employment History	JobTitle	Other	0.729	employer	employer	0.892	employer-1	5
+extracted	employment-bridgeport	To_3	To	Employment History	Other	Other	0.982	employer	employer	0.892	employer-1	5
+extracted	employment-bridgeport	Company Phone	Company Phone #	Employment History	Phone	Phone	0.990	employer	employer	0.892	employer-1	5
+extracted	employment-bridgeport	Reason for leaving this employer	Reason for leaving this employer	Employment History	Other	Other	0.951	employer	employer	0.892	employer-1	5
+extracted	employment-bridgeport	May we contact for reference  YES  NO	May we contact for reference?	Employment History	Other	Phone	0.478	employer	employer	0.805	employer-1	6
+extracted	employment-bridgeport	Company Name  Address_2	Company Name & Address	Employment History	Organization	AddressWhole	0.736	employer	employer	0.805	employer-2	6
+extracted	employment-bridgeport	Starting Title  Salary_2	Starting Title & Salary	Employment History	JobTitle	Honorific	0.403	employer	employer	0.805	employer-2	6
+extracted	employment-bridgeport	Final Title  Salary_2	Final Title & Salary	Employment History	JobTitle	Other	0.458	employer	employer	0.805	employer-2	6
+extracted	employment-bridgeport	From_4	From	Employment History	Other	Other	0.995	employer	employer	0.805	employer-2	6
+extracted	employment-bridgeport	To_4	To	Employment History	Other	Other	0.988	employer	employer	0.805	employer-2	6
+extracted	employment-bridgeport	Company Phone_2	Company Phone #	Employment History	Phone	Phone	0.990	employer	employer	0.928	employer-2	7
+extracted	employment-bridgeport	Reason for leaving this employer_2	Reason for leaving this employer	Employment History	Other	Other	0.956	employer	employer	0.928	employer-2	7
+extracted	employment-bridgeport	May we contact for reference  YES  NO_2	May we contact for reference?	Employment History	Other	Other	0.673	employer	employer	0.928	employer-2	7
+extracted	employment-bridgeport	Summarize job responsibilitiesRow1_2	Summarize job responsibilities:_Row_1	Employment History	Other	Other	0.965	employer	employer	0.928	employer-2	7
+extracted	employment-bridgeport	Company Name  Address_3	Company Name & Address	Employment History	Organization	AddressWhole	0.787	employer	employer	0.928	employer-3	7
+extracted	employment-bridgeport	From_5	From	Employment History	Other	Other	0.992	employer	employer	0.928	employer-3	7
+extracted	employment-bridgeport	Starting Title  Salary_3	Starting Title & Salary	Employment History	JobTitle	Other	0.502	employer	employer	0.928	employer-3	7
+extracted	employment-bridgeport	Final Title  Salary_3	Final Title & Salary	Employment History	JobTitle	Other	0.729	employer	employer	0.928	employer-3	7
+extracted	employment-bridgeport	To_5	To	Employment History	Other	Other	0.982	employer	employer	0.928	employer-3	7
+extracted	employment-bridgeport	Company Phone_3	Company Phone #	Employment History	Phone	Phone	0.989	employer	employer	0.846	employer-3	8
+extracted	employment-bridgeport	Reason for leaving this employer_3	Reason for leaving this employer	Employment History	Other	Other	0.954	employer	employer	0.846	employer-3	8
+extracted	employment-bridgeport	May we contact for reference  YES  NO_3	May we contact for reference?	Employment History	Other	Other	0.625	employer	employer	0.846	employer-3	8
+extracted	employment-bridgeport	Summarize job responsibilities	Summarize job responsibilities	Employment History	Other	Other	0.992	employer	employer	0.846	employer-3	8
+extracted	employment-bridgeport	Company Name  Address_4	Company Name & Address		Organization	AddressWhole	0.774	employer	employer	0.740	employer-4	9
+extracted	employment-bridgeport	From_6	From		Other	Other	0.978	employer	employer	0.740	employer-4	9
+extracted	employment-bridgeport	Starting Title  Salary_4	Starting Title & Salary		JobTitle	Other	0.418	employer	other	0.372	employer-4	10
+extracted	employment-bridgeport	Final Title  Salary_4	Final Title & Salary		JobTitle	Other	0.663	employer	employer	0.740	employer-4	9
+extracted	employment-bridgeport	To_6	To		Other	Other	0.977	employer	employer	0.740	employer-4	9
+extracted	employment-bridgeport	Company Phone_4	Company Phone #		Phone	Phone	0.988	employer	employer	0.740	employer-4	9
+extracted	employment-bridgeport	Reason for leaving this employer_4	Reason for leaving this employer		Other	Other	0.951	employer	employer	0.740	employer-4	9
+extracted	employment-bridgeport	May we contact for reference  YES  NO_4	May we contact for reference?		Other	Other	0.562	employer	employer	0.740	employer-4	9
+extracted	employment-bridgeport	Summarize job responsibilitiesRow1_3	Summarize job responsibilities		Other	Other	0.981	employer	employer	0.740	employer-4	9
+extracted	employment-bridgeport	Company Name  Address_5	Company Name & Address		Organization	AddressWhole	0.671	employer	employer	0.740	employer-5	9
+extracted	employment-bridgeport	Starting Title  Salary_5	Starting Title & Salary		JobTitle	Honorific	0.449	employer	employer	0.740	employer-5	9
+extracted	employment-bridgeport	Final Title  Salary_5	Final Title & Salary		JobTitle	Honorific	0.424	employer	employer	0.516	employer-5	4
+extracted	employment-bridgeport	From_7	From		Other	Other	0.994	employer	employer	0.516	employer-5	4
+extracted	employment-bridgeport	To_7	To		Other	Other	0.984	employer	employer	0.516	employer-5	4
+extracted	employment-bridgeport	Company Phone_5	Company Phone #		Phone	Phone	0.990	employer	employer	0.516	employer-5	4
+extracted	employment-bridgeport	Reason for leaving this employer_5	Reason for leaving this employer		Other	Other	0.950	employer	employer	0.516	employer-5	4
+extracted	employment-bridgeport	May we contact for reference  YES  NO_5	May we contact for reference?		Other	Other	0.770	employer	employer	0.516	employer-5	4
+extracted	employment-bridgeport	Summarize job responsibilitiesRow1_4	Summarize job responsibilities		Other	Other	0.995	employer	employer	0.516	employer-5	4
+extracted	employment-bridgeport	Branch of Service	Branch of Service		Other	Other	0.973	applicant	employer	0.516	military	4
+extracted	employment-bridgeport	Rank  Type of Service	Rank & Type of Service		Other	Other	0.958	applicant	employer	0.516	military	4
+extracted	employment-bridgeport	undefined_4	undefined		Other	Other	0.989	applicant	employer	0.516	military	4
+extracted	employment-bridgeport	undefined_5	undefined		Other	Other	0.980	applicant	employer	0.516	military	4
+extracted	employment-bridgeport	Training  experience received	Training & experience received		Other	Other	0.960	applicant	employer	0.516	military	4
+extracted	employment-bridgeport	Dates From To	Dates From: To		Other	Other	0.996	applicant	employer	0.516	military	4
+extracted	employment-bridgeport	NameRow1	Name_Row_1		FullName	FullName	0.965	reference	applicant	0.287	reference-1	0
+extracted	employment-bridgeport	CompanyTitleRow1	Company/Title		Organization	Organization	0.583	reference	applicant	0.287	reference-1	0
+extracted	employment-bridgeport	PhoneRow1	Phone_Row_1		Phone	Phone	0.999	reference	applicant	0.287	reference-1	0
+extracted	employment-bridgeport	EmailRow1	Email_Row_1		Email	Email	0.997	reference	applicant	0.287	reference-1	0
+extracted	employment-bridgeport	Years KnownRow1	Years Known		Other	Other	0.989	reference	applicant	0.287	reference-1	0
+extracted	employment-bridgeport	NameRow2	Name_Row_2		FullName	FullName	0.964	reference	provider	0.403	reference-2	12
+extracted	employment-bridgeport	CompanyTitleRow2	Company/Title_Row_2		Organization	Organization	0.349	reference	provider	0.403	reference-2	12
+extracted	employment-bridgeport	PhoneRow2	Phone_Row_2		Phone	Phone	1.000	reference	provider	0.403	reference-2	12
+extracted	employment-bridgeport	EmailRow2	Email_Row_2		Email	Email	0.993	reference	provider	0.403	reference-2	12
+extracted	employment-bridgeport	Years KnownRow2	Years Known_Row_2		Other	Other	0.998	reference	provider	0.403	reference-2	12
+extracted	employment-bridgeport	NameRow3	Name_Row_3		FullName	FullName	0.805	reference	reference	0.306	reference-3	13
+extracted	employment-bridgeport	CompanyTitleRow3	Company/Title_Row_3		Organization	Organization	0.353	reference	reference	0.306	reference-3	13
+extracted	employment-bridgeport	PhoneRow3	Phone_Row_3		Phone	Phone	0.994	reference	reference	0.306	reference-3	13
+extracted	employment-bridgeport	EmailRow3	Email_Row_3		Email	Email	0.977	reference	reference	0.306	reference-3	13
+extracted	employment-bridgeport	Years KnownRow3	Years Known_Row_3		Other	Other	0.999	reference	reference	0.306	reference-3	13
+extracted	employment-bridgeport	NameRow4	Name_Row_4		FullName	FullName	0.937	reference	provider	0.470	reference-4	14
+extracted	employment-bridgeport	CompanyTitleRow4	Company/Title_Row_4		Organization	Organization	0.450	reference	provider	0.470	reference-4	14
+extracted	employment-bridgeport	PhoneRow4	Phone_Row_4		Phone	Phone	0.996	reference	provider	0.470	reference-4	14
+extracted	employment-bridgeport	EmailRow4	Email_Row_4		Email	Email	0.994	reference	provider	0.470	reference-4	14
+extracted	employment-bridgeport	Years KnownRow4	Years Known_Row_4		Other	Other	0.997	reference	other	0.490	reference-4	15
+extracted	employment-bridgeport	NameRow5	Name_Row_5		FullName	FullName	0.787	reference	provider	0.399	reference-5	16
+extracted	employment-bridgeport	CompanyTitleRow5	Company/Title_Row_5		Organization	Organization	0.425	reference	provider	0.399	reference-5	16
+extracted	employment-bridgeport	PhoneRow5	Phone_Row_5		Phone	Phone	0.996	reference	provider	0.399	reference-5	16
+extracted	employment-bridgeport	EmailRow5	Email_Row_5		Email	Email	0.996	reference	provider	0.399	reference-5	16
+extracted	employment-bridgeport	Years KnownRow5	Years Known_Row_5		Other	Other	0.998	reference	provider	0.399	reference-5	16
+extracted	employment-bridgeport	Date	Date		Date	Date	0.984	applicant	applicant	0.482	applicant	0
+extracted	youth-bartlett	Head of Household	Head of Household		FullName	Other	0.278	guardian	applicant	0.764	guardian-primary	0
+extracted	youth-bartlett	Address	Address		AddressLine1	AddressLine1	0.936	guardian	applicant	0.764	guardian-primary	0
+extracted	youth-bartlett	City	City		City	City	0.993	guardian	applicant	0.764	guardian-primary	0
+extracted	youth-bartlett	Zip	Zip		Zip	Zip	0.985	guardian	applicant	0.764	guardian-primary	0
+extracted	youth-bartlett	Email Address	E-mail Address		Email	Email	0.998	guardian	applicant	0.764	guardian-primary	0
+extracted	youth-bartlett	Primary Contact Phone	Primary Contact Phone		PhoneArea	Phone	0.996	guardian	applicant	0.764	guardian-primary	0
+extracted	youth-bartlett	undefined	undefined		PhoneLocal	Other	0.974	guardian	applicant	0.764	guardian-primary	0
+extracted	youth-bartlett	undefined_2	undefined		PhoneArea	Other	0.973	guardian	applicant	0.764	guardian-primary	0
+extracted	youth-bartlett	undefined_3	undefined		PhoneLocal	Other	0.985	guardian	applicant	0.764	guardian-primary	0
+extracted	youth-bartlett	Card Holders Name	Card Holder’s Name		FullName	FullName	0.990	other	applicant	0.933	cardholder	0
+extracted	youth-bartlett	Fathers Name	Father’s Name		FullName	FullName	0.974	guardian	applicant	0.933	guardian-father	0
+extracted	youth-bartlett	Expiration	Expiration		Other	Other	0.465	other	applicant	0.933	cardholder	0
+extracted	youth-bartlett	CID	CID		Other	Other	0.854	other	applicant	0.933	cardholder	0
+extracted	youth-bartlett	Mothers Name	Mother’s Name		FullName	FullName	0.986	guardian	child	0.302	guardian-mother	2
+extracted	youth-bartlett	Amount Charged	Amount Charged		Other	Other	0.992	other	child	0.302	cardholder	2
+extracted	youth-bartlett	Name of the person interested in coaching or coordinating	Name of the person interested in coaching or coordinating		FullName	FullName	0.995	other	child	0.302	volunteer	2
+extracted	youth-bartlett	Volunteer Email mandatory	Volunteer E-mail (mandatory		Email	Email	0.959	other	child	0.302	volunteer	2
+extracted	youth-bartlett	inclusion into the programs A two week notice is recommended 1	inclusion into the program(s). A two week notice is recommended [1]		Other	Other	0.992	applicant	child	0.302	applicant	2
+extracted	youth-bartlett	cannot be honored	cannot be honored		Other	Other	0.959	guardian	child	0.302	guardian-primary	2
+extracted	youth-bartlett	inclusion into the programs A two week notice is recommended 2	inclusion into the program(s). A two week notice is recommended [2]		Other	Other	0.935	applicant	provider	0.470	applicant	3
+extracted	youth-bartlett	ParticipantRow1	Participant		FullName	BirthDate	0.399	applicant	other	0.379	applicant	4
+extracted	youth-bartlett	GenderRow1	Gender_Row_1		Other	Other	0.973	applicant	other	0.443	applicant	5
+extracted	youth-bartlett	Birth DateRow1	Birth Date		BirthDate	BirthDate	0.983	applicant	other	0.443	applicant	5
+extracted	youth-bartlett	GradeRow1	Grade_Row_1		Other	Other	0.982	applicant	other	0.443	applicant	5
+extracted	youth-bartlett	School Name	Attends (School Name)		Organization	Organization	0.968	applicant	provider	0.906	applicant	6
+extracted	youth-bartlett	Uniform SizeRow1	Uniform Size*		Other	Other	0.628	applicant	other	0.443	applicant	5
+extracted	youth-bartlett	Program NameRow1	Program Name		Other	Organization	0.630	applicant	provider	0.591	applicant	7
+extracted	youth-bartlett	ID NumberRow1	I.D. Number_Row_1		Other	Other	0.706	applicant	other	0.443	applicant	5
+extracted	youth-bartlett	ParticipantRow2	Participant		FullName	BirthDate	0.525	child	other	0.518	child-2	8
+extracted	youth-bartlett	GenderRow2	Gender_Row_2		Other	Other	0.957	child	other	0.518	child-2	8
+extracted	youth-bartlett	Birth DateRow2	Birth Date		BirthDate	BirthDate	0.979	child	other	0.521	child-2	9
+extracted	youth-bartlett	GradeRow2	Grade_Row_2		Other	Other	0.990	child	provider	0.470	child-2	3
+extracted	youth-bartlett	School Name 2	Attends (School Name)		Organization	Organization	0.948	child	provider	0.710	child-2	10
+extracted	youth-bartlett	Uniform SizeRow2	Uniform Size*		Other	Other	0.709	child	provider	0.710	child-2	10
+extracted	youth-bartlett	Program NameRow2	Program Name		Other	Organization	0.709	child	provider	0.460	child-2	11
+extracted	youth-bartlett	ID NumberRow2	I.D. Number_Row_2		Other	Other	0.744	child	provider	0.470	child-2	3
+extracted	youth-bartlett	ParticipantRow3	Participant_Row_3		FullName	Other	0.578	child	other	0.609	child-3	12
+extracted	youth-bartlett	GenderRow3	Gender_Row_3		Other	Other	0.997	child	other	0.609	child-3	12
+extracted	youth-bartlett	Birth DateRow3	Birth Date_Row_3		BirthDate	BirthDate	0.963	child	other	0.609	child-3	12
+extracted	youth-bartlett	GradeRow3	Grade_Row_3		Other	Other	0.999	child	other	0.609	child-3	12
+extracted	youth-bartlett	School Name 3	School Name 3		Organization	Organization	0.914	child	provider	0.784	child-3	13
+extracted	youth-bartlett	Uniform SizeRow3	Uniform Size*_Row_3		Other	Other	0.956	child	other	0.609	child-3	12
+extracted	youth-bartlett	Program NameRow3	Program Name_Row_3		Other	Organization	0.462	child	provider	0.784	child-3	13
+extracted	youth-bartlett	ID NumberRow3	I.D. Number_Row_3		Other	Other	0.981	child	other	0.609	child-3	12
+extracted	youth-bartlett	ParticipantRow4	Participant_Row_4		FullName	BirthDate	0.405	child	other	0.785	child-4	14
+extracted	youth-bartlett	GenderRow4	Gender_Row_4		Other	Other	0.990	child	other	0.785	child-4	14
+extracted	youth-bartlett	Birth DateRow4	Birth Date_Row_4		BirthDate	BirthDate	0.988	child	other	0.785	child-4	14
+extracted	youth-bartlett	GradeRow4	Grade_Row_4		Other	Other	0.995	child	other	0.785	child-4	14
+extracted	youth-bartlett	School Name 4	School Name 4		Organization	Organization	0.899	child	provider	0.791	child-4	15
+extracted	youth-bartlett	Uniform SizeRow4	Uniform Size*_Row_4		Other	Other	0.763	child	other	0.431	child-4	16
+extracted	youth-bartlett	Program NameRow4	Program Name_Row_4		Other	Organization	0.790	child	provider	0.791	child-4	15
+extracted	youth-bartlett	ID NumberRow4	I.D. Number_Row_4		Other	Other	0.775	child	other	0.431	child-4	16
+extracted	youth-bartlett	warning of risk assumption of risk	warning of risk, assumption of risk		FullName	Other	0.961	applicant	other	0.431	applicant	16
+extracted	youth-bartlett	Date	Date		Date	Date	0.986	applicant	other	0.431	applicant	16
+extracted	parking-charleston	Name	Name		FullName	FullName	0.937	applicant	applicant	0.992	applicant	0
+extracted	parking-charleston	Home Address	Home Address		AddressLine1	AddressLine1	0.775	applicant	applicant	0.992	applicant	0
+extracted	parking-charleston	City	City		City	City	0.998	applicant	applicant	0.992	applicant	0
+extracted	parking-charleston	State	State		State	State	0.997	applicant	applicant	0.992	applicant	0
+extracted	parking-charleston	Zip Code	Zip Code		Zip	Zip	0.999	applicant	applicant	0.992	applicant	0
+extracted	parking-charleston	Home Phone	Home Phone		Phone	Phone	1.000	applicant	applicant	0.992	applicant	0
+extracted	parking-charleston	Work	Work		WorkPhone	WorkPhone	0.962	applicant	applicant	0.992	applicant	0
+extracted	parking-charleston	Cell	Cell		Phone	Phone	0.990	applicant	applicant	0.510	applicant	0
+extracted	parking-charleston	Vehicle 1 VIN	Vehicle #1 VIN		Other	Other	0.896	applicant	applicant	0.510	vehicle-1	0
+extracted	parking-charleston	License	License		Other	Other	0.974	applicant	applicant	0.510	vehicle-1	0
+extracted	parking-charleston	Make	Make		Other	Other	0.964	applicant	applicant	0.510	vehicle-1	0
+extracted	parking-charleston	Model	Model		Other	Other	0.955	applicant	applicant	0.510	vehicle-1	0
+extracted	parking-charleston	Color	Color		Other	Other	0.985	applicant	applicant	0.510	vehicle-1	0
+extracted	parking-charleston	Vehicle 2 VIN	Vehicle #2 VIN		Other	Other	0.894	applicant	applicant	0.510	vehicle-2	0
+extracted	parking-charleston	License_2	License		Other	Other	0.975	applicant	applicant	0.510	vehicle-2	0
+extracted	parking-charleston	undefined	undefined		Other	Other	0.993	applicant	applicant	0.510	vehicle-2	0
+extracted	parking-charleston	Model_2	Model		Other	Other	0.959	applicant	applicant	0.510	vehicle-2	0
+extracted	parking-charleston	Color_2	Color		Other	Other	0.986	applicant	applicant	0.510	vehicle-2	0
+extracted	parking-charleston	Date	Date		Date	Date	0.988	applicant	applicant	0.510	applicant	0
+extracted	adoption-columbia	Name of the animals that you are interested in	Name of the animal(s) that you are interested in		Other	Other	0.793	applicant	applicant	0.997	animal-wanted	0
+extracted	adoption-columbia	Name	Name		FullName	FullName	0.948	applicant	applicant	0.997	applicant	0
+extracted	adoption-columbia	Phone	Phone		Phone	Phone	0.999	applicant	applicant	0.997	applicant	0
+extracted	adoption-columbia	Email Address	Email Address		Email	Email	0.998	applicant	applicant	0.997	applicant	0
+extracted	adoption-columbia	Drivers License Number	Driver’s License Number		Other	Other	0.996	applicant	applicant	0.997	applicant	0
+extracted	adoption-columbia	License Expiration Date	License Expiration Date		Date	Date	0.999	applicant	applicant	0.997	applicant	0
+extracted	adoption-columbia	If yes please explain	If yes, please explain		Other	Other	0.993	applicant	applicant	0.997	applicant	0
+extracted	adoption-columbia	Address	Address		AddressWhole	AddressWhole	0.746	applicant	applicant	0.762	applicant	0
+extracted	adoption-columbia	Other	Other		Other	Other	0.490	applicant	applicant	0.762	applicant	0
+extracted	adoption-columbia	Rent If renting have you discussed with your landlord	Rent If renting; have you discussed with your landlord		Other	Other	0.928	applicant	applicant	0.762	applicant	0
+extracted	adoption-columbia	How long have you lived at your current residence	How long have you lived at your current residence		Other	Other	0.986	applicant	applicant	0.762	applicant	0
+extracted	adoption-columbia	If less than 6 monthsprevious address	If less than 6 months-previous address		AddressWhole	AddressWhole	0.631	applicant-alt	applicant-alt	0.655	applicant-previous	2
+extracted	adoption-columbia	How many people are in your home  ages	How many people are in your home & ages		Other	Other	0.624	applicant	applicant	0.762	applicant	0
+extracted	adoption-columbia	Children	Children		Other	Other	0.971	applicant	applicant	0.762	applicant	0
+extracted	adoption-columbia	Please provide information on where the dog will be when you are not home	Please provide information on where the dog will be when you are not home		Other	Other	0.999	applicant	applicant	0.762	applicant	0
+extracted	adoption-columbia	Please list any current pets	Please list any current pets		Other	Other	0.999	applicant	applicant	0.762	applicant	0
+extracted	adoption-columbia	Name  SpeciesRow1	Name & Species_Row_1		Other	FullName	0.677	applicant	other	0.386	pet-1	3
+extracted	adoption-columbia	Male or FemaleRow1	Male or Female_Row_1		Other	Other	0.783	applicant	other	0.386	pet-1	3
+extracted	adoption-columbia	SpayedNeuteredRow1	Spayed/Neutered		Other	Other	0.992	applicant	other	0.386	pet-1	3
+extracted	adoption-columbia	BreedRow1	Breed_Row_1		Other	Other	0.995	applicant	other	0.386	pet-1	3
+extracted	adoption-columbia	Current on VaccinesRow1	Current on Vaccines_Row_1		Other	Other	0.811	applicant	other	0.386	pet-1	3
+extracted	adoption-columbia	Years ownedRow1	Years owned_Row_1		Other	Other	0.991	applicant	other	0.386	pet-1	3
+extracted	adoption-columbia	Name  SpeciesRow2	Name & Species_Row_2		Other	FullName	0.816	applicant	other	0.451	pet-2	4
+extracted	adoption-columbia	Male or FemaleRow2	Male or Female_Row_2		Other	Other	0.773	applicant	other	0.451	pet-2	4
+extracted	adoption-columbia	SpayedNeuteredRow2	Spayed/Neutered_Row_2		Other	Other	0.995	applicant	other	0.451	pet-2	4
+extracted	adoption-columbia	BreedRow2	Breed_Row_2		Other	Other	0.998	applicant	other	0.451	pet-2	4
+extracted	adoption-columbia	Current on VaccinesRow2	Current on Vaccines_Row_2		Other	Other	0.803	applicant	other	0.451	pet-2	4
+extracted	adoption-columbia	Years ownedRow2	Years owned_Row_2		Other	Other	0.996	applicant	other	0.451	pet-2	4
+extracted	adoption-columbia	Name  SpeciesRow3	Name & Species_Row_3		Other	Other	0.555	applicant	applicant	0.587	pet-3	0
+extracted	adoption-columbia	Male or FemaleRow3	Male or Female_Row_3		Other	Other	0.970	applicant	applicant	0.587	pet-3	0
+extracted	adoption-columbia	SpayedNeuteredRow3	Spayed/Neutered_Row_3		Other	Other	0.999	applicant	applicant	0.587	pet-3	0
+extracted	adoption-columbia	BreedRow3	Breed_Row_3		Other	Other	1.000	applicant	applicant	0.587	pet-3	0
+extracted	adoption-columbia	Current on VaccinesRow3	Current on Vaccines_Row_3		Other	Other	0.980	applicant	applicant	0.587	pet-3	0
+extracted	adoption-columbia	Years ownedRow3	Years owned_Row_3		Other	Other	0.999	applicant	applicant	0.587	pet-3	0
+extracted	adoption-columbia	Name  SpeciesRow4	Name & Species_Row_4		Other	FullName	0.654	applicant	other	0.471	pet-4	6
+extracted	adoption-columbia	Male or FemaleRow4	Male or Female_Row_4		Other	Other	0.901	applicant	other	0.471	pet-4	6
+extracted	adoption-columbia	SpayedNeuteredRow4	Spayed/Neutered_Row_4		Other	Other	0.996	applicant	other	0.471	pet-4	6
+extracted	adoption-columbia	BreedRow4	Breed_Row_4		Other	Other	0.999	applicant	other	0.471	pet-4	6
+extracted	adoption-columbia	Current on VaccinesRow4	Current on Vaccines_Row_4		Other	Other	0.878	applicant	other	0.471	pet-4	6
+extracted	adoption-columbia	Years ownedRow4	Years owned_Row_4		Other	Other	0.997	applicant	other	0.471	pet-4	6
+extracted	adoption-columbia	Name  SpeciesRow5	Name & Species_Row_5		Other	Other	0.529	applicant	applicant	0.610	pet-5	0
+extracted	adoption-columbia	Male or FemaleRow5	Male or Female_Row_5		Other	Other	0.938	applicant	applicant	0.610	pet-5	0
+extracted	adoption-columbia	SpayedNeuteredRow5	Spayed/Neutered_Row_5		Other	Other	0.997	applicant	applicant	0.610	pet-5	0
+extracted	adoption-columbia	BreedRow5	Breed_Row_5		Other	Other	0.998	applicant	applicant	0.610	pet-5	0
+extracted	adoption-columbia	Current on VaccinesRow5	Current on Vaccines_Row_5		Other	Other	0.887	applicant	applicant	0.610	pet-5	0
+extracted	adoption-columbia	Years ownedRow5	Years owned_Row_5		Other	Other	0.996	applicant	applicant	0.610	pet-5	0
+extracted	adoption-columbia	Date	Date		Date	Date	0.987	applicant	applicant	0.610	applicant	0

@@ -1,0 +1,41 @@
+{
+ "frozen": "2026-11-14, before the first run of any model on the v5 holdout",
+ "model": "layout-aware AnalysisModel (src/analysis.rs), Settings::default(), Decode::Subject",
+ "settings": {
+  "epochs": 20,
+  "pair_epochs": 12,
+  "folds": 5,
+  "synthetic": 500,
+  "seed": 1,
+  "kind_decay": 0.997,
+  "role_decay": 0.997,
+  "block_weight": 0.5,
+  "join": 0.0,
+  "cut": 0.5,
+  "members": 3
+ },
+ "training": "all 26 development forms: data/v4/corpus.tsv + data/v4/holdout-corpus.tsv (the spent v4 holdout), with data/v4/layout.tsv",
+ "declared_runs": [
+  "frozen model as is",
+  "the same code and settings with NO_LAYOUT=1, to measure what layout adds"
+ ],
+ "development": "leave-one-form-out over the 26 forms; data/v4/runs/dev-layout",
+ "development_totals": [
+  "gold TOTAL                kind 957/1113 (86.0%); role 759/1113 (68.2%); group pairs P 66.1% R 72.4% F1 69.1%; detail F1 75.3%; fills right 158/205 gold, foreign 21, wrong kind 16",
+  "extracted TOTAL                kind 905/1113 (81.3%); role 701/1113 (63.0%); group pairs P 61.3% R 69.9% F1 65.3%; detail F1 73.6%; fills right 143/205 gold, foreign 29, wrong kind 24"
+ ],
+ "sha256": {
+  "src/analysis.rs": "d1c05ac0779bd33e4c562e537a00d398df9e6a5b73710987d1cf3e9e6ea88ca2",
+  "src/personal.rs": "f87ee39285dca154d0ccc3b1bbdaf7e00aef1c0c4c8112e05b4b5e5934457977",
+  "src/synth.rs": "b5a5d557daa060d0c487ce7206c9a550903bcf31a3ef2f5766260af55371bc2a",
+  "src/lib.rs": "5b2470c34cfd76160bde282d6697c2a5161e84817c56f2e850426366d557f032",
+  "examples/analysis_v4.rs": "6de601dc0cb52a56d12cbbf470ab7ad8e53d4378ae22919dd67e6ac8e5597cb6",
+  "data/v4/corpus.tsv": "5bc2be49001c225ff7b4cf178dc350e897f74fd20800533d22a39ef60974b2db",
+  "data/v4/holdout-corpus.tsv": "241ca95a1eac475efa20c29262267b32e1627b8148219779c7eb8d313497c753",
+  "data/v4/layout.tsv": "545ed61a18b3af206a22531a26228fe073023236097aebeac2e283edf76c53c3",
+  "data/v5/holdout-corpus.tsv": "39117e7c8f66a2ca5f139251634f00ded86411f7f083ad21c45e227d7df6f8d9",
+  "data/v5/holdout-corpus-layout.tsv": "469a243b0423a9194a69c9af4da68b65cb404c1cca42625aefd279de9d8e92a7",
+  "../../tools/fieldml_v4_layout.py": "8310edc2afd34b5b2e6b4e1393ace7e97a5caa8ad9ad3534941253be9a2c4a48",
+  "../../tools/fieldml_v5_holdout.py": "db92cda7df88a4b1cac34f463543da3d20476a0fdafc49d216f7bd88898224ef"
+ }
+}

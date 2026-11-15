@@ -1,0 +1,445 @@
+# track	form	field	label	section	kind	said_kind	kind_p	role	said_role	role_p	group	said_group
+gold	dog-stpaul	First Name	First Name	Pet Owner Information	FirstName	FirstName	0.996	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Last Name	Last Name	Pet Owner Information	LastName	LastName	0.998	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Dog Name_2	Dog Name	Dog Information #2	Other	FullName	0.906	applicant	applicant	0.899	dog-2	0
+gold	dog-stpaul	Dog Age_2	Dog Age	Dog Information #2	Other	Other	0.349	applicant	applicant	0.899	dog-2	0
+gold	dog-stpaul	Sex_2	Sex	Dog Information #2	Other	Other	0.492	applicant	applicant	0.899	dog-2	0
+gold	dog-stpaul	Dogs	# Dogs ($80/Year)	Dog License Fees	Other	BirthYear	0.506	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	undefined	Fee ($80/Year)	Dog License Fees	Other	BirthYear	0.457	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Address	Address	Pet Owner Information	AddressLine1	AddressWhole	0.899	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Breed_2	Breed	Dog Information #2	Other	Other	0.842	applicant	applicant	0.899	dog-2	0
+gold	dog-stpaul	Colors_2	Color(s)	Dog Information #2	Other	Other	0.904	applicant	applicant	0.899	dog-2	0
+gold	dog-stpaul	Apt	Apt #	Pet Owner Information	AddressLine2	AddressLine2	0.378	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Zip Code	Zip Code	Pet Owner Information	Zip	Zip	0.894	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	X	# Dogs ($20/Year)	Dog License Fees	Other	Other	0.564	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	1_4	Fee ($20/Year)	Dog License Fees	Other	Other	0.440	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Microchip Brand and Number required for lifetime license_2	Microchip Brand and Number (required for lifetime license)	Dog Information #2	Other	Other	1.000	applicant	applicant	0.899	dog-2	0
+gold	dog-stpaul	Primary Phone	Primary Phone	Pet Owner Information	Phone	Phone	0.608	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Alternate Phone	Alternate Phone	Pet Owner Information	Phone	Phone	0.988	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	X_2	# Dogs ($140/Lifetime)	Dog License Fees	Other	Other	0.778	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	2_4	Fee ($140/Lifetime)	Dog License Fees	Other	Other	0.868	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Email	E-mail	Pet Owner Information	Email	Email	0.996	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Owners date of birth monthdateyear	Owner's date of birth (month/date/year)	Pet Owner Information	BirthDate	BirthDate	0.596	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Clinic Name_2	Clinic Name	Rabies Vaccination Information	Organization	Organization	0.787	provider	provider	0.837	vet-2	1
+gold	dog-stpaul	Dogs_2	# Dogs ($10/Year)	Dog License Fees	Other	BirthYear	0.508	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	X10	Fee ($10/Year)	Dog License Fees	Other	BirthYear	0.526	applicant	other	0.412	applicant	2
+gold	dog-stpaul	Clinic Address_2	Clinic Address	Rabies Vaccination Information	AddressLine1	AddressWhole	0.895	provider	provider	0.328	vet-2	3
+gold	dog-stpaul	x70	Fee ($70/Lifetime)	Dog License Fees	Other	Other	0.888	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Dogs_3	# Dogs ($70/Lifetime)	Dog License Fees	Other	Other	0.837	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	1_2	Clinic Address (continued)	Rabies Vaccination Information	AddressLine2	AddressWhole	0.832	provider	provider	0.837	vet-2	1
+gold	dog-stpaul	Dog Name	Dog Name	Dog Information #1	Other	FullName	0.908	applicant	provider	0.328	dog-1	3
+gold	dog-stpaul	Dog Age	Dog Age	Dog Information #1	Other	Other	0.348	applicant	provider	0.328	dog-1	3
+gold	dog-stpaul	Sex	Sex	Dog Information #1	Other	Other	0.494	applicant	provider	0.328	dog-1	3
+gold	dog-stpaul	2_2	Clinic Phone #	Rabies Vaccination Information	Phone	Phone	0.997	provider	provider	0.920	vet-2	4
+gold	dog-stpaul	Vaccination Expiration Date monthdateyear_2	Vaccination Expiration Date (month/date/year)	Rabies Vaccination Information	Date	Date	0.993	applicant	applicant	0.899	dog-2	0
+gold	dog-stpaul	Breed	Breed	Dog Information #1	Other	Other	0.841	applicant	provider	0.328	dog-1	3
+gold	dog-stpaul	Colors	Color(s)	Dog Information #1	Other	Other	0.946	applicant	provider	0.328	dog-1	3
+gold	dog-stpaul	undefined_2	Fee Intact (PD Only)	Dog License Fees	Other	Other	0.922	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Intact PD Only	# Dogs Intact (PD Only)	Dog License Fees	Other	Other	0.966	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Microchip Brand and Number required for lifetime license	Microchip Brand and Number (required for lifetime license)	Dog Information #1	Other	Other	1.000	applicant	provider	0.328	dog-1	3
+gold	dog-stpaul	Dog Name_3	Dog Name	Dog Information #3	Other	FullName	0.903	applicant	other	0.482	dog-3	5
+gold	dog-stpaul	Dog Age_3	Dog Age	Dog Information #3	Other	Other	0.245	applicant	other	0.482	dog-3	5
+gold	dog-stpaul	Sex_3	Sex	Dog Information #3	Other	Other	0.367	applicant	other	0.482	dog-3	5
+gold	dog-stpaul	undefined_3	Fee Altered (PD or DD)	Dog License Fees	Other	Other	0.608	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Altered PD or DD	# Dogs Altered (PD or DD)	Dog License Fees	Other	Other	0.753	applicant	applicant	0.899	applicant	0
+gold	dog-stpaul	Breed_3	Breed	Dog Information #3	Other	Other	0.759	applicant	other	0.482	dog-3	5
+gold	dog-stpaul	Colors_3	Color(s)	Dog Information #3	Other	Other	0.915	applicant	other	0.482	dog-3	5
+gold	dog-stpaul	Clinic Name	Clinic Name	Rabies Vaccination Information	Organization	Organization	0.923	provider	provider	0.793	vet-1	6
+gold	dog-stpaul	Clinic Address	Clinic Address	Rabies Vaccination Information	AddressLine1	AddressWhole	0.973	provider	provider	0.793	vet-1	6
+gold	dog-stpaul	Microchip Brand and Number required for lifetime license_3	Microchip Brand and Number (required for lifetime license)	Dog Information #3	Other	Other	1.000	applicant	other	0.482	dog-3	5
+gold	dog-stpaul	1	Clinic Address (continued)	Rabies Vaccination Information	AddressLine2	AddressWhole	0.805	provider	provider	0.793	vet-1	6
+gold	dog-stpaul	2	Clinic Phone #	Rabies Vaccination Information	Phone	Phone	0.997	provider	provider	0.374	vet-1	7
+gold	dog-stpaul	Vaccination Expiration Date monthdateyear	Vaccination Expiration Date (month/date/year)	Rabies Vaccination Information	Date	Date	0.991	applicant	provider	0.374	dog-1	7
+gold	dog-stpaul	Clinic Name_3	Clinic Name	Rabies Vaccination Information	Organization	Organization	0.856	provider	provider	0.841	vet-3	8
+gold	dog-stpaul	Clinic Address_3	Clinic Address	Rabies Vaccination Information	AddressLine1	AddressWhole	0.959	provider	provider	0.841	vet-3	8
+gold	dog-stpaul	1_3	Clinic Address (continued)	Rabies Vaccination Information	AddressLine2	AddressWhole	0.574	provider	provider	0.900	vet-3	9
+gold	dog-stpaul	2_3	Clinic Phone #	Rabies Vaccination Information	Phone	Phone	0.998	provider	provider	0.910	vet-3	10
+gold	dog-stpaul	Vaccination Expiration Date monthdateyear_3	Vaccination Expiration Date (month/date/year)	Rabies Vaccination Information	Date	Date	0.990	applicant	other	0.643	dog-3	11
+gold	emergency-mt	Childs Name First Last	Child's Name (First, Last)	Child	FullName	NameLastFirst	0.701	applicant	applicant	0.972	applicant	0
+gold	emergency-mt	Date of Birth	Date of Birth	Child	BirthDate	BirthDate	0.998	applicant	applicant	0.972	applicant	0
+gold	emergency-mt	Name First Last	Name (First, Last)	Parent or Guardian Contact Information	FullName	NameLastFirst	0.775	guardian	guardian	0.906	guardian-1	1
+gold	emergency-mt	Relationship	Relationship	Parent or Guardian Contact Information	Relationship	Relationship	0.995	guardian	guardian	0.906	guardian-1	1
+gold	emergency-mt	Home Address Street City Zip	Home Address (Street, City, Zip)	Parent or Guardian Contact Information	AddressWhole	AddressLine1	0.964	guardian	guardian	0.906	guardian-1	1
+gold	emergency-mt	Primary Phone	Primary Phone	Parent or Guardian Contact Information	Phone	Phone	0.970	guardian	guardian	0.906	guardian-1	1
+gold	emergency-mt	Email Address	Email Address	Parent or Guardian Contact Information	Email	Email	0.999	guardian	guardian	0.906	guardian-1	1
+gold	emergency-mt	Work Address Street City Zip	Work Address (Street, City, Zip)	Parent or Guardian Contact Information	WorkAddress	AddressWhole	0.424	guardian	guardian	0.946	guardian-1	2
+gold	emergency-mt	Work Phone	Work Phone	Parent or Guardian Contact Information	WorkPhone	Phone	0.971	guardian	guardian	0.946	guardian-1	2
+gold	emergency-mt	Name First Last_2	Name (First, Last)	Parent or Guardian Contact Information	FullName	NameLastFirst	0.820	guardian	guardian	0.946	guardian-2	2
+gold	emergency-mt	Relationship_2	Relationship	Parent or Guardian Contact Information	Relationship	Relationship	0.994	guardian	guardian	0.946	guardian-2	2
+gold	emergency-mt	Home Address Street City Zip_2	Home Address (Street, City, Zip)	Parent or Guardian Contact Information	AddressWhole	AddressLine1	0.965	guardian	guardian	0.946	guardian-2	2
+gold	emergency-mt	Primary Phone_2	Primary Phone	Parent or Guardian Contact Information	Phone	Phone	0.970	guardian	guardian	0.946	guardian-2	2
+gold	emergency-mt	Email Address_2	Email Address	Parent or Guardian Contact Information	Email	Email	0.999	guardian	guardian	0.946	guardian-2	2
+gold	emergency-mt	Work Address Street City Zip_2	Work Address (Street, City, Zip)	Parent or Guardian Contact Information	WorkAddress	AddressWhole	0.420	guardian	guardian	0.951	guardian-2	3
+gold	emergency-mt	Work Phone_2	Work Phone	Parent or Guardian Contact Information	WorkPhone	Phone	0.966	guardian	guardian	0.951	guardian-2	3
+gold	emergency-mt	Name First Last_3	Name (First, Last)	Required Emergency Contact Information – person other than parent or guardian that is authorized to pick up child	FullName	NameLastFirst	0.739	emergency	guardian	0.948	emergency-1	4
+gold	emergency-mt	Phone_0	Phone	Required Emergency Contact Information – person other than parent or guardian that is authorized to pick up child	Phone	Phone	0.998	emergency	guardian	0.948	emergency-1	4
+gold	emergency-mt	Relationship_3	Relationship	Required Emergency Contact Information – person other than parent or guardian that is authorized to pick up child	Relationship	Relationship	0.995	emergency	guardian	0.603	emergency-1	5
+gold	emergency-mt	Name First Last_4	Name (First, Last)	Required Emergency Contact Information – person other than parent or guardian that is authorized to pick up child	FullName	NameLastFirst	0.696	emergency	guardian	0.603	emergency-2	5
+gold	emergency-mt	Phone_1	Phone	Required Emergency Contact Information – person other than parent or guardian that is authorized to pick up child	Phone	Phone	0.997	emergency	guardian	0.603	emergency-2	5
+gold	emergency-mt	Relationship_4	Relationship	Required Emergency Contact Information – person other than parent or guardian that is authorized to pick up child	Relationship	Relationship	0.995	emergency	other	0.954	emergency-2	6
+gold	emergency-mt	Name First Last_5	Name (First, Last)	Required Emergency Contact Information – person other than parent or guardian that is authorized to pick up child	FullName	NameLastFirst	0.706	emergency	guardian	0.570	emergency-3	7
+gold	emergency-mt	Phone_2	Phone	Required Emergency Contact Information – person other than parent or guardian that is authorized to pick up child	Phone	Phone	0.997	emergency	guardian	0.570	emergency-3	7
+gold	emergency-mt	Relationship_5	Relationship	Required Emergency Contact Information – person other than parent or guardian that is authorized to pick up child	Relationship	Relationship	0.994	emergency	other	0.955	emergency-3	8
+gold	emergency-mt	Medical Provider	Primary Medical Care Provider	Required Medical Information	FullName	Other	0.318	provider	guardian	0.570	physician	7
+gold	emergency-mt	Phone	Phone	Required Medical Information	Phone	Phone	0.994	provider	applicant	0.582	physician	0
+gold	emergency-mt	Health Concerns Please explainRow1	Health Concerns (Please explain)	Required Medical Information	Other	Other	0.981	applicant	applicant	0.582	applicant	0
+gold	emergency-mt	AllergiesRow1	Allergies	Required Medical Information	Other	Other	0.903	applicant	applicant	0.582	applicant	0
+gold	emergency-mt	Date	Date	Parent or Guardian Authorization	Date	Date	0.985	guardian	guardian	0.999	guardian-signer	10
+gold	fitness-dpparks	Date	Date		Date	Date	0.984	applicant	child	0.023	applicant	0
+gold	fitness-dpparks	Household Last Name	Household Last Name	Household	LastName	LastName	0.993	applicant	applicant	0.975	applicant	1
+gold	fitness-dpparks	First Name	First Name	Household	FirstName	FirstName	0.992	applicant	applicant	0.975	applicant	1
+gold	fitness-dpparks	Address	Address	Household	AddressLine1	AddressLine1	0.709	applicant	applicant	0.975	applicant	1
+gold	fitness-dpparks	City	City	Household	City	City	0.987	applicant	applicant	0.975	applicant	1
+gold	fitness-dpparks	Zip	Zip	Household	Zip	Zip	0.988	applicant	applicant	0.975	applicant	1
+gold	fitness-dpparks	Primary Phone	Primary Phone	Household	Phone	Phone	0.560	applicant	applicant	0.975	applicant	1
+gold	fitness-dpparks	Secondary Phone	Secondary Phone	Household	Phone	Phone	0.831	applicant	applicant	0.975	applicant	1
+gold	fitness-dpparks	Email	Email	Household	Email	Email	0.999	applicant	applicant	0.975	applicant	1
+gold	fitness-dpparks	Emergency Contact Name	Emergency Contact Name	Household	FullName	FullName	0.997	emergency	emergency	0.995	emergency-1	2
+gold	fitness-dpparks	Emergency Phone	Emergency Phone	Household	Phone	Phone	0.997	emergency	emergency	0.995	emergency-1	2
+gold	fitness-dpparks	Membership Number	Membership Number	SilverSneakers / Prime / Renew Active	Other	Other	0.977	applicant	child	0.023	applicant	0
+gold	fitness-dpparks	Participant First NameRow1	Participant First Name	Participants	FirstName	FirstName	0.644	other	child	0.023	participant-1	0
+gold	fitness-dpparks	MFRow1	M/F	Participants	Other	MiddleInitial	0.362	other	child	0.023	participant-1	0
+gold	fitness-dpparks	Birth DateRow1	Birth Date	Participants	BirthDate	BirthDate	0.958	other	child	0.023	participant-1	0
+gold	fitness-dpparks	FeeRow1	Fee	Participants	Other	Other	0.498	other	child	0.023	participant-1	0
+gold	fitness-dpparks	Participant First NameRow2	Participant First Name	Participants	FirstName	FullName	0.521	other	child	0.155	participant-2	3
+gold	fitness-dpparks	MFRow2	M/F	Participants	Other	Other	0.342	other	child	0.155	participant-2	3
+gold	fitness-dpparks	Birth DateRow2	Birth Date	Participants	BirthDate	BirthDate	0.958	other	child	0.155	participant-2	3
+gold	fitness-dpparks	FeeRow2	Fee	Participants	Other	Other	0.498	other	child	0.155	participant-2	3
+gold	fitness-dpparks	Participant First NameRow3	Participant First Name	Participants	FirstName	FullName	0.521	other	child	0.155	participant-3	3
+gold	fitness-dpparks	MFRow3	M/F	Participants	Other	Other	0.342	other	child	0.155	participant-3	3
+gold	fitness-dpparks	Birth DateRow3	Birth Date	Participants	BirthDate	BirthDate	0.958	other	child	0.155	participant-3	3
+gold	fitness-dpparks	FeeRow3	Fee	Participants	Other	Other	0.498	other	child	0.155	participant-3	3
+gold	fitness-dpparks	Participant First NameRow4	Participant First Name	Participants	FirstName	FullName	0.521	other	child	0.120	participant-4	4
+gold	fitness-dpparks	MFRow4	M/F	Participants	Other	Other	0.342	other	child	0.120	participant-4	4
+gold	fitness-dpparks	Birth DateRow4	Birth Date	Participants	BirthDate	BirthDate	0.958	other	child	0.120	participant-4	4
+gold	fitness-dpparks	FeeRow4	Fee	Participants	Other	Other	0.498	other	child	0.120	participant-4	4
+gold	fitness-dpparks	Participant First NameRow5	Participant First Name	Participants	FirstName	FullName	0.521	other	applicant	0.863	participant-5	1
+gold	fitness-dpparks	MFRow5	M/F	Participants	Other	MiddleInitial	0.335	other	applicant	0.863	participant-5	1
+gold	fitness-dpparks	Birth DateRow5	Birth Date	Participants	BirthDate	BirthDate	0.958	other	applicant	0.863	participant-5	1
+gold	fitness-dpparks	FeeRow5	Fee	Participants	Other	Other	0.607	other	applicant	0.863	participant-5	1
+gold	fitness-dpparks	Text12	Total: $	Participants	Other	Other	0.803	applicant	applicant	0.863	applicant	1
+gold	fitness-dpparks	If over 18	Signature (If over 18)	Waiver and Release	Signature	Signature	0.986	applicant	applicant	0.863	applicant	1
+gold	fitness-dpparks	Members Name	Member's Name (Please print)	Waiver and Release	FullName	FullName	0.990	applicant	applicant	0.863	applicant	1
+gold	fitness-dpparks	Credit Card Number	Credit Card Number	Payment	Other	Other	0.965	other	applicant	0.863	cardholder	1
+gold	fitness-dpparks	undefined	Credit Card Number (part 2)	Payment	Other	Other	0.953	other	applicant	0.863	cardholder	1
+gold	fitness-dpparks	undefined_2	Credit Card Number (part 3)	Payment	Other	Other	0.990	other	applicant	0.863	cardholder	1
+gold	fitness-dpparks	undefined_3	Credit Card Number (part 4)	Payment	Other	Other	0.997	other	applicant	0.863	cardholder	1
+gold	fitness-dpparks	Exp Date	Exp. Date	Payment	Date	Date	0.967	other	applicant	0.863	cardholder	1
+gold	fitness-dpparks	CVV	CVV	Payment	Other	Other	0.818	other	applicant	0.863	cardholder	1
+gold	fitness-dpparks	Card Holder Name	Card Holder Name	Payment	FullName	FullName	0.982	other	other	0.156	cardholder	6
+gold	fitness-dpparks	Members Name Print	Member's Name (Print)	Tivity Health Waiver	FullName	FullName	0.998	applicant	other	0.156	applicant	6
+gold	fitness-dpparks	Date_2	Date	Tivity Health Waiver	Date	Date	0.982	applicant	other	0.156	applicant	6
+gold	fitness-dpparks	Emergency Contact Name_2	Emergency Contact Name	Tivity Health Waiver	FullName	FullName	0.998	emergency	emergency	0.835	emergency-2	7
+gold	fitness-dpparks	Contact Phone Number	Contact Phone Number	Tivity Health Waiver	Phone	Phone	1.000	emergency	emergency	0.835	emergency-2	7
+gold	school-philasd	p1-132	Last Name	STUDENT INFORMATION - SECTION 1	LastName	LastName	0.999	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-133	First Name	STUDENT INFORMATION - SECTION 1	FirstName	FirstName	0.998	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-134	M.I.	STUDENT INFORMATION - SECTION 1	MiddleInitial	MiddleInitial	0.961	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-138	STUDENT ID NUMBER	STUDENT INFORMATION - SECTION 1	Other	Other	0.994	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-135	Date of Birth MONTH	STUDENT INFORMATION - SECTION 1	BirthMonth	BirthMonth	0.720	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-136	Date of Birth DAY	STUDENT INFORMATION - SECTION 1	BirthDay	BirthDay	0.539	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-137	Date of Birth YEAR	STUDENT INFORMATION - SECTION 1	BirthYear	BirthYear	0.703	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-139	House No.	STUDENT INFORMATION - SECTION 1	StreetNumber	Other	0.682	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-140	Dir	STUDENT INFORMATION - SECTION 1	StreetDirection	Other	0.428	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-141	Street Name	STUDENT INFORMATION - SECTION 1	StreetName	FullName	0.611	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-142	St., Ave., Etc.	STUDENT INFORMATION - SECTION 1	StreetSuffix	State	0.146	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-143	Apt#	STUDENT INFORMATION - SECTION 1	AddressLine2	AddressLine2	0.350	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-144	Zip Code	STUDENT INFORMATION - SECTION 1	Zip	Zip	0.972	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-145	Phone Number	STUDENT INFORMATION - SECTION 1	Phone	Phone	1.000	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-146	Country of Birth	STUDENT INFORMATION - SECTION 1	Other	BirthDate	0.794	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-147	Home Primary Language	STUDENT INFORMATION - SECTION 1	Other	Other	0.702	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-148	Date child first enrolled into a U.S. School	STUDENT INFORMATION - SECTION 1	Date	Date	0.876	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-149	Public School	STUDENT ENROLLMENT HISTORY - SECTION 2	Organization	Organization	0.778	provider	provider	0.189	school-previous	1
+gold	school-philasd	p1-150	Other City	STUDENT ENROLLMENT HISTORY - SECTION 2	City	City	0.715	provider	provider	0.189	school-previous	1
+gold	school-philasd	p1-151	Non Public School	STUDENT ENROLLMENT HISTORY - SECTION 2	Organization	Organization	0.513	provider	provider	0.189	school-previous	1
+gold	school-philasd	p1-152	Date Last Attended	STUDENT ENROLLMENT HISTORY - SECTION 2	Date	Date	0.633	provider	provider	0.189	school-previous	1
+gold	school-philasd	p1-153	Grade Last Attended	STUDENT ENROLLMENT HISTORY - SECTION 2	Other	Other	0.504	provider	provider	0.189	school-previous	1
+gold	school-philasd	p1-154	Name of School	STUDENT ENROLLMENT HISTORY - SECTION 2	Organization	Organization	0.982	provider	provider	0.189	school-previous	1
+gold	school-philasd	p1-155	Address	STUDENT ENROLLMENT HISTORY - SECTION 2	AddressLine1	AddressLine1	0.920	provider	provider	0.189	school-previous	1
+gold	school-philasd	p1-156	City	STUDENT ENROLLMENT HISTORY - SECTION 2	City	City	0.985	provider	provider	0.189	school-previous	1
+gold	school-philasd	p1-157	State	STUDENT ENROLLMENT HISTORY - SECTION 2	State	State	0.878	provider	provider	0.189	school-previous	1
+gold	school-philasd	p1-158	Special Education Services: If yes, which state	STUDENT ENROLLMENT HISTORY - SECTION 2	Other	Other	0.991	applicant	provider	0.189	applicant	1
+gold	school-philasd	p1-159	If yes, what	STUDENT ENROLLMENT HISTORY - SECTION 2	Other	Other	0.699	applicant	provider	0.189	applicant	1
+gold	school-philasd	p1-160	If yes, which state	STUDENT ENROLLMENT HISTORY - SECTION 2	Other	Other	0.941	applicant	provider	0.189	applicant	1
+gold	school-philasd	p1-161	Other Language (question 1)	LANGUAGE SURVEY - SECTION 3	Other	Other	0.661	applicant	applicant	0.885	applicant	0
+gold	school-philasd	p1-162	Other Language (question 2)	LANGUAGE SURVEY - SECTION 3	Other	Other	0.674	applicant	provider	0.189	applicant	1
+gold	school-philasd	p1-163	Other Language (question 3)	LANGUAGE SURVEY - SECTION 3	Other	Other	0.784	applicant	provider	0.364	applicant	2
+gold	school-philasd	p1-164	Other Language (question 4)	LANGUAGE SURVEY - SECTION 3	Other	Other	0.492	applicant	applicant	0.514	applicant	0
+gold	school-philasd	p1-165	Other Language (question 5)	LANGUAGE SURVEY - SECTION 3	Other	Other	0.629	applicant	applicant	0.514	applicant	0
+gold	school-philasd	p1-166	Other Language (question 6)	LANGUAGE SURVEY - SECTION 3	Other	Organization	0.226	applicant	provider	0.427	applicant	4
+gold	school-philasd	p2-167	Parent / Guardian Name	HOUSEHOLD INFORMATION - SECTION 4	FullName	FullName	0.999	guardian	provider	0.276	guardian-1	5
+gold	school-philasd	p2-176	Parent / Guardian Name	HOUSEHOLD INFORMATION - SECTION 4	FullName	FullName	0.999	guardian	provider	0.276	guardian-2	5
+gold	school-philasd	p2-168	Mother / Father / Stepparent / Guardian / Other	HOUSEHOLD INFORMATION - SECTION 4	Relationship	FullName	0.498	guardian	provider	0.276	guardian-1	5
+gold	school-philasd	p2-177	Mother / Father / Stepparent / Guardian / Other	HOUSEHOLD INFORMATION - SECTION 4	Relationship	FullName	0.520	guardian	provider	0.276	guardian-2	5
+gold	school-philasd	p2-169	Address	HOUSEHOLD INFORMATION - SECTION 4	AddressLine1	AddressLine1	0.679	guardian	provider	0.276	guardian-1	5
+gold	school-philasd	p2-178	Address	HOUSEHOLD INFORMATION - SECTION 4	AddressLine1	AddressLine2	0.615	guardian	provider	0.276	guardian-2	5
+gold	school-philasd	p2-170	Address: (second line)	HOUSEHOLD INFORMATION - SECTION 4	CityStateZip	AddressLine2	0.803	guardian	provider	0.276	guardian-1	5
+gold	school-philasd	p2-179	Address: (second line)	HOUSEHOLD INFORMATION - SECTION 4	CityStateZip	AddressLine2	0.805	guardian	provider	0.276	guardian-2	5
+gold	school-philasd	p2-171	Phone: (Home)	HOUSEHOLD INFORMATION - SECTION 4	Phone	Phone	0.999	guardian	provider	0.276	guardian-1	5
+gold	school-philasd	p2-180	Phone: (Home)	HOUSEHOLD INFORMATION - SECTION 4	Phone	Phone	0.991	guardian	provider	0.276	guardian-2	5
+gold	school-philasd	p2-172	Phone: (Cell)	HOUSEHOLD INFORMATION - SECTION 4	Phone	Phone	0.966	guardian	provider	0.276	guardian-1	5
+gold	school-philasd	p2-181	Phone: (Cell)	HOUSEHOLD INFORMATION - SECTION 4	Phone	Phone	0.957	guardian	provider	0.276	guardian-2	5
+gold	school-philasd	p2-173	Phone: (Work)	HOUSEHOLD INFORMATION - SECTION 4	WorkPhone	WorkPhone	0.698	guardian	provider	0.276	guardian-1	5
+gold	school-philasd	p2-182	Phone: (Work)	HOUSEHOLD INFORMATION - SECTION 4	WorkPhone	WorkPhone	0.540	guardian	provider	0.276	guardian-2	5
+gold	school-philasd	p2-174	Email	HOUSEHOLD INFORMATION - SECTION 4	Email	Email	0.998	guardian	provider	0.276	guardian-1	5
+gold	school-philasd	p2-183	Email	HOUSEHOLD INFORMATION - SECTION 4	Email	Email	0.994	guardian	provider	0.276	guardian-2	5
+gold	school-philasd	p2-175	Preferred Language for School Related Communications	HOUSEHOLD INFORMATION - SECTION 4	Other	Other	0.995	guardian	provider	0.276	guardian-1	5
+gold	school-philasd	p2-184	Preferred Language for School Related Communications	HOUSEHOLD INFORMATION - SECTION 4	Other	Other	0.988	guardian	provider	0.276	guardian-2	5
+gold	school-philasd	p2-185	Name	SIBLING INFORMATION - SECTION 5	FullName	FullName	0.950	child	child	0.305	child-1	6
+gold	school-philasd	p2-186	D.O.B.	SIBLING INFORMATION - SECTION 5	BirthDate	BirthDate	0.682	child	child	0.305	child-1	6
+gold	school-philasd	p2-187	Current School	SIBLING INFORMATION - SECTION 5	Organization	Organization	0.949	child	child	0.305	child-1	6
+gold	school-philasd	p2-188	Grade	SIBLING INFORMATION - SECTION 5	Other	Other	0.971	child	child	0.305	child-1	6
+gold	school-philasd	p2-189	Student ID# if available	SIBLING INFORMATION - SECTION 5	Other	Other	0.936	child	child	0.305	child-1	6
+gold	school-philasd	p2-190	Name	SIBLING INFORMATION - SECTION 5	FullName	FullName	0.941	child	child	0.305	child-2	6
+gold	school-philasd	p2-191	D.O.B.	SIBLING INFORMATION - SECTION 5	BirthDate	BirthDate	0.623	child	child	0.305	child-2	6
+gold	school-philasd	p2-192	Current School	SIBLING INFORMATION - SECTION 5	Organization	Organization	0.944	child	child	0.305	child-2	6
+gold	school-philasd	p2-193	Grade	SIBLING INFORMATION - SECTION 5	Other	Other	0.971	child	child	0.305	child-2	6
+gold	school-philasd	p2-194	Student ID# if available	SIBLING INFORMATION - SECTION 5	Other	Other	0.936	child	child	0.305	child-2	6
+gold	school-philasd	p2-195	Name	SIBLING INFORMATION - SECTION 5	FullName	FullName	0.941	child	child	0.305	child-3	6
+gold	school-philasd	p2-196	D.O.B.	SIBLING INFORMATION - SECTION 5	BirthDate	BirthDate	0.623	child	child	0.305	child-3	6
+gold	school-philasd	p2-197	Current School	SIBLING INFORMATION - SECTION 5	Organization	Organization	0.944	child	child	0.305	child-3	6
+gold	school-philasd	p2-198	Grade	SIBLING INFORMATION - SECTION 5	Other	Other	0.971	child	child	0.305	child-3	6
+gold	school-philasd	p2-199	Student ID# if available	SIBLING INFORMATION - SECTION 5	Other	Other	0.936	child	child	0.305	child-3	6
+gold	school-philasd	p2-200	Name	SIBLING INFORMATION - SECTION 5	FullName	FullName	0.941	child	child	0.305	child-4	6
+gold	school-philasd	p2-201	D.O.B.	SIBLING INFORMATION - SECTION 5	BirthDate	BirthDate	0.623	child	child	0.305	child-4	6
+gold	school-philasd	p2-202	Current School	SIBLING INFORMATION - SECTION 5	Organization	Organization	0.944	child	provider	0.758	child-4	7
+gold	school-philasd	p2-203	Grade	SIBLING INFORMATION - SECTION 5	Other	Other	0.971	child	child	0.305	child-4	6
+gold	school-philasd	p2-204	Student ID# if available	SIBLING INFORMATION - SECTION 5	Other	Other	0.936	child	child	0.305	child-4	6
+gold	school-philasd	p2-205	Name	SIBLING INFORMATION - SECTION 5	FullName	FullName	0.941	child	child	0.305	child-5	6
+gold	school-philasd	p2-206	D.O.B.	SIBLING INFORMATION - SECTION 5	BirthDate	BirthDate	0.623	child	provider	0.758	child-5	7
+gold	school-philasd	p2-207	Current School	SIBLING INFORMATION - SECTION 5	Organization	Organization	0.949	child	provider	0.758	child-5	7
+gold	school-philasd	p2-208	Grade	SIBLING INFORMATION - SECTION 5	Other	Other	0.968	child	provider	0.758	child-5	7
+gold	school-philasd	p2-209	Student ID# if available	SIBLING INFORMATION - SECTION 5	Other	Other	0.924	child	child	0.305	child-5	6
+gold	school-philasd	p2-210	Name	EMERGENCY CONTACT INFORMATION - SECTION 6	FullName	FullName	0.991	emergency	emergency	0.895	emergency-1	8
+gold	school-philasd	p2-211	Relationship	EMERGENCY CONTACT INFORMATION - SECTION 6	Relationship	Relationship	0.995	emergency	emergency	0.895	emergency-1	8
+gold	school-philasd	p2-212	Phone (1)	EMERGENCY CONTACT INFORMATION - SECTION 6	Phone	Phone	0.997	emergency	applicant	0.885	emergency-1	0
+gold	school-philasd	p2-213	Phone (2)	EMERGENCY CONTACT INFORMATION - SECTION 6	Phone	Phone	0.996	emergency	provider	0.189	emergency-1	1
+gold	school-philasd	p2-214	Name	EMERGENCY CONTACT INFORMATION - SECTION 6	FullName	FullName	0.994	emergency	emergency	0.895	emergency-2	8
+gold	school-philasd	p2-215	Relationship	EMERGENCY CONTACT INFORMATION - SECTION 6	Relationship	Relationship	0.994	emergency	emergency	0.895	emergency-2	8
+gold	school-philasd	p2-216	Phone (1)	EMERGENCY CONTACT INFORMATION - SECTION 6	Phone	Phone	0.996	emergency	applicant	0.885	emergency-2	0
+gold	school-philasd	p2-217	Phone (2)	EMERGENCY CONTACT INFORMATION - SECTION 6	Phone	Phone	0.996	emergency	provider	0.189	emergency-2	1
+gold	school-philasd	p2-218	Parent / Guardian Signature		Signature	Signature	0.994	guardian	guardian	0.684	guardian-signer-1	9
+gold	school-philasd	p2-219	Date		Date	Date	0.991	guardian	guardian	0.684	guardian-signer-1	9
+gold	school-philasd	p2-220	Parent / Guardian Signature		Signature	Signature	0.997	guardian	guardian	0.684	guardian-signer-2	9
+gold	school-philasd	p2-221	Date		Date	Date	0.991	guardian	other	0.398	guardian-signer-2	10
+extracted	dog-stpaul	First Name	First Name		FirstName	FirstName	0.997	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	Last Name	Last Name		LastName	LastName	0.999	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	Dog Name_2	Dog Name		Other	FullName	0.791	applicant	applicant	0.992	dog-2	0
+extracted	dog-stpaul	Dog Age_2	Dog Age		Other	Age	0.350	applicant	applicant	0.992	dog-2	0
+extracted	dog-stpaul	Sex_2	Sex		Other	Other	0.496	applicant	applicant	0.992	dog-2	0
+extracted	dog-stpaul	Dogs	Dogs		Other	Other	0.607	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	undefined	undefined		Other	Other	0.621	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	Address	Address		AddressLine1	AddressWhole	0.909	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	Breed_2	Breed		Other	Other	0.398	applicant	applicant	0.992	dog-2	0
+extracted	dog-stpaul	Colors_2	Color(s		Other	Other	0.628	applicant	applicant	0.992	dog-2	0
+extracted	dog-stpaul	Apt	Apt		AddressLine2	AddressLine2	0.463	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	Zip Code	Zip Code		Zip	Zip	0.851	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	X	X		Other	Other	0.475	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	1_4	[1]		Other	Other	0.554	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	Microchip Brand and Number required for lifetime license_2	Microchip Brand and Number (required for lifetime license		Other	Other	1.000	applicant	applicant	0.992	dog-2	0
+extracted	dog-stpaul	Primary Phone	Primary Phone		Phone	Phone	0.630	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	Alternate Phone	Alternate Phone		Phone	Phone	0.987	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	X_2	X		Other	Other	0.668	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	2_4	[2]		Other	Other	0.815	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	Email	E-mail		Email	Email	0.997	applicant	applicant	0.992	applicant	0
+extracted	dog-stpaul	Owners date of birth monthdateyear	Owner’s date of birth (month/date/year		BirthDate	BirthDate	0.559	applicant	applicant-alt	0.022	applicant	1
+extracted	dog-stpaul	Clinic Name_2	Clinic Name		Organization	Organization	0.813	provider	applicant-alt	0.022	vet-2	1
+extracted	dog-stpaul	Dogs_2	Dogs		Other	Other	0.506	applicant	applicant-alt	0.022	applicant	1
+extracted	dog-stpaul	X10	$10/Year		Other	BirthYear	0.557	applicant	applicant-alt	0.022	applicant	1
+extracted	dog-stpaul	Clinic Address_2	Clinic Address		AddressLine1	AddressWhole	0.938	provider	applicant-alt	0.022	vet-2	1
+extracted	dog-stpaul	x70	$70/Lifetime		Other	Other	0.482	applicant	applicant-alt	0.022	applicant	1
+extracted	dog-stpaul	Dogs_3	Dogs		Other	Other	0.407	applicant	applicant-alt	0.022	applicant	1
+extracted	dog-stpaul	1_2	[1]		AddressLine2	Other	0.514	provider	applicant-alt	0.022	vet-2	1
+extracted	dog-stpaul	Dog Name	Dog Name		Other	FullName	0.929	applicant	other	0.088	dog-1	2
+extracted	dog-stpaul	Dog Age	Dog Age		Other	Other	0.362	applicant	other	0.088	dog-1	2
+extracted	dog-stpaul	Sex	Sex		Other	Other	0.407	applicant	other	0.088	dog-1	2
+extracted	dog-stpaul	2_2	[2]		Phone	Other	0.737	provider	other	0.088	vet-2	2
+extracted	dog-stpaul	Vaccination Expiration Date monthdateyear_2	Vaccination Expiration Date (month/date/year		Date	Date	0.992	applicant	other	0.088	dog-2	2
+extracted	dog-stpaul	Breed	Breed		Other	Other	0.881	applicant	other	0.088	dog-1	2
+extracted	dog-stpaul	Colors	Color(s		Other	Other	0.942	applicant	other	0.088	dog-1	2
+extracted	dog-stpaul	undefined_2	undefined		Other	Other	0.851	applicant	other	0.088	applicant	2
+extracted	dog-stpaul	Intact PD Only	Intact (PD Only		Other	Other	0.974	applicant	other	0.088	applicant	2
+extracted	dog-stpaul	Microchip Brand and Number required for lifetime license	Microchip Brand and Number (required for lifetime license		Other	Other	1.000	applicant	other	0.088	dog-1	2
+extracted	dog-stpaul	Dog Name_3	Dog Name		Other	FullName	0.957	applicant	other	0.088	dog-3	2
+extracted	dog-stpaul	Dog Age_3	Dog Age		Other	Other	0.552	applicant	other	0.088	dog-3	2
+extracted	dog-stpaul	Sex_3	Sex		Other	Other	0.473	applicant	other	0.088	dog-3	2
+extracted	dog-stpaul	undefined_3	undefined		Other	Other	0.538	applicant	other	0.088	applicant	2
+extracted	dog-stpaul	Altered PD or DD	Altered (PD or DD		Other	Other	0.649	applicant	other	0.088	applicant	2
+extracted	dog-stpaul	Breed_3	Breed		Other	Other	0.753	applicant	other	0.088	dog-3	2
+extracted	dog-stpaul	Colors_3	Color(s		Other	Other	0.867	applicant	other	0.088	dog-3	2
+extracted	dog-stpaul	Clinic Name	Clinic Name		Organization	Organization	0.904	provider	provider	0.416	vet-1	3
+extracted	dog-stpaul	Clinic Address	Clinic Address		AddressLine1	AddressWhole	0.971	provider	provider	0.416	vet-1	3
+extracted	dog-stpaul	Microchip Brand and Number required for lifetime license_3	Microchip Brand and Number (required for lifetime license		Other	Other	1.000	applicant	applicant	0.710	dog-3	0
+extracted	dog-stpaul	1	[1]		AddressLine2	Other	0.623	provider	applicant	0.710	vet-1	0
+extracted	dog-stpaul	2	[2]		Phone	Other	0.732	provider	applicant	0.710	vet-1	0
+extracted	dog-stpaul	Vaccination Expiration Date monthdateyear	Vaccination Expiration Date (month/date/year		Date	Date	0.993	applicant	applicant	0.710	dog-1	0
+extracted	dog-stpaul	Clinic Name_3	Clinic Name		Organization	Organization	0.850	provider	provider	0.539	vet-3	5
+extracted	dog-stpaul	Clinic Address_3	Clinic Address		AddressLine1	AddressWhole	0.993	provider	provider	0.539	vet-3	5
+extracted	dog-stpaul	1_3	[1]		AddressLine2	Other	0.397	provider	applicant	0.710	vet-3	0
+extracted	dog-stpaul	2_3	[2]		Phone	Other	0.470	provider	applicant	0.710	vet-3	0
+extracted	dog-stpaul	Vaccination Expiration Date monthdateyear_3	Vaccination Expiration Date (month/date/year		Date	Date	0.991	applicant	applicant	0.710	dog-3	0
+extracted	emergency-mt	Childs Name First Last	Child’s Name (First, Last)		FullName	NameLastFirst	0.707	applicant	child	0.005	applicant	0
+extracted	emergency-mt	Date of Birth	Date of Birth		BirthDate	BirthDate	0.997	applicant	other	0.049	applicant	1
+extracted	emergency-mt	Name First Last	Name (First, Last)		FullName	NameLastFirst	0.711	guardian	other	0.049	guardian-1	1
+extracted	emergency-mt	Relationship	Relationship		Relationship	Relationship	0.994	guardian	other	0.049	guardian-1	1
+extracted	emergency-mt	Home Address Street City Zip	Home Address (Street, City, Zip)		AddressWhole	AddressLine1	0.988	guardian	other	0.049	guardian-1	1
+extracted	emergency-mt	Primary Phone	Primary Phone		Phone	Phone	0.948	guardian	other	0.049	guardian-1	1
+extracted	emergency-mt	Email Address	Email Address		Email	Email	0.998	guardian	other	0.049	guardian-1	1
+extracted	emergency-mt	Work Address Street City Zip	Work Address (Street, City, Zip)		WorkAddress	City	0.378	guardian	other	0.049	guardian-1	1
+extracted	emergency-mt	Work Phone	Work Phone		WorkPhone	Phone	0.959	guardian	other	0.049	guardian-1	1
+extracted	emergency-mt	Name First Last_2	Name (First, Last)		FullName	NameLastFirst	0.785	guardian	other	0.049	guardian-2	1
+extracted	emergency-mt	Relationship_2	Relationship		Relationship	Relationship	0.994	guardian	applicant-alt	0.391	guardian-2	2
+extracted	emergency-mt	Home Address Street City Zip_2	Home Address (Street, City, Zip)		AddressWhole	AddressLine1	0.985	guardian	applicant-alt	0.391	guardian-2	2
+extracted	emergency-mt	Primary Phone_2	Primary Phone		Phone	Phone	0.948	guardian	applicant-alt	0.391	guardian-2	2
+extracted	emergency-mt	Email Address_2	Email Address		Email	Email	0.998	guardian	applicant-alt	0.135	guardian-2	3
+extracted	emergency-mt	Work Address Street City Zip_2	Work Address (Street, City, Zip)		WorkAddress	City	0.421	guardian	applicant-alt	0.135	guardian-2	3
+extracted	emergency-mt	Work Phone_2	Work Phone		WorkPhone	Phone	0.957	guardian	applicant-alt	0.135	guardian-2	3
+extracted	emergency-mt	Name First Last_3	Name (First, Last)		FullName	NameLastFirst	0.774	emergency	applicant-alt	0.135	emergency-1	3
+extracted	emergency-mt	Phone_0	Phone		Phone	Phone	0.990	emergency	applicant-alt	0.135	emergency-1	3
+extracted	emergency-mt	Relationship_3	Relationship		Relationship	Relationship	0.994	emergency	emergency	0.445	emergency-1	4
+extracted	emergency-mt	Name First Last_4	Name (First, Last)		FullName	NameLastFirst	0.615	emergency	applicant	0.717	emergency-2	5
+extracted	emergency-mt	Phone_1	Phone		Phone	Phone	0.996	emergency	applicant	0.717	emergency-2	5
+extracted	emergency-mt	Relationship_4	Relationship		Relationship	Relationship	0.995	emergency	applicant	0.717	emergency-2	5
+extracted	emergency-mt	Name First Last_5	Name (First, Last)		FullName	NameLastFirst	0.632	emergency	applicant	0.717	emergency-3	5
+extracted	emergency-mt	Phone_2	Phone		Phone	Phone	0.995	emergency	applicant	0.717	emergency-3	5
+extracted	emergency-mt	Relationship_5	Relationship		Relationship	Relationship	0.995	emergency	applicant	0.717	emergency-3	5
+extracted	emergency-mt	Medical Provider	Primary Medical Care Provider		FullName	Other	0.366	provider	applicant	0.717	physician	5
+extracted	emergency-mt	Phone	Phone		Phone	Phone	0.987	provider	applicant	0.717	physician	5
+extracted	emergency-mt	Health Concerns Please explainRow1	Health Concerns		Other	Other	0.787	applicant	applicant	0.717	applicant	5
+extracted	emergency-mt	AllergiesRow1	Allergies		Other	Other	0.905	applicant	applicant	0.717	applicant	5
+extracted	emergency-mt	Date	Date		Date	Date	0.980	guardian	applicant	0.717	guardian-signer	5
+extracted	fitness-dpparks	Date	Date		Date	Date	0.977	applicant	guardian	0.003	applicant	0
+extracted	fitness-dpparks	Household Last Name	Household Last Name		LastName	LastName	0.991	applicant	guardian	0.003	applicant	0
+extracted	fitness-dpparks	First Name	First Name		FirstName	FirstName	0.991	applicant	guardian	0.003	applicant	0
+extracted	fitness-dpparks	Address	Address		AddressLine1	AddressLine1	0.740	applicant	guardian	0.003	applicant	0
+extracted	fitness-dpparks	City	City		City	City	0.987	applicant	guardian	0.003	applicant	0
+extracted	fitness-dpparks	Zip	Zip		Zip	Zip	0.989	applicant	guardian	0.003	applicant	0
+extracted	fitness-dpparks	Primary Phone	Primary Phone		Phone	Phone	0.562	applicant	guardian	0.003	applicant	0
+extracted	fitness-dpparks	Secondary Phone	Secondary Phone		Phone	Phone	0.832	applicant	guardian	0.003	applicant	0
+extracted	fitness-dpparks	Email	Email		Email	Email	0.999	applicant	guardian	0.003	applicant	0
+extracted	fitness-dpparks	Emergency Contact Name	Emergency Contact Name		FullName	FullName	0.998	emergency	emergency	0.313	emergency-1	1
+extracted	fitness-dpparks	Emergency Phone	Emergency Phone		Phone	Phone	0.997	emergency	emergency	0.313	emergency-1	1
+extracted	fitness-dpparks	Membership Number	Membership Number		Other	Other	0.954	applicant	guardian	0.003	applicant	0
+extracted	fitness-dpparks	Participant First NameRow1	Participant First Name		FirstName	FullName	0.537	other	child	0.018	participant-1	2
+extracted	fitness-dpparks	MFRow1	M/F_Row_1		Other	Other	0.638	other	guardian	0.003	participant-1	0
+extracted	fitness-dpparks	Birth DateRow1	Birth Date		BirthDate	BirthDate	0.965	other	child	0.018	participant-1	2
+extracted	fitness-dpparks	FeeRow1	Fee_Row_1		Other	Other	0.432	other	guardian	0.003	participant-1	0
+extracted	fitness-dpparks	Participant First NameRow2	Participant First Name_Row_2		FirstName	FullName	0.856	other	emergency	0.313	participant-2	1
+extracted	fitness-dpparks	MFRow2	M/F_Row_2		Other	Other	0.657	other	emergency	0.313	participant-2	1
+extracted	fitness-dpparks	Birth DateRow2	Birth Date_Row_2		BirthDate	BirthDate	0.968	other	emergency	0.313	participant-2	1
+extracted	fitness-dpparks	FeeRow2	Fee_Row_2		Other	Other	0.779	other	emergency	0.313	participant-2	1
+extracted	fitness-dpparks	Participant First NameRow3	Participant First Name_Row_3		FirstName	FullName	0.676	other	child	0.052	participant-3	3
+extracted	fitness-dpparks	MFRow3	M/F_Row_3		Other	Other	0.903	other	child	0.052	participant-3	3
+extracted	fitness-dpparks	Birth DateRow3	Birth Date_Row_3		BirthDate	BirthDate	0.930	other	child	0.052	participant-3	3
+extracted	fitness-dpparks	FeeRow3	Fee_Row_3		Other	Other	0.910	other	child	0.052	participant-3	3
+extracted	fitness-dpparks	Participant First NameRow4	Participant First Name_Row_4		FirstName	FullName	0.578	other	child	0.044	participant-4	4
+extracted	fitness-dpparks	MFRow4	M/F_Row_4		Other	Other	0.650	other	child	0.044	participant-4	4
+extracted	fitness-dpparks	Birth DateRow4	Birth Date_Row_4		BirthDate	BirthDate	0.968	other	child	0.044	participant-4	4
+extracted	fitness-dpparks	FeeRow4	Fee_Row_4		Other	Other	0.665	other	child	0.044	participant-4	4
+extracted	fitness-dpparks	Participant First NameRow5	Participant First Name_Row_5		FirstName	FirstName	0.506	other	applicant	0.918	participant-5	5
+extracted	fitness-dpparks	MFRow5	M/F_Row_5		Other	Other	0.519	other	applicant	0.918	participant-5	5
+extracted	fitness-dpparks	Birth DateRow5	Birth Date_Row_5		BirthDate	BirthDate	0.964	other	applicant	0.918	participant-5	5
+extracted	fitness-dpparks	FeeRow5	Fee_Row_5		Other	Other	0.779	other	applicant	0.918	participant-5	5
+extracted	fitness-dpparks	Text12	Total		Other	Other	0.850	applicant	applicant	0.918	applicant	5
+extracted	fitness-dpparks	If over 18	If over 18		Signature	Other	0.642	applicant	applicant	0.918	applicant	5
+extracted	fitness-dpparks	Members Name	Member’s Name		FullName	FullName	0.998	applicant	applicant	0.918	applicant	5
+extracted	fitness-dpparks	Credit Card Number	Credit Card Number		Other	Other	0.970	other	applicant	0.918	cardholder	5
+extracted	fitness-dpparks	undefined	undefined		Other	Other	0.533	other	applicant	0.918	cardholder	5
+extracted	fitness-dpparks	undefined_2	undefined		Other	Other	0.552	other	applicant	0.918	cardholder	5
+extracted	fitness-dpparks	undefined_3	undefined		Other	Other	0.709	other	applicant	0.918	cardholder	5
+extracted	fitness-dpparks	Exp Date	Exp. Date		Date	Date	0.973	other	applicant	0.918	cardholder	5
+extracted	fitness-dpparks	CVV	CVV		Other	Other	0.605	other	applicant	0.918	cardholder	5
+extracted	fitness-dpparks	Card Holder Name	Card Holder Name		FullName	FullName	0.981	other	other	0.309	cardholder	6
+extracted	fitness-dpparks	Members Name Print	Member’s Name (Print	sponsor	FullName	FullName	0.998	applicant	guardian	0.476	applicant	7
+extracted	fitness-dpparks	Date_2	Date	sponsor	Date	Date	0.982	applicant	guardian	0.476	applicant	7
+extracted	fitness-dpparks	Emergency Contact Name_2	Emergency Contact Name	sponsor	FullName	FullName	0.998	emergency	emergency	0.877	emergency-2	8
+extracted	fitness-dpparks	Contact Phone Number	Contact Phone Number	sponsor	Phone	Phone	1.000	emergency	emergency	0.877	emergency-2	8
+extracted	school-philasd	p1-132	Last Name		LastName	LastName	0.983	applicant	applicant	0.975	applicant	0
+extracted	school-philasd	p1-133	Street Name	PARENT / GUARDIAN	FirstName	FullName	0.765	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-134	M.I.	PARENT / GUARDIAN	MiddleInitial	MiddleInitial	0.672	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-138	YEAR	PARENT / GUARDIAN	Other	BirthYear	0.589	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-135	MONTH	PARENT / GUARDIAN	BirthMonth	BirthMonth	0.916	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-136	DAY	PARENT / GUARDIAN	BirthDay	BirthDay	0.677	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-137	YEAR	PARENT / GUARDIAN	BirthYear	BirthYear	0.828	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-139	House No.		StreetNumber	Other	0.720	applicant	applicant	0.975	applicant	0
+extracted	school-philasd	p1-140	Dir	PARENT / GUARDIAN	StreetDirection	Other	0.484	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-141	Street Name	PARENT / GUARDIAN	StreetName	FullName	0.629	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-142	St., Ave., Etc.	PARENT / GUARDIAN	StreetSuffix	State	0.176	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-143	Apt#	PARENT / GUARDIAN	AddressLine2	AddressLine2	0.391	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-144	Zip Code	PARENT / GUARDIAN	Zip	Zip	0.974	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-145	Phone Number	PARENT / GUARDIAN	Phone	Phone	0.999	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-146	Country of Birth	PARENT / GUARDIAN	Other	BirthDate	0.798	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-147	Home Primary Language	PARENT / GUARDIAN	Other	Other	0.776	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-148	Date child first enrolled into a U.S. School	PARENT / GUARDIAN	Date	Date	0.866	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-149	□Public School	PARENT / GUARDIAN	Organization	Organization	0.785	provider	guardian	0.983	school-previous	1
+extracted	school-philasd	p1-150	□Other City	PARENT / GUARDIAN	City	City	0.691	provider	guardian	0.983	school-previous	1
+extracted	school-philasd	p1-151	Non Public School	PARENT / GUARDIAN	Organization	Organization	0.542	provider	guardian	0.983	school-previous	1
+extracted	school-philasd	p1-152	Date Last Attended		Date	Date	0.781	provider	applicant	0.975	school-previous	0
+extracted	school-philasd	p1-153	Date Last Attended	PARENT / GUARDIAN	Other	Date	0.703	provider	guardian	0.983	school-previous	1
+extracted	school-philasd	p1-154	Grade Last Attended	PARENT / GUARDIAN	Organization	LastName	0.547	provider	guardian	0.983	school-previous	1
+extracted	school-philasd	p1-155	Name of School	PARENT / GUARDIAN	AddressLine1	Organization	0.945	provider	guardian	0.983	school-previous	1
+extracted	school-philasd	p1-156	If the student attended school outside of the United States, do you have his/her school records?	PARENT / GUARDIAN	City	Other	0.994	provider	guardian	0.983	school-previous	1
+extracted	school-philasd	p1-157	State	PARENT / GUARDIAN	State	Other	0.927	provider	guardian	0.983	school-previous	1
+extracted	school-philasd	p1-158	If yes, which state	PARENT / GUARDIAN	Other	Other	0.925	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-159	If yes, what	PARENT / GUARDIAN	Other	Other	0.641	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-160	If yes, which state	PARENT / GUARDIAN	Other	Other	0.968	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-161	Language	PARENT / GUARDIAN	Other	Other	0.955	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-162	Language	PARENT / GUARDIAN	Other	Other	0.929	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-163	3) What language does the child speak to her his parent(s) most of the time?*	PARENT / GUARDIAN	Other	Other	0.985	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-164	4) What language does the child speak to her/his brothers/sisters most of the time?*	PARENT / GUARDIAN	Other	Other	1.000	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-165	4) What language does the child speak to her/his brothers/sisters most of the time?*	PARENT / GUARDIAN	Other	Other	1.000	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p1-166	5) What language does the child speak to her/his friends most of the time?*	PARENT / GUARDIAN	Other	Other	1.000	applicant	guardian	0.983	applicant	1
+extracted	school-philasd	p2-167	Parent Guardian Name	Parent / Guardian	FullName	FullName	0.999	guardian	guardian	1.000	guardian-1	2
+extracted	school-philasd	p2-176	Parent Guardian Name	Parent / Guardian	FullName	FullName	0.998	guardian	guardian	1.000	guardian-2	3
+extracted	school-philasd	p2-168	(Circle) Mother Father Stepparent Guardian Other	Parent / Guardian	Relationship	FullName	0.384	guardian	guardian	1.000	guardian-1	3
+extracted	school-philasd	p2-177	(Circle) Mother Father Stepparent Guardian Other	Parent / Guardian	Relationship	FullName	0.381	guardian	guardian	1.000	guardian-2	3
+extracted	school-philasd	p2-169	Address	Parent / Guardian	AddressLine1	AddressLine1	0.465	guardian	guardian	1.000	guardian-1	3
+extracted	school-philasd	p2-178	Address	Parent / Guardian	AddressLine1	AddressLine2	0.669	guardian	guardian	1.000	guardian-2	3
+extracted	school-philasd	p2-170	Address	Parent / Guardian	CityStateZip	AddressLine2	0.643	guardian	guardian	1.000	guardian-1	3
+extracted	school-philasd	p2-179	Address	Parent / Guardian	CityStateZip	AddressWhole	0.690	guardian	guardian	1.000	guardian-2	3
+extracted	school-philasd	p2-171	(Home)	Parent / Guardian	Phone	Phone	0.970	guardian	guardian	1.000	guardian-1	3
+extracted	school-philasd	p2-180	(Home)	Parent / Guardian	Phone	Phone	0.794	guardian	guardian	1.000	guardian-2	3
+extracted	school-philasd	p2-172	(Cell)	Parent / Guardian	Phone	Phone	0.905	guardian	guardian	0.964	guardian-1	4
+extracted	school-philasd	p2-181	(Cell)	Parent / Guardian	Phone	Phone	0.953	guardian	guardian	0.964	guardian-2	4
+extracted	school-philasd	p2-173	(Work)	Parent / Guardian	WorkPhone	WorkPhone	0.886	guardian	guardian	0.964	guardian-1	4
+extracted	school-philasd	p2-182	(Work)	Parent / Guardian	WorkPhone	WorkPhone	0.773	guardian	guardian	0.964	guardian-2	4
+extracted	school-philasd	p2-174	Email	Parent / Guardian	Email	Email	0.996	guardian	guardian	0.964	guardian-1	4
+extracted	school-philasd	p2-183	Email	Parent / Guardian	Email	Email	0.994	guardian	guardian	0.964	guardian-2	4
+extracted	school-philasd	p2-175	Preferred Language for School Related Communications	Parent / Guardian	Other	Other	0.992	guardian	guardian	0.964	guardian-1	4
+extracted	school-philasd	p2-184	Preferred Language for School Related Communications	Parent / Guardian	Other	Other	0.978	guardian	guardian	0.964	guardian-2	4
+extracted	school-philasd	p2-185	Name	Parent / Guardian	FullName	FullName	0.956	child	guardian	0.927	child-1	5
+extracted	school-philasd	p2-186	D.O.B.	Parent / Guardian	BirthDate	BirthDate	0.656	child	guardian	0.927	child-1	5
+extracted	school-philasd	p2-187	Current School	Parent / Guardian	Organization	Organization	0.957	child	guardian	0.927	child-1	5
+extracted	school-philasd	p2-188	Grade	Parent / Guardian	Other	Other	0.962	child	guardian	0.927	child-1	5
+extracted	school-philasd	p2-189	Student ID# if available	Parent / Guardian	Other	Other	0.921	child	guardian	0.927	child-1	5
+extracted	school-philasd	p2-190	Name	Parent / Guardian	FullName	FullName	0.942	child	guardian	0.941	child-2	6
+extracted	school-philasd	p2-191	D.O.B.	Parent / Guardian	BirthDate	BirthDate	0.697	child	guardian	0.941	child-2	6
+extracted	school-philasd	p2-192	Current School	Parent / Guardian	Organization	Organization	0.954	child	guardian	0.941	child-2	6
+extracted	school-philasd	p2-193	Grade	Parent / Guardian	Other	Other	0.961	child	guardian	0.941	child-2	6
+extracted	school-philasd	p2-194	Student ID# if available	Parent / Guardian	Other	Other	0.926	child	guardian	0.941	child-2	6
+extracted	school-philasd	p2-195	Unlabeled field	Parent / Guardian	FullName	FullName	0.473	child	guardian	0.941	child-3	6
+extracted	school-philasd	p2-196	Unlabeled field	Parent / Guardian	BirthDate	AddressWhole	0.512	child	guardian	0.941	child-3	6
+extracted	school-philasd	p2-197	Unlabeled field	Parent / Guardian	Organization	AddressWhole	0.394	child	guardian	0.977	child-3	7
+extracted	school-philasd	p2-198	Unlabeled field	Parent / Guardian	Other	AddressWhole	0.418	child	guardian	0.988	child-3	8
+extracted	school-philasd	p2-199	Unlabeled field	Parent / Guardian	Other	AddressWhole	0.415	child	guardian	0.986	child-3	9
+extracted	school-philasd	p2-200	Unlabeled field	Parent / Guardian	FullName	AddressWhole	0.415	child	guardian	0.988	child-4	10
+extracted	school-philasd	p2-201	Unlabeled field	Parent / Guardian	BirthDate	AddressWhole	0.415	child	guardian	0.985	child-4	11
+extracted	school-philasd	p2-202	Unlabeled field	Parent / Guardian	Organization	AddressWhole	0.446	child	guardian	0.991	child-4	12
+extracted	school-philasd	p2-203	Unlabeled field	Parent / Guardian	Other	AddressWhole	0.462	child	guardian	0.995	child-4	13
+extracted	school-philasd	p2-204	Unlabeled field	Parent / Guardian	Other	FullName	0.222	child	guardian	0.995	child-4	13
+extracted	school-philasd	p2-205	EMERGENCY CONTACT INFORMATION SECTION	Parent / Guardian	FullName	FullName	0.330	child	emergency	0.601	child-5	14
+extracted	school-philasd	p2-206	6	Parent / Guardian	BirthDate	Other	0.530	child	guardian	0.995	child-5	13
+extracted	school-philasd	p2-207	Unlabeled field	Parent / Guardian	Organization	FullName	0.550	child	guardian	0.989	child-5	15
+extracted	school-philasd	p2-208	Unlabeled field	Parent / Guardian	Other	AddressWhole	0.560	child	guardian	0.989	child-5	15
+extracted	school-philasd	p2-209	Unlabeled field	Parent / Guardian	Other	CityStateZip	0.332	child	guardian	0.989	child-5	15
+extracted	school-philasd	p2-210	Name	Parent / Guardian	FullName	FullName	0.969	emergency	guardian	0.989	emergency-1	15
+extracted	school-philasd	p2-211	Relationship	Parent / Guardian	Relationship	Relationship	0.994	emergency	guardian	0.989	emergency-1	15
+extracted	school-philasd	p2-212	Name	Parent / Guardian	Phone	FullName	0.977	emergency	guardian	0.955	emergency-1	16
+extracted	school-philasd	p2-213	Relationship	Parent / Guardian	Phone	Relationship	0.995	emergency	guardian	0.955	emergency-1	16
+extracted	school-philasd	p2-214	Name	Parent / Guardian	FullName	FullName	0.976	emergency	guardian	0.948	emergency-2	17
+extracted	school-philasd	p2-215	Relationship	Parent / Guardian	Relationship	Relationship	0.995	emergency	guardian	0.948	emergency-2	17
+extracted	school-philasd	p2-216	Name	Parent / Guardian	Phone	FullName	0.975	emergency	guardian	0.983	emergency-2	18
+extracted	school-philasd	p2-217	Relationship	Parent / Guardian	Phone	Relationship	0.994	emergency	guardian	0.983	emergency-2	18
+extracted	school-philasd	p2-218	Parent Guardian Signature	Parent / Guardian	Signature	Signature	0.991	guardian	guardian	0.983	guardian-signer-1	18
+extracted	school-philasd	p2-219	Date	Parent / Guardian	Date	Date	0.990	guardian	guardian	0.983	guardian-signer-1	18
+extracted	school-philasd	p2-220	Parent Guardian Signature	Parent / Guardian	Signature	Signature	0.997	guardian	guardian	0.983	guardian-signer-2	18
+extracted	school-philasd	p2-221	Date	Parent / Guardian	Date	Date	0.991	guardian	guardian	0.983	guardian-signer-2	18
