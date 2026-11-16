@@ -159,8 +159,15 @@ pub enum Done {
         items: Vec<OutlineItem>,
         from_headings: bool,
     },
-    /// Auto-orient: the upright /Rotate of each page and what it was
-    /// judged from, None where a page gave nothing to go by.
+    /// Auto-orient has judged one page: its upright /Rotate and what
+    /// that was judged from, None where the page gave nothing to go by.
+    /// Sent as each page is done, so pages turn while the rest are read.
+    OrientedPage {
+        generation: u64,
+        page: usize,
+        rotation: Option<(u16, Basis)>,
+    },
+    /// Auto-orient has finished: the same for every page.
     Oriented {
         generation: u64,
         rotations: Vec<Option<(u16, Basis)>>,
@@ -419,6 +426,11 @@ impl Pool {
                             .ok()
                             .flatten();
                             results.lock().unwrap_or_else(|e| e.into_inner())[i] = r;
+                            let _ = tx.send(Done::OrientedPage {
+                                generation,
+                                page: i,
+                                rotation: r,
+                            });
                             done.fetch_add(1, Ordering::SeqCst);
                             wake();
                         }
