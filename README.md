@@ -241,6 +241,12 @@ lines to write on and check boxes, and suggests a field for each, named after th
 label printed beside it or, in a table, its row and column headings. Places that
 already have a field are left alone.
 
+A form laid out as a table, with each label in a cell of its own, gets its fields in
+the blank cells: a blank is named by the label in the cell before it or over it, and
+the room left over in a label's cell is not offered as somewhere to write. A check
+square drawn inside a cell is suggested at its own size, and the cell around it is
+left alone; when no text stands beside the square, it takes the label of its row.
+
 Suggestions lie over the pages in green. Click one to pick it (Tab goes to the next),
 drag it to move it and its edges to resize it, and use the bar at the bottom to
 rename it, change its kind (one line of text, several lines, or a check box), add it
