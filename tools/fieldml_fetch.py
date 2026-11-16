@@ -47,7 +47,7 @@ def sources():
         path = DATA / manifest
         if not path.exists():
             continue
-        for s in json.loads(path.read_text()):
+        for s in json.loads(path.read_text(encoding='utf-8')):
             if 'sha256' in s and 'url' in s:
                 yield s['id'], s['url'], s['sha256'], DATA / folder / f"{name(s['id'])}.pdf"
 

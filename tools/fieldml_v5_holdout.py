@@ -43,7 +43,7 @@ SKIP = {
 
 
 def build():
-    sources = json.loads((DATA / 'holdout-sources.json').read_text())
+    sources = json.loads((DATA / 'holdout-sources.json').read_text(encoding='utf-8'))
     for s in sources:
         path = DATA / 'sources' / (s['id'] + '.pdf')
         if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest() != s['sha256']:
@@ -297,11 +297,11 @@ def build():
         for n in sorted({f['page'] for f in mine}):
             widgets = [fitz.Rect(f['rect']) for f in mine if f['page'] == n]
             layout.extend('\t'.join(r) for r in page_records(s['id'], n, docs[s['id']][n - 1], widgets))
-    (DATA / 'holdout-sources.json').write_text(json.dumps(sources, indent=2) + '\n')
-    (DATA / 'holdout-fields.json').write_text(json.dumps(fields, indent=2, ensure_ascii=False) + '\n')
-    (DATA / 'holdout-labels.tsv').write_text('\n'.join(labels) + '\n')
-    (DATA / 'holdout-corpus.tsv').write_text('\n'.join(corpus) + '\n')
-    (DATA / 'holdout-corpus-layout.tsv').write_text('\n'.join(layout) + '\n')
+    (DATA / 'holdout-sources.json').write_text(json.dumps(sources, indent=2) + '\n', encoding='utf-8')
+    (DATA / 'holdout-fields.json').write_text(json.dumps(fields, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    (DATA / 'holdout-labels.tsv').write_text('\n'.join(labels) + '\n', encoding='utf-8')
+    (DATA / 'holdout-corpus.tsv').write_text('\n'.join(corpus) + '\n', encoding='utf-8')
+    (DATA / 'holdout-corpus-layout.tsv').write_text('\n'.join(layout) + '\n', encoding='utf-8')
     print('v5 holdout fields:', len(fields), {s['id']: s['annotated_fields'] for s in sources})
 
 

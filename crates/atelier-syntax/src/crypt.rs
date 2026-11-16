@@ -232,6 +232,9 @@ impl Security {
             value.extend_from_slice(&salts);
             let wrapping = params.hash(password, &salts[8..], u);
             let aes = Aes::new(&wrapping).expect("32-byte key");
+            // The file key is wrapped with a zero IV because the format
+            // says so (ISO 32000-2, Algorithms 8 and 9); the salts
+            // above are what make each wrapping different.
             Ok((value, aes_cbc_encrypt(&aes, &[0; 16], &key)))
         };
         let (u, ue) = make_entry(user.as_bytes(), &[])?;
@@ -512,6 +515,7 @@ impl Params {
         }
         let k = self.hash(password, &hash[40..48], udata);
         let aes = Aes::new(&k)?;
+        // A zero IV, as Algorithm 2.A specifies for the wrapped file key.
         Some(aes_cbc_decrypt(&aes, &[0; 16], &encrypted[..32]))
     }
 

@@ -8,7 +8,7 @@ DATA=Path(__file__).resolve().parents[1]/'crates/atelier-fieldml/data/v3'
 
 
 def build():
-    candidates=json.loads((DATA/'fresh-sources.json').read_text())
+    candidates=json.loads((DATA/'fresh-sources.json').read_text(encoding='utf-8'))
     sources=[s for s in candidates if 'sha256' in s]
     docs={s['id']:fitz.open(DATA/'sources'/(s['id']+'.pdf')) for s in sources}
     fields=[]
@@ -165,9 +165,9 @@ def build():
         assert hashlib.sha256(path.read_bytes()).hexdigest()==source['sha256']
         source['annotated_fields']=sum(f['source']==source['id'] for f in fields)
         source['coverage']='Reviewed text slots in core applicant, conditional and third-party groups; checkbox choices and unsupported implicit labels excluded.'
-    (DATA/'fresh-reviewed-sources.json').write_text(json.dumps(sources,indent=2)+'\n')
-    (DATA/'fresh-fields.json').write_text(json.dumps(fields,indent=2,ensure_ascii=False)+'\n')
-    (DATA/'fresh-gold.tsv').write_text('\n'.join(gold)+'\n');(DATA/'fresh-extracted.tsv').write_text('\n'.join(actual)+'\n')
+    (DATA/'fresh-reviewed-sources.json').write_text(json.dumps(sources,indent=2)+'\n', encoding='utf-8')
+    (DATA/'fresh-fields.json').write_text(json.dumps(fields,indent=2,ensure_ascii=False)+'\n', encoding='utf-8')
+    (DATA/'fresh-gold.tsv').write_text('\n'.join(gold)+'\n', encoding='utf-8');(DATA/'fresh-extracted.tsv').write_text('\n'.join(actual)+'\n', encoding='utf-8')
     print('Fresh annotated slots:',len(fields),'families:',len(sources))
 
 if __name__=='__main__':build()

@@ -11,15 +11,20 @@ from collections import Counter
 try:
     import pymupdf as fitz
     from fieldml_applications import APP, DATA, extract
-    READY = any(APP.glob('*.pdf'))
+    # Every source, not just some: publishers take forms down, and a
+    # partial set fails these checks for a reason that is not theirs.
+    READY = all(
+        (APP / (s['id'] + '.pdf')).is_file()
+        for s in json.loads((DATA / 'applications.json').read_text(encoding='utf-8'))
+    )
 except ImportError:
     READY = False
 
 
-@unittest.skipUnless(READY, 'needs pymupdf and the fetched source PDFs')
+@unittest.skipUnless(READY, 'needs pymupdf and every fetched source PDF')
 class ApplicationCorpusTests(unittest.TestCase):
     def test_sources_and_families_are_pinned_and_disjoint(self):
-        sources=json.loads((DATA/'applications.json').read_text())
+        sources=json.loads((DATA/'applications.json').read_text(encoding='utf-8'))
         self.assertEqual(len(sources),11)
         self.assertEqual(len({s['id'] for s in sources}),11)
         self.assertEqual(len({s['family'] for s in sources}),11)
@@ -31,11 +36,11 @@ class ApplicationCorpusTests(unittest.TestCase):
 
     def test_gold_and_extracted_slots_match_without_duplicate_locations(self):
         def rows(path):
-            return [row for row in csv.reader(path.read_text().splitlines(),delimiter='\t') if row and not row[0].startswith('#')]
+            return [row for row in csv.reader(path.read_text(encoding='utf-8').splitlines(),delimiter='\t') if row and not row[0].startswith('#')]
         gold=rows(DATA/'applications-gold.tsv');actual=rows(DATA/'applications-extracted.tsv')
         self.assertEqual([r[:4] for r in gold],[r[:4] for r in actual])
         self.assertEqual(len(gold),434)
-        slots=json.loads((DATA/'applications-fields.json').read_text())
+        slots=json.loads((DATA/'applications-fields.json').read_text(encoding='utf-8'))
         identities=[(f['source'],f['field']) for f in slots]
         positions=[(f['source'],f['page'],tuple(round(x,1) for x in f['rect'])) for f in slots]
         self.assertEqual(len(set(identities)),len(slots))

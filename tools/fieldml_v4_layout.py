@@ -105,7 +105,7 @@ def main():
     forms = 0
     for fields_path, folder in FIELDS:
         by_form = {}
-        for f in json.loads(fields_path.read_text()):
+        for f in json.loads(fields_path.read_text(encoding='utf-8')):
             by_form.setdefault(f["source"], []).append(f)
         for form, fields in by_form.items():
             doc = fitz.open(folder / f"{form}.pdf")
@@ -116,7 +116,7 @@ def main():
                 records.append(["F", form, clean(f["field"]), str(f["page"]), *num(*rect(f["rect"]))])
             for n in pages:
                 records.extend(page_records(form, n, doc[n - 1], widgets[n]))
-    with OUT.open("w") as out:
+    with OUT.open("w", encoding='utf-8') as out:
         out.write("# P form page width height | F form field page x0 y0 x1 y1 | "
                   "T form page x0 y0 x1 y1 size bold text | S form page x0 y0 x1 y1 filled stroked | "
                   "L form page x0 y0 x1 y1\n")

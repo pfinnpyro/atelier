@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Public blank forms + fictional fill expectations. Never reads user documents.
-Requires pypdf==6.1.1. See crates/atelier-fieldml/README.md.
+Requires the pypdf pinned in tools/fieldml-requirements.txt. See
+crates/atelier-fieldml/README.md.
 """
 import argparse
 import csv
@@ -108,14 +109,14 @@ def annotate():
             text_fields=len(fields), label_origin='human transcription with section context',
             scope='individual applicant; text fields only; unsupported details left blank',
             provenance='Public blank U.S. federal government form; no submitted or personal records.'))
-    (DATA / 'online.tsv').write_text('\n'.join(lines) + '\n')
-    (DATA / 'sources.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    (DATA / 'online.tsv').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    (DATA / 'sources.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     print('Annotated', sum(s['text_fields'] for s in manifest), 'public blank text fields')
 
 
 def load_forms(path):
     forms = defaultdict(list)
-    for row in csv.reader(path.read_text().splitlines(), delimiter='\t'):
+    for row in csv.reader(path.read_text(encoding='utf-8').splitlines(), delimiter='\t'):
         if not row or row[0].startswith('#'): continue
         split, form, field, klass, label = row
         forms[(split, form)].append(dict(id=field, label=label, klass=klass))
@@ -231,7 +232,7 @@ def materialize(out):
     forms.update(load_forms(DATA / 'online.tsv'))
     dest = out / 'pdfs'; dest.mkdir(exist_ok=True)
     predictions = {}
-    for row in csv.DictReader((out / 'predictions.tsv').open(), delimiter='\t'):
+    for row in csv.DictReader((out / 'predictions.tsv').open(encoding='utf-8'), delimiter='\t'):
         predictions[(row['form'], row['field'])] = row['predicted']
     counts = defaultdict(int)
     examples = []
@@ -280,9 +281,9 @@ def materialize(out):
                 predicted_class=predictions[(form,f['id'])], predicted_value=prediction,
                 correction_needed=predictions[(form,f['id'])] != f['klass']))
         example = dict(form=form, split=split, fictional_profile=p, fields=records)
-        (dest / f'{form}.json').write_text(json.dumps(example,indent=2)+'\n')
+        (dest / f'{form}.json').write_text(json.dumps(example,indent=2)+'\n', encoding='utf-8')
         examples.append(example)
-    (out / 'expectations.jsonl').write_text(''.join(json.dumps(e)+'\n' for e in examples))
+    (out / 'expectations.jsonl').write_text(''.join(json.dumps(e)+'\n' for e in examples), encoding='utf-8')
     print(f'Wrote and verified {len(examples)} blank/expected/predicted PDF triples plus JSON expectations')
 
 

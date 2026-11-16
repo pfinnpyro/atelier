@@ -15,15 +15,15 @@ def build():
     previous.extract=extract
     previous.label_rects=label_rects
     previous.build()
-    manifest=json.loads((target/'applications.json').read_text())
+    manifest=json.loads((target/'applications.json').read_text(encoding='utf-8'))
     splits={s['id']:('validation' if s['split']=='validation' else 'train') for s in manifest}
     for kind in ['gold','extracted']:
-        rows=(target/f'applications-{kind}.tsv').read_text().splitlines()
+        rows=(target/f'applications-{kind}.tsv').read_text(encoding='utf-8').splitlines()
         output=['# V2 tests retired into development training; validation families stay disjoint.']
         for row in rows:
             if row.startswith('#'):continue
             fields=row.split('\t');fields[0]=splits[fields[1]];output.append('\t'.join(fields))
-        (DATA/f'v3/development-{kind}.tsv').write_text('\n'.join(output)+'\n')
+        (DATA/f'v3/development-{kind}.tsv').write_text('\n'.join(output)+'\n', encoding='utf-8')
     (DATA/'v3/development-fields.json').write_bytes((target/'applications-fields.json').read_bytes())
 
 if __name__=='__main__':build()
