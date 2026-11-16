@@ -115,6 +115,8 @@ impl Viewer {
             Command::SaveAs => self.save(SaveTo::As),
             Command::SaveCopy => self.save(SaveTo::Copy),
             Command::Encrypt => self.open_security(false),
+            // Also where keys are kept, so it needs no document.
+            Command::Protect => self.open_protect(),
             Command::Sign | Command::BackInk => self.open_security(true),
             Command::Print => self.open_print(),
             // Passed on as the key presses they stand for, so whatever has
