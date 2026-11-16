@@ -1,0 +1,15 @@
+# Advisories `cargo audit` is told to pass over, each with why. Review the
+# list whenever eframe is updated: all of these come in through it.
+
+[advisories]
+ignore = [
+    # quick-xml 0.38: slow or memory-hungry on hostile XML. It is here only
+    # through zbus_xml <- zbus-lockstep <- atspi-common, the Linux
+    # accessibility interface that eframe 0.37 uses, where it reads the
+    # AT-SPI interface descriptions shipped inside the atspi crate while
+    # that crate is compiled and tested. Atelier never gives it a file. The
+    # fix (quick-xml 0.41) needs zbus_xml 6, which eframe 0.37's
+    # accessibility stack does not accept.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+]
