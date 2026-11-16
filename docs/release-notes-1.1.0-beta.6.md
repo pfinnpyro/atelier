@@ -3,8 +3,24 @@
 > Release snapshot. Later working-tree changes and remaining work are tracked in the
 > [roadmap](roadmap.md); these notes are not current platform-validation results.
 
-This prerelease makes drawing faster and lighter on memory, rebuilds the menus and
-Settings, and fills more kinds of form field from a profile.
+This prerelease adds OpenPGP protection for whole documents, makes drawing faster and
+lighter on memory, rebuilds the menus and Settings, and fills more kinds of form field
+from a profile.
+
+- **Protect with OpenPGP.** In the Save dropdown and the File menu, this encrypts a
+  copy of the whole document for people's keys, a passphrase, or both. The document
+  becomes one OpenPGP message (RFC 9580) inside a small wrapper PDF, so nothing of it
+  shows from outside, and any change to the encrypted data is caught before a byte is
+  shown. The same window makes your key, exports your certificate to give to others,
+  backs the key up, and keeps other people's certificates.
+- **Opening and saving protected files.** Opening one asks for your key's passphrase
+  or the document's. Saving seals it again for the same readers, so it never reaches
+  the disk in the clear. To change who can read it, export a new protected copy.
+- **Approved algorithms only.** Version 6 keys on NIST P-256 or P-384, ECDH with the
+  AES key wrap, HKDF-SHA256 and AES-256-GCM. RSA, Curve25519 and version 4 keys are
+  refused by name. In the FIPS packages this is done by Windows CNG, and passphrase
+  protection is not offered there, because OpenPGP's way of turning a passphrase into
+  a key is not an approved one.
 
 - **Faster drawing.** Each open document parses its fonts and decodes its images once
   and shares them across every tile, thread and zoom level, instead of once per tile.
@@ -31,6 +47,17 @@ Settings, and fills more kinds of form field from a profile.
   split into separate month, day and year fields. Profiles now record when they were
   created.
 - **`atelier bench`** times drawing pages in tiles, the way the viewer draws them.
+
+OpenPGP protection is new and has limits. Other PDF viewers do not open a protected
+file; they show a cover page that says so. The message inside can be decrypted by
+other RFC 9580 programs that support these algorithms, which GnuPG 2.4 does not.
+Atelier does not check whose a certificate is: compare its fingerprint with its owner.
+A protected file is decrypted and sealed whole, in memory, so very large files pause
+the window. The cryptography in the ordinary packages is Atelier's own and has not
+been independently reviewed. This has been exercised by automated tests, not yet by
+hand on each platform. The README says more.
+
+This build also fixes compilation of the macOS menu bar.
 
 The source tree also gains `atelier-fieldml`: a small model, about 1 MB, that reads
 a form's labels and layout. For each field it says what detail it asks for, which
