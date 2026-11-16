@@ -14,6 +14,7 @@ atelier-crypto = { path = "crates/atelier-crypto" }
 atelier-filters = { path = "crates/atelier-filters" }
 atelier-font = { path = "crates/atelier-font" }
 atelier-form = { path = "crates/atelier-form" }
+atelier-pgp = { path = "crates/atelier-pgp" }
 atelier-syntax = { path = "crates/atelier-syntax" }
 atelier-raster = { path = "crates/atelier-raster" }
 atelier-render = { path = "crates/atelier-render" }
@@ -48,4 +49,8 @@ opt-level = 2
 
 # Training the field models in their tests is a lot of arithmetic.
 [profile.dev.package.atelier-fieldml]
+opt-level = 2
+
+# OpenPGP stretches a passphrase by hashing 65 MB, and seals whole files.
+[profile.dev.package.atelier-pgp]
 opt-level = 2

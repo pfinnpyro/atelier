@@ -1,0 +1,32 @@
+[package]
+name = "atelier-pgp"
+description = "OpenPGP (RFC 9580) restricted to NIST-approved algorithms: version 6 keys on P-256 and P-384, and messages sealed with AES-GCM"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+atelier-crypto.workspace = true
+# The wrapper PDF that carries an encrypted document.
+atelier-syntax.workspace = true
+# The system's random number generator, for the software provider.
+getrandom = "0.3"
+
+[features]
+# Build for places that must use validated cryptography: OpenPGP is then
+# done by the operating system's FIPS-validated module (Windows CNG) and
+# not by Atelier's own code. Windows only so far.
+fips = ["dep:windows-sys"]
+
+[target."cfg(windows)".dependencies]
+# CNG, for the `fips` build.
+windows-sys = { version = "0.61", optional = true, features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+
+# The workspace forbids unsafe code; this crate only denies it, so the one
+# module that talks to CNG (`cng.rs`) can allow it.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

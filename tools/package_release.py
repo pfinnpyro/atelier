@@ -71,8 +71,9 @@ def package(target, skip_build=False, installer=False, fips=False):
         ["cargo", "metadata", "--no-deps", "--format-version=1", "--locked", "--offline"], cwd=ROOT))
     version = next(p["version"] for p in metadata["packages"] if p["name"] == "atelier-app")
     if not skip_build:
-        # The FIPS build seals form profiles with the system's validated module.
-        features = ("--features", "atelier-app/fips") if fips else ()
+        # The FIPS build seals form profiles and does OpenPGP with the system's
+        # validated module, in the viewer and the command-line tool.
+        features = ("--features", "atelier-app/fips,atelier-cli/fips") if fips else ()
         run("cargo", "build", "--locked", "--release", "--target", triple,
             "-p", "atelier-app", "-p", "atelier-cli", *features)
     target_dir = Path(os.environ.get("CARGO_TARGET_DIR", ROOT / "target"))

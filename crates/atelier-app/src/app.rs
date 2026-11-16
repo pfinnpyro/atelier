@@ -36,6 +36,7 @@ mod organize;
 mod pages;
 mod print;
 mod profiles;
+mod protect;
 mod revisions;
 mod safety;
 mod scripts;
@@ -131,6 +132,9 @@ struct Open {
     scripts: Option<scripts::ScriptState>,
     /// Suggested fields being reviewed, while they are.
     suggest: Option<detect::Suggest>,
+    /// Who the file is encrypted for, when it was opened from one
+    /// protected with OpenPGP. Saving seals it for them again.
+    readers: Option<atelier_pgp::Readers>,
 }
 
 /// A file read and parsed on a thread of its own.
@@ -260,6 +264,7 @@ pub struct Viewer {
     zoom_changed: Option<std::time::Instant>,
     /// The scale tiles were last drawn for.
     last_scale: u32,
+    protect: protect::ProtectUi,
     #[cfg(target_os = "macos")]
     mac: mac::Mac,
 }
@@ -354,6 +359,7 @@ impl Viewer {
             recent: crate::recent::Recent::load(),
             annotate: annotate::Annotate::default(),
             security: security::SecurityUi::default(),
+            protect: protect::ProtectUi::default(),
             #[cfg(target_os = "macos")]
             mac: mac::Mac::default(),
         }
@@ -413,7 +419,7 @@ impl Viewer {
                     if let Some(i) = path.as_deref().and_then(|p| self.tab_with(p)) {
                         self.switch_to(i);
                     } else {
-                        self.install(*doc, name, path);
+                        self.install(*doc, name, path, None);
                     }
                 }
                 Loaded::Locked { data, name, path } => {
@@ -466,9 +472,17 @@ impl Viewer {
         password: &str,
         path: Option<PathBuf>,
     ) {
+        // Set when these bytes were decrypted from a protected file.
+        let readers = self.protect.pending.take();
         // The bytes are kept only while a password is needed.
         let doc = match Document::open_with_password(&data[..], password.as_bytes()) {
             Ok(d) => d,
+            Err(Error::Password) if readers.is_some() => {
+                self.error = Some(format!(
+                    "Could not open {name}: the document inside the OpenPGP protection also has a PDF password, which is not supported together."
+                ));
+                return;
+            }
             Err(Error::Password) => {
                 self.locked = Some(Locked {
                     data,
@@ -485,11 +499,39 @@ impl Viewer {
                 return;
             }
         };
-        self.install(doc, name, path);
+        self.install(doc, name, path, readers);
     }
 
-    /// Shows a parsed document in a new tab.
-    fn install(&mut self, doc: Document, name: String, path: Option<PathBuf>) {
+    /// Shows a parsed document in a new tab. `readers` is who the file is
+    /// encrypted for, when these are the bytes decrypted from one
+    /// protected with OpenPGP.
+    fn install(
+        &mut self,
+        doc: Document,
+        name: String,
+        path: Option<PathBuf>,
+        readers: Option<atelier_pgp::Readers>,
+    ) {
+        // A file protected with OpenPGP is a cover page around the real
+        // document, which is opened in its place once decrypted.
+        match atelier_pgp::protected_payload(&doc) {
+            Ok(None) => {}
+            Ok(Some(_)) if readers.is_some() => {
+                self.error = Some(format!(
+                    "Could not open {name}: it is protected twice over, which is not supported."
+                ));
+                return;
+            }
+            Ok(Some(payload)) => {
+                self.locked = None;
+                self.open_protected(payload, name, path);
+                return;
+            }
+            Err(e) => {
+                self.error = Some(format!("Could not open {name}: {e}"));
+                return;
+            }
+        }
         let pages = match doc.pages() {
             Ok(p) => p.iter().map(PageGeom::of).collect(),
             Err(e) => {
@@ -533,6 +575,7 @@ impl Viewer {
             stale: HashSet::new(),
             scripts: None,
             suggest: None,
+            readers,
         };
         Self::load_form(&mut open);
         let blocked = open.scripts.as_ref().map_or(0, |s| s.runnable().len());
@@ -625,10 +668,25 @@ impl Viewer {
             }
         };
         let Some(path) = path else { return };
+        // A document opened from a protected file is sealed again for
+        // the same readers, and is never written out in the clear here.
+        // The sealing is done now; only the writing is left to the thread.
         let doc = o.doc.clone();
+        let sealed = if o.readers.is_some() {
+            match self.bytes_to_save() {
+                Ok(bytes) => Some(bytes.into_owned()),
+                Err(e) => {
+                    self.error = Some(e);
+                    return;
+                }
+            }
+        } else {
+            None
+        };
         let (tx, wake) = (self.saved.0.clone(), self.ctx.clone());
         let work = move || {
-            let result = write_replacing(&path, doc.data())
+            let bytes = sealed.as_deref().unwrap_or_else(|| doc.data());
+            let result = write_replacing(&path, bytes)
                 .map_err(|e| format!("Could not save {}: {e}", path.display()));
             let _ = tx.send(Saved {
                 doc,
@@ -1410,6 +1468,16 @@ impl Viewer {
                 }
                 if ui.button("Encrypt a copy…").clicked() {
                     self.open_security(false);
+                    ui.close();
+                }
+                if ui
+                    .button("Protect with OpenPGP…")
+                    .on_hover_text(
+                        "Encrypt the whole document for people's keys, and manage those keys",
+                    )
+                    .clicked()
+                {
+                    self.open_protect();
                     ui.close();
                 }
                 if ui.button("Sign with certificate…").clicked() {
@@ -2426,6 +2494,8 @@ impl eframe::App for Viewer {
             self.warnings_window(&ctx);
         }
         self.password_window(&ctx);
+        self.sealed_window(&ctx);
+        self.protect_window(&ctx);
         self.settings_window(&ctx);
         self.colors_window(&ctx);
         self.profiles_window(&ctx);

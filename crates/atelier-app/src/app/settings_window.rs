@@ -479,7 +479,7 @@ fn about_ui(ui: &mut egui::Ui) {
     ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
     if cfg!(feature = "fips") {
         ui.label(format!(
-            "FIPS build: form profiles are encrypted by {}.",
+            "FIPS build: form profiles and OpenPGP protection are encrypted by {}.",
             crate::sealing::MODULE
         ));
     }

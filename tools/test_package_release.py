@@ -77,7 +77,7 @@ class LinuxPackagingTests(unittest.TestCase):
                 with patch.object(packaging, "ROOT", root), patch.object(packaging.platform, "system", return_value="Windows"), patch.object(packaging.subprocess, "check_output", return_value=metadata), patch.object(packaging, "run") as build, patch.dict(os.environ, {"CARGO_TARGET_DIR": "custom-target"}):
                     packaging.package("windows-x64", fips=fips)
                     command = build.call_args.args
-                    self.assertEqual("atelier-app/fips" in command, fips)
+                    self.assertEqual("atelier-app/fips,atelier-cli/fips" in command, fips)
                     folder = root / "dist/1.2.3" / ("windows-x64" + variant)
                     names = {f"atelier-windows-x64{variant}.exe", f"atelier-cli-windows-x64{variant}.exe", f"atelier-windows-x64{variant}.zip"}
                     self.assertEqual({p.name for p in folder.iterdir()}, names | {"SHA256SUMS.txt"})

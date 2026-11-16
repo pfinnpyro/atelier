@@ -22,13 +22,13 @@ jobs:
             target: windows-x64
             triple: x86_64-pc-windows-msvc
             options: '--installer'
-          # The FIPS variant: form profiles sealed by Windows CNG.
+          # The FIPS variant: form profiles and OpenPGP done by Windows CNG.
           - os: windows-2022
             target: windows-x64
             triple: x86_64-pc-windows-msvc
             options: '--installer --fips'
             variant: '-fips'
-            features: '--features atelier-app/fips'
+            features: '--features atelier-app/fips,atelier-cli/fips'
           - os: ubuntu-22.04
             target: linux-x64
             triple: x86_64-unknown-linux-gnu

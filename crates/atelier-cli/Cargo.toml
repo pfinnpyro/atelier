@@ -11,10 +11,16 @@ publish.workspace = true
 name = "atelier"
 path = "src/main.rs"
 
+[features]
+# OpenPGP through the operating system's FIPS-validated module (Windows
+# CNG) and not Atelier's own code. Windows only so far.
+fips = ["atelier-pgp/fips"]
+
 [dependencies]
 atelier-filters.workspace = true
 atelier-form.workspace = true
 atelier-ocr.workspace = true
+atelier-pgp.workspace = true
 atelier-render.workspace = true
 atelier-syntax.workspace = true
 atelier-view.workspace = true
