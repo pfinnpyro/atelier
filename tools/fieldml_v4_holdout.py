@@ -40,7 +40,7 @@ OLD_CLASSES = {
 
 
 def build():
-    sources = json.loads((DATA / 'holdout-sources.json').read_text())
+    sources = json.loads((DATA / 'holdout-sources.json').read_text(encoding='utf-8'))
     for s in sources:
         path = DATA / 'sources' / (s['id'] + '.pdf')
         if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest() != s['sha256']:
@@ -289,11 +289,11 @@ def build():
                                  f['role'], clean(f['label']), clean(f['section'])]))
     for s in sources:
         s['annotated_fields'] = sum(f['source'] == s['id'] for f in fields)
-    (DATA / 'holdout-sources.json').write_text(json.dumps(sources, indent=2) + '\n')
-    (DATA / 'holdout-fields.json').write_text(json.dumps(fields, indent=2, ensure_ascii=False) + '\n')
-    (DATA / 'holdout-labels.tsv').write_text('\n'.join(labels) + '\n')
-    (DATA / 'holdout-gold.tsv').write_text('\n'.join(gold) + '\n')
-    (DATA / 'holdout-extracted.tsv').write_text('\n'.join(actual) + '\n')
+    (DATA / 'holdout-sources.json').write_text(json.dumps(sources, indent=2) + '\n', encoding='utf-8')
+    (DATA / 'holdout-fields.json').write_text(json.dumps(fields, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    (DATA / 'holdout-labels.tsv').write_text('\n'.join(labels) + '\n', encoding='utf-8')
+    (DATA / 'holdout-gold.tsv').write_text('\n'.join(gold) + '\n', encoding='utf-8')
+    (DATA / 'holdout-extracted.tsv').write_text('\n'.join(actual) + '\n', encoding='utf-8')
     print('v4 holdout fields:', len(fields), 'families:', len(sources),
           {s['id']: s['annotated_fields'] for s in sources})
 

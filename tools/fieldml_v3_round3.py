@@ -33,7 +33,7 @@ DATA = Path(__file__).resolve().parents[1] / 'crates/atelier-fieldml/data/v3'
 
 
 def build():
-    sources = json.loads((DATA / 'round3-sources.json').read_text())
+    sources = json.loads((DATA / 'round3-sources.json').read_text(encoding='utf-8'))
     for s in sources:
         path = DATA / 'sources' / (s['id'] + '.pdf')
         if hashlib.sha256(path.read_bytes()).hexdigest() != s['sha256']:
@@ -211,7 +211,7 @@ def build():
     gold, actual = [header], [header]
     # The reserved calibration families, unchanged from the earlier round.
     for name, out in [('fresh-gold.tsv', gold), ('fresh-extracted.tsv', actual)]:
-        out.extend(r for r in (DATA / name).read_text().splitlines() if r.startswith('validation\t'))
+        out.extend(r for r in (DATA / name).read_text(encoding='utf-8').splitlines() if r.startswith('validation\t'))
     for f in fields:
         label, context, evidence = extract(docs[f['source']][f['page'] - 1], f)
         f.update(extracted_label=label, extracted_section=context, label_evidence=evidence)
@@ -220,10 +220,10 @@ def build():
         actual.append('\t'.join(prefix + [label or f['field'], context]))
     for s in sources:
         s['annotated_fields'] = sum(f['source'] == s['id'] for f in fields)
-    (DATA / 'round3-sources.json').write_text(json.dumps(sources, indent=2) + '\n')
-    (DATA / 'round3-fields.json').write_text(json.dumps(fields, indent=2, ensure_ascii=False) + '\n')
-    (DATA / 'round3-gold.tsv').write_text('\n'.join(gold) + '\n')
-    (DATA / 'round3-extracted.tsv').write_text('\n'.join(actual) + '\n')
+    (DATA / 'round3-sources.json').write_text(json.dumps(sources, indent=2) + '\n', encoding='utf-8')
+    (DATA / 'round3-fields.json').write_text(json.dumps(fields, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    (DATA / 'round3-gold.tsv').write_text('\n'.join(gold) + '\n', encoding='utf-8')
+    (DATA / 'round3-extracted.tsv').write_text('\n'.join(actual) + '\n', encoding='utf-8')
     rows = [r for r in csv.reader(io.StringIO('\n'.join(gold[1:])), delimiter='\t') if r[0] == 'test']
     print('Round-3 test slots:', len(fields), 'families:', len(sources),
           'positives:', sum(r[3] != 'Other' for r in rows))

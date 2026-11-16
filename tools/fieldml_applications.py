@@ -83,7 +83,7 @@ def extract(page, field):
 
 
 def build():
-    manifest=json.loads((DATA/'applications.json').read_text())
+    manifest=json.loads((DATA/'applications.json').read_text(encoding='utf-8'))
     annotations=[]
     for source in manifest:
         if source.get('sha256'):
@@ -253,14 +253,14 @@ def build():
         prefix=[split[f['source']],f['source'],f['field'],f['klass']]
         gold.append('\t'.join(prefix+[clean(f['label']),clean(f['section'])]))
         extracted.append('\t'.join(prefix+[label,section]))
-    (DATA/'applications-gold.tsv').write_text('\n'.join(gold)+'\n')
-    (DATA/'applications-extracted.tsv').write_text('\n'.join(extracted)+'\n')
-    (DATA/'applications-fields.json').write_text(json.dumps(annotations,indent=2,ensure_ascii=False)+'\n')
+    (DATA/'applications-gold.tsv').write_text('\n'.join(gold)+'\n', encoding='utf-8')
+    (DATA/'applications-extracted.tsv').write_text('\n'.join(extracted)+'\n', encoding='utf-8')
+    (DATA/'applications-fields.json').write_text(json.dumps(annotations,indent=2,ensure_ascii=False)+'\n', encoding='utf-8')
     for s in manifest:
         path=APP/(s['id']+'.pdf')
         s.update(sha256=hashlib.sha256(path.read_bytes()).hexdigest(),bytes=path.stat().st_size,
                  annotated_fields=sum(f['source']==s['id'] for f in annotations))
-    (DATA/'applications.json').write_text(json.dumps(manifest,indent=2)+'\n')
+    (DATA/'applications.json').write_text(json.dumps(manifest,indent=2)+'\n', encoding='utf-8')
     print('Annotated',len(annotations),'slots across',len(manifest),'application families')
 
 
@@ -268,11 +268,11 @@ def build():
 def fixtures(out):
     """Save annotated derivatives; benchmark extraction always uses originals."""
     from fieldml_corpus import expected, profile
-    manifest=json.loads((DATA/'applications.json').read_text())
-    annotations=json.loads((DATA/'applications-fields.json').read_text())
+    manifest=json.loads((DATA/'applications.json').read_text(encoding='utf-8'))
+    annotations=json.loads((DATA/'applications-fields.json').read_text(encoding='utf-8'))
     groups=defaultdict(list)
     for f in annotations:groups[f['source']].append(f)
-    prediction_rows=list(csv.DictReader((out/'predictions.tsv').open(),delimiter='\t'))
+    prediction_rows=list(csv.DictReader((out/'predictions.tsv').open(encoding='utf-8'),delimiter='\t'))
     predictions={(r['form'],r['field']):r for r in prediction_rows if r['variant']=='contextual' and r['seed']=='1' and r['track'] in ['gold','synthetic']}
     dest=out/'pdfs';dest.mkdir(exist_ok=True)
     all_examples=[]
@@ -333,16 +333,16 @@ def fixtures(out):
                  for f,value,said,accepted in zip(fields,wants,says,allowed)]
         record=dict(form=source,split=split,profile=p,track='gold labels and sections',
                     derivative_note='Manual printable slots become annotated widgets only in these fixtures; benchmark uses source originals.',fields=records)
-        (dest/f'{source}.json').write_text(json.dumps(record,indent=2)+'\n');all_examples.append(record)
+        (dest/f'{source}.json').write_text(json.dumps(record,indent=2)+'\n', encoding='utf-8');all_examples.append(record)
     for m in manifest:write_versions(m['id'],groups[m['id']],m['split'])
     synthetic=defaultdict(list);splits={}
-    for row in csv.reader((out/'synthetic.tsv').read_text().splitlines(),delimiter='\t'):
+    for row in csv.reader((out/'synthetic.tsv').read_text(encoding='utf-8').splitlines(),delimiter='\t'):
         if not row or row[0].startswith('#'):continue
         split,source,field,klass,label,section=row
         if int(source.rsplit('-',1)[-1]) >= {'train':8,'validation':4,'test':4}[split]:continue
         synthetic[source].append(dict(source=source,field=field,klass=klass,label=label,section=section));splits[source]=split
     for source,fields in synthetic.items():write_versions(source,fields,splits[source],True)
-    (out/'expectations.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in all_examples))
+    (out/'expectations.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in all_examples), encoding='utf-8')
     print('Saved and read back',len(all_examples),'blank/expected/predicted/accepted PDF sets')
 
 if __name__=='__main__':

@@ -101,7 +101,7 @@ KIND_WORDS = [
 def load_fields():
     fields = []
     for path in SOURCES:
-        fields.extend(json.loads(path.read_text()))
+        fields.extend(json.loads(path.read_text(encoding='utf-8')))
     return fields
 
 
@@ -146,7 +146,7 @@ def draft():
         rows.append([f["source"], str(f["page"]), f["field"], guess_kind(f), group, role,
                      f["label"], f["section"]])
     path = OUT / "labels-draft.tsv"
-    with path.open("w") as out:
+    with path.open("w", encoding='utf-8') as out:
         out.write("# " + "\t".join(HEADER) + "\n")
         for r in rows:
             out.write("\t".join(clean(c) for c in r) + "\n")
@@ -159,7 +159,7 @@ def clean(s):
 
 def read_labels(path):
     rows = []
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding='utf-8').splitlines():
         if not line or line.startswith("#"):
             continue
         cols = line.split("\t")
@@ -171,7 +171,7 @@ def apply():
     rows = read_labels(OUT / "labels-draft.tsv")
     by_key = {(r["form"], r["field"]): r for r in rows}
     errors = 0
-    for n, line in enumerate((OUT / "review.txt").read_text().splitlines(), 1):
+    for n, line in enumerate((OUT / "review.txt").read_text(encoding='utf-8').splitlines(), 1):
         if not line.strip() or line.startswith("#"):
             continue
         parts = line.split("|")
@@ -186,7 +186,7 @@ def apply():
                 row[col] = val
     if errors:
         sys.exit(1)
-    with (OUT / "labels.tsv").open("w") as out:
+    with (OUT / "labels.tsv").open("w", encoding='utf-8') as out:
         out.write("# " + "\t".join(HEADER) + "\n")
         for r in rows:
             out.write("\t".join(r[c] for c in HEADER) + "\n")
@@ -244,7 +244,7 @@ def corpus():
     ]:
         ext = {}
         for path in extracted:
-            for line in path.read_text().splitlines():
+            for line in path.read_text(encoding='utf-8').splitlines():
                 if not line or line.startswith("#"):
                     continue
                 c = line.split("\t") + [""]
@@ -253,7 +253,7 @@ def corpus():
         missing = [(r["form"], r["field"]) for r in rows if (r["form"], r["field"]) not in ext]
         if missing:
             sys.exit(f"{out.name}: no extracted label for {missing[:3]}")
-        with out.open("w") as f:
+        with out.open("w", encoding='utf-8') as f:
             f.write("# " + "\t".join(CORPUS_HEADER) + "\n")
             for r in rows:
                 e = ext[(r["form"], r["field"])]
