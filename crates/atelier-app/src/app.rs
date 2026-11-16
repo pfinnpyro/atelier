@@ -23,6 +23,7 @@ use crate::worker::{Done, Job, Pool};
 
 mod annotate;
 mod colors;
+mod commands;
 mod controls;
 mod detect;
 mod form;
@@ -58,8 +59,12 @@ use crate::settings::Settings;
 
 const MIN_ZOOM: f64 = 0.05;
 const MAX_ZOOM: f64 = 64.0;
-/// GPU memory for page tiles.
-const TILE_BUDGET: usize = 512 << 20;
+/// Sharp tiles wait this long after the zoom last changed, so resizing
+/// the window or pinching draws each page once, not once per step.
+const ZOOM_SETTLE: std::time::Duration = std::time::Duration::from_millis(140);
+/// Page pictures and page texts kept for the file in front.
+const MAX_THUMBS: usize = 240;
+const MAX_TEXTS: usize = 160;
 const SELECTION: Color32 = Color32::from_rgba_premultiplied(0, 70, 160, 90);
 const HIT: Color32 = Color32::from_rgba_premultiplied(120, 100, 0, 110);
 const CURRENT_HIT: Color32 = Color32::from_rgba_premultiplied(160, 70, 0, 150);
@@ -128,7 +133,35 @@ struct Open {
     suggest: Option<detect::Suggest>,
 }
 
+/// A file read and parsed on a thread of its own.
+enum Loaded {
+    Ready {
+        doc: Box<Document>,
+        name: String,
+        path: Option<PathBuf>,
+    },
+    /// It needs a password; the bytes wait for one.
+    Locked {
+        data: Vec<u8>,
+        name: String,
+        path: Option<PathBuf>,
+    },
+    Failed(String),
+}
+
+/// A save that finished writing on a thread of its own.
+struct Saved {
+    /// The document as it was written.
+    doc: Arc<Document>,
+    path: PathBuf,
+    to: SaveTo,
+    result: Result<(), String>,
+    /// What was waiting on the save: closing the tab or the window.
+    then: Option<Pending>,
+}
+
 /// Something waiting on the unsaved-changes prompt.
+#[derive(Clone, Copy)]
 enum Pending {
     /// Closing the window.
     Close,
@@ -198,6 +231,35 @@ pub struct Viewer {
     recent: crate::recent::Recent,
     annotate: annotate::Annotate,
     security: security::SecurityUi,
+    /// The memory limits in force.
+    budgets: crate::memory::Budgets,
+    /// Files being read, and how many.
+    loaded: (
+        std::sync::mpsc::Sender<Loaded>,
+        std::sync::mpsc::Receiver<Loaded>,
+    ),
+    loading: usize,
+    /// Saves being written, and how many.
+    saved: (
+        std::sync::mpsc::Sender<Saved>,
+        std::sync::mpsc::Receiver<Saved>,
+    ),
+    saving: usize,
+    /// The kind of setting Settings is showing.
+    settings_pane: settings_window::Pane,
+    /// The find bar floating over the page is open.
+    find_bar: bool,
+    /// The message shown as a toast: its text, whether it is an error,
+    /// and when it came up.
+    toast: Option<(String, bool, std::time::Instant)>,
+    /// The notice and error last seen, to tell when a new one arrives.
+    seen: (Option<String>, Option<String>),
+    /// Key presses and edits picked from a menu, for the next frame's input.
+    injected: Vec<Event>,
+    /// When the zoom last changed.
+    zoom_changed: Option<std::time::Instant>,
+    /// The scale tiles were last drawn for.
+    last_scale: u32,
     #[cfg(target_os = "macos")]
     mac: mac::Mac,
 }
@@ -240,7 +302,21 @@ impl Viewer {
         ctx.options_mut(|o| o.zoom_with_keyboard = false);
         controls::style(&ctx);
         let wake = ctx.clone();
+        let budgets = crate::memory::Budgets::of(settings.memory);
+        atelier_render::set_image_cache_budget(budgets.images);
         Self {
+            budgets,
+            loaded: std::sync::mpsc::channel(),
+            loading: 0,
+            saved: std::sync::mpsc::channel(),
+            saving: 0,
+            injected: Vec::new(),
+            settings_pane: Default::default(),
+            find_bar: false,
+            toast: None,
+            seen: (None, None),
+            zoom_changed: None,
+            last_scale: 0,
             pool: Pool::new(move || wake.request_repaint()),
             ctx,
             open: None,
@@ -283,10 +359,75 @@ impl Viewer {
         }
     }
 
+    /// Opens a file in a new tab, or brings forward the tab that already
+    /// has it. The file is read and parsed on a thread of its own, so a
+    /// big one does not hold up the window.
     fn open_path(&mut self, path: &Path) {
-        match std::fs::read(path) {
-            Ok(data) => self.open_bytes(data, display_name(path), Some(path.to_path_buf())),
-            Err(e) => self.error = Some(format!("Could not read {}: {e}", path.display())),
+        if let Some(i) = self.tab_with(path) {
+            self.switch_to(i);
+            return;
+        }
+        let (path, name) = (path.to_path_buf(), display_name(path));
+        let (tx, wake) = (self.loaded.0.clone(), self.ctx.clone());
+        let work = move || {
+            let loaded = match std::fs::read(&path) {
+                Ok(data) => Self::parse(data, name, Some(path)),
+                Err(e) => Loaded::Failed(format!("Could not read {}: {e}", path.display())),
+            };
+            let _ = tx.send(loaded);
+            wake.request_repaint();
+        };
+        match std::thread::Builder::new().name("open".into()).spawn(work) {
+            Ok(_) => self.loading += 1,
+            Err(e) => self.error = Some(format!("Could not start opening the file: {e}")),
+        }
+    }
+
+    /// Parses a file's bytes with no password, off the window's thread.
+    fn parse(data: Vec<u8>, name: String, path: Option<PathBuf>) -> Loaded {
+        let parsed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let doc = Document::open_with_password(&data[..], b"")?;
+            // Walks the page tree now, so the window need not.
+            doc.pages()?;
+            Ok::<_, Error>(doc)
+        }));
+        match parsed {
+            Ok(Ok(doc)) => Loaded::Ready {
+                doc: Box::new(doc),
+                name,
+                path,
+            },
+            Ok(Err(Error::Password)) => Loaded::Locked { data, name, path },
+            Ok(Err(e)) => Loaded::Failed(format!("Could not open {name}: {e}")),
+            Err(_) => Loaded::Failed(format!("Could not open {name}: it could not be read.")),
+        }
+    }
+
+    /// Takes in the files that finished loading.
+    fn finish_loads(&mut self) {
+        while let Ok(loaded) = self.loaded.1.try_recv() {
+            self.loading = self.loading.saturating_sub(1);
+            match loaded {
+                Loaded::Ready { doc, name, path } => {
+                    // Opened twice in quick succession: show the first.
+                    if let Some(i) = path.as_deref().and_then(|p| self.tab_with(p)) {
+                        self.switch_to(i);
+                    } else {
+                        self.install(*doc, name, path);
+                    }
+                }
+                Loaded::Locked { data, name, path } => {
+                    self.locked = Some(Locked {
+                        data,
+                        name,
+                        path,
+                        password: String::new(),
+                        wrong: false,
+                        focus: true,
+                    });
+                }
+                Loaded::Failed(e) => self.error = Some(e),
+            }
         }
     }
 
@@ -344,6 +485,11 @@ impl Viewer {
                 return;
             }
         };
+        self.install(doc, name, path);
+    }
+
+    /// Shows a parsed document in a new tab.
+    fn install(&mut self, doc: Document, name: String, path: Option<PathBuf>) {
         let pages = match doc.pages() {
             Ok(p) => p.iter().map(PageGeom::of).collect(),
             Err(e) => {
@@ -378,7 +524,7 @@ impl Viewer {
             name,
             generation: self.generation,
             layout: Layout::new(pages, 1.0),
-            tiles: TileCache::new(TILE_BUDGET),
+            tiles: TileCache::new(self.budgets.tiles),
             failed: HashSet::new(),
             text: HashMap::new(),
             warnings,
@@ -435,6 +581,13 @@ impl Viewer {
     /// to one the person picks. The file is written beside the target and
     /// then moved over it, so a failed write never leaves half a file.
     fn save(&mut self, to: SaveTo) {
+        self.save_then(to, None);
+    }
+
+    /// [`Viewer::save`], going on to `then` once the file is written.
+    /// The bytes are written on a thread of their own; the file counts as
+    /// saved when that ends well.
+    fn save_then(&mut self, to: SaveTo, then: Option<Pending>) {
         // Reject pending restricted edits before consuming ink/editor buffers or
         // presenting a save dialog. An unchanged copy is still safe to save.
         if let Some(o) = &self.open {
@@ -472,29 +625,76 @@ impl Viewer {
             }
         };
         let Some(path) = path else { return };
-        if let Err(e) = write_replacing(&path, o.doc.data()) {
-            self.error = Some(format!("Could not save {}: {e}", path.display()));
-            return;
+        let doc = o.doc.clone();
+        let (tx, wake) = (self.saved.0.clone(), self.ctx.clone());
+        let work = move || {
+            let result = write_replacing(&path, doc.data())
+                .map_err(|e| format!("Could not save {}: {e}", path.display()));
+            let _ = tx.send(Saved {
+                doc,
+                path,
+                to,
+                result,
+                then,
+            });
+            wake.request_repaint();
+        };
+        match std::thread::Builder::new().name("save".into()).spawn(work) {
+            Ok(_) => self.saving += 1,
+            Err(e) => self.error = Some(format!("Could not start saving: {e}")),
         }
-        let Some(o) = &mut self.open else { return };
-        let xfa = o.safety.xfa.is_some() && o.session.is_dirty();
-        if to == SaveTo::Copy {
-            self.notice = Some(format!("Saved a copy as {}.", display_name(&path)));
-        } else {
-            self.recent.add(&path);
-            o.name = display_name(&path);
-            o.path = Some(path);
+    }
+
+    /// Takes in the saves that finished writing.
+    fn finish_saves(&mut self) {
+        while let Ok(saved) = self.saved.1.try_recv() {
+            self.saving = self.saving.saturating_sub(1);
+            if let Err(e) = saved.result {
+                self.error = Some(e);
+                continue;
+            }
+            let name = display_name(&saved.path);
+            if saved.to != SaveTo::Copy {
+                self.recent.add(&saved.path);
+            }
+            // The file the save was of, in front or in another tab. It is
+            // only marked saved if it has not changed since it was written.
+            let front = self
+                .open
+                .as_ref()
+                .is_some_and(|o| Arc::ptr_eq(&o.doc, &saved.doc));
+            let Some(o) = self.open_showing(&saved.doc) else {
+                self.notice = Some(format!(
+                    "Saved {name}. Changes made while it was being written are not in the file yet."
+                ));
+                continue;
+            };
+            let xfa = o.safety.xfa.is_some() && o.session.is_dirty();
+            if saved.to != SaveTo::Copy {
+                o.name = name.clone();
+                o.path = Some(saved.path);
+            }
+            // The changes are saved somewhere, so closing need not ask again.
+            o.session.saved(o.doc.clone());
+            if saved.to == SaveTo::Copy {
+                self.notice = Some(format!("Saved a copy as {name}."));
+            }
+            if xfa {
+                self.notice = Some(
+                    "Saved. The XFA form is kept as it was, so Acrobat may show its own XFA data \
+                     rather than these field values."
+                        .into(),
+                );
+            }
+            if front {
+                self.update_title();
+                if let Some(pending) = saved.then
+                    && !self.is_dirty()
+                {
+                    self.proceed(pending);
+                }
+            }
         }
-        if xfa {
-            self.notice = Some(
-                "Saved. The XFA form is kept as it was, so Acrobat may show its own XFA data \
-                 rather than these field values."
-                    .into(),
-            );
-        }
-        // The changes are saved somewhere, so closing need not ask again.
-        o.session.saved(o.doc.clone());
-        self.update_title();
     }
 
     /// Asks whether to save changes before closing or opening another file.
@@ -536,12 +736,18 @@ impl Viewer {
             return;
         }
         if choice == 0 {
-            self.save(SaveTo::Overwrite);
-            if self.is_dirty() {
-                // Not saved (cancelled or failed): stay.
-                return;
-            }
+            // Closing goes ahead when the file is written; if saving is
+            // cancelled or fails, the file stays open.
+            self.save_then(SaveTo::Overwrite, Some(pending));
+            return;
         }
+        self.proceed(pending);
+    }
+
+    /// Closes the tab or the window, the unsaved changes having been
+    /// saved or given up.
+    fn proceed(&mut self, pending: Pending) {
+        let ctx = self.ctx.clone();
         match pending {
             Pending::Close => {
                 // Not saving drops the changes; other tabs may have some
@@ -599,6 +805,7 @@ impl Viewer {
             .map_or_else(|| o.layout.page_at_y(ly), |(page, _, _)| page);
         let user = o.layout.to_user(page, lx, ly);
         o.layout.set_zoom(zoom);
+        self.zoom_changed = Some(std::time::Instant::now());
         if let (Some(u), Some(t)) = (user, o.layout.user_to_layout(page)) {
             let p = t.apply(u);
             let shift = ((f64::from(self.view_size.x) - o.layout.size().0) / 2.0).max(0.0);
@@ -703,6 +910,8 @@ impl Viewer {
 
     /// Scrolls so a hit is in view, if it is not already.
     fn reveal_hit(&mut self, i: usize) {
+        // A hit is on a page, so the page grid gives way to the pages.
+        self.organize.grid = false;
         let shift = self.centre_shift() as f32;
         let Some(o) = &self.open else { return };
         let Some(hit) = self.search.hits.get(i) else {
@@ -798,7 +1007,10 @@ impl Viewer {
                     hits,
                     text,
                 } if generation == o.generation && search == self.search.id => {
-                    o.text.entry(page).or_insert(text);
+                    // Kept for the pages with hits, to draw and reveal them.
+                    if !hits.is_empty() {
+                        o.text.entry(page).or_insert(text);
+                    }
                     self.search.pages_done = page + 1;
                     let first_new = self.search.hits.len();
                     self.search
@@ -837,6 +1049,11 @@ impl Viewer {
                     );
                     o.thumbs.insert(page, tex);
                     o.thumb_stale.remove(&page);
+                    if o.thumbs.len() > MAX_THUMBS {
+                        // Keep the page pictures nearest the one that came.
+                        let reach = MAX_THUMBS / 3;
+                        o.thumbs.retain(|p, _| p.abs_diff(page) <= reach);
+                    }
                 }
                 Done::Outline {
                     opened,
@@ -890,6 +1107,17 @@ impl Viewer {
                 }
                 _ => {}
             }
+        }
+        // A long file's text is kept only around the page in view.
+        let here = self.current_page();
+        if let Some(o) = &mut self.open
+            && o.text.len() > MAX_TEXTS
+        {
+            let sel = self.selection;
+            o.text.retain(|p, _| {
+                p.abs_diff(here) <= MAX_TEXTS / 4
+                    || sel.is_some_and(|s| *p == s.anchor.page || *p == s.focus.page)
+            });
         }
         for (run, page, found) in detected {
             self.detected(run, page, found);
@@ -956,6 +1184,24 @@ impl Viewer {
         if pressed(Key::F3) {
             self.run_search(shift);
         }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::G)) {
+            self.run_search(true);
+        }
+        if shortcut(Key::G) {
+            self.run_search(false);
+        }
+        if shortcut(Key::Q) {
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+        }
+        if shortcut(Key::Comma) {
+            self.window = Some(Window::Settings);
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::ALT, Key::ArrowDown)) {
+            self.run_command(crate::commands::Command::NextPage);
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::ALT, Key::ArrowUp)) {
+            self.run_command(crate::commands::Command::PreviousPage);
+        }
         if copy && !typing {
             self.copy_selection();
         }
@@ -1002,9 +1248,13 @@ impl Viewer {
         if self.open.is_none() {
             return;
         }
-        self.settings.sidebar = true;
-        self.organize.grid = false;
-        self.sidebar.find();
+        // Finding does not leave the page grid; showing a hit does.
+        if self.settings.find_floating {
+            self.find_bar = true;
+        } else {
+            self.settings.sidebar = true;
+            self.sidebar.find();
+        }
         self.focus_search = true;
     }
 
@@ -1066,119 +1316,6 @@ impl Viewer {
         });
     }
 
-    /// The menu behind the button at the start of the toolbar.
-    fn main_menu(&mut self, ui: &mut egui::Ui) {
-        ui.menu_button(
-            crate::icons::Icon::Menu
-                .image()
-                .tint(ui.visuals().text_color()),
-            |ui| {
-                if ui
-                    .add_enabled(
-                        self.open.is_some(),
-                        egui::Button::new("Find in document…").shortcut_text("Ctrl+F"),
-                    )
-                    .clicked()
-                {
-                    self.request_find();
-                    ui.close();
-                }
-                if ui.button("Print…").clicked() {
-                    self.open_print();
-                    ui.close();
-                }
-                ui.add_enabled_ui(self.open.is_some(), |ui| {
-                    ui.menu_button("Mark", |ui| self.mark_menu(ui));
-                });
-                if ui
-                    .add_enabled(
-                        self.open.is_some(),
-                        egui::Button::selectable(
-                            self.reviewing_fields(),
-                            "Find tables and form fields…",
-                        ),
-                    )
-                    .on_hover_text(
-                        "Suggest fields for the boxes, lines and tables of a printed form",
-                    )
-                    .clicked()
-                {
-                    if self.reviewing_fields() {
-                        self.close_detect();
-                    } else {
-                        self.start_detect();
-                    }
-                    ui.close();
-                }
-                if ui
-                    .add(egui::Button::selectable(
-                        self.profiles.open,
-                        "Fill from a profile…",
-                    ))
-                    .on_hover_text(
-                        "Keep your name, addresses and other details, and fill forms with them",
-                    )
-                    .clicked()
-                {
-                    self.toggle_profiles();
-                    ui.close();
-                }
-                ui.separator();
-                if let Some(fv) = self.open.as_ref().and_then(|o| o.form.as_ref())
-                    && ui.selectable_label(fv.highlight, "Fields").clicked()
-                {
-                    self.toggle_highlight();
-                    ui.close();
-                }
-                if ui
-                    .selectable_label(self.inspector.open, "Inspect")
-                    .clicked()
-                {
-                    self.inspector.open = !self.inspector.open;
-                    ui.close();
-                }
-                if ui.selectable_label(self.colors.open, "Colours").clicked() {
-                    self.toggle_colors();
-                    ui.close();
-                }
-                if ui.button("Rotate pages left").clicked() {
-                    self.rotate_pages(-1);
-                    ui.close();
-                }
-                if ui.button("Rotate pages right").clicked() {
-                    self.rotate_pages(1);
-                    ui.close();
-                }
-                let orienting = self.open.as_ref().is_some_and(|o| o.orienting.is_some());
-                if ui
-                    .add_enabled(!orienting, egui::Button::new("Auto-orient pages"))
-                    .clicked()
-                {
-                    self.auto_orient();
-                    ui.close();
-                }
-                ui.separator();
-                if ui
-                    .add(
-                        egui::Button::image_and_text(
-                            crate::icons::Icon::Settings.image(),
-                            "Settings…",
-                        )
-                        .image_tint_follows_text_color(true),
-                    )
-                    .clicked()
-                {
-                    self.window = Some(Window::Settings);
-                    ui.close();
-                }
-                if ui.button("About Atelier").clicked() {
-                    self.window = Some(Window::About);
-                    ui.close();
-                }
-            },
-        );
-    }
-
     #[cfg(target_os = "macos")]
     fn native_menu_bar(&self) -> bool {
         self.mac.has_menu_bar()
@@ -1218,7 +1355,7 @@ impl Viewer {
                     .button()
                     .selected(self.settings.sidebar),
             )
-            .on_hover_text("Page pictures and outline (F4)")
+            .on_hover_text(self.tip("Page pictures and outline", "F4"))
             .clicked()
         {
             self.toggle_sidebar();
@@ -1230,7 +1367,10 @@ impl Viewer {
             self.settings.toolbar_display[0],
             "Recent files",
         );
-        if open.on_hover_text("Open a PDF (Ctrl+O)").clicked() {
+        if open
+            .on_hover_text(self.tip("Open a PDF", "Mod+O"))
+            .clicked()
+        {
             self.pick_file();
         }
         egui::Popup::menu(&recent).show(|ui| {
@@ -1246,12 +1386,15 @@ impl Viewer {
                 self.settings.toolbar_display[1],
                 "Save options",
             );
-            if save.on_hover_text("Save changes (Ctrl+S)").clicked() {
+            if save
+                .on_hover_text(self.tip("Save changes", "Mod+S"))
+                .clicked()
+            {
                 self.save(SaveTo::Overwrite);
             }
             egui::Popup::menu(&options).show(|ui| {
                 if ui
-                    .add(egui::Button::new("Save").shortcut_text("Ctrl+S"))
+                    .add(egui::Button::new("Save").shortcut_text(self.keys("Mod+S")))
                     .on_hover_text("Save over the file it was opened from")
                     .clicked()
                 {
@@ -1259,7 +1402,7 @@ impl Viewer {
                     ui.close();
                 }
                 if ui
-                    .add(egui::Button::new("Save as…").shortcut_text("Ctrl+Shift+S"))
+                    .add(egui::Button::new("Save as…").shortcut_text(self.keys("Mod+Shift+S")))
                     .clicked()
                 {
                     self.save(SaveTo::As);
@@ -1284,7 +1427,7 @@ impl Viewer {
         ui.add_enabled_ui(enabled, |ui| {
             let centre = self.view_size / 2.0;
             if crate::icons::button(ui, crate::icons::Icon::Minus, "Zoom out")
-                .on_hover_text("Zoom out (Ctrl+−)")
+                .on_hover_text(self.tip("Zoom out", "Mod+-"))
                 .clicked()
             {
                 self.zoom_by(0.8, centre);
@@ -1311,7 +1454,7 @@ impl Viewer {
                 self.zoom_input = format!("{:.0}%", self.zoom() * 100.0);
             }
             if crate::icons::button(ui, crate::icons::Icon::Plus, "Zoom in")
-                .on_hover_text("Zoom in (Ctrl+=)")
+                .on_hover_text(self.tip("Zoom in", "Mod+="))
                 .clicked()
             {
                 self.zoom_by(1.25, centre);
@@ -1400,6 +1543,7 @@ impl Viewer {
             {
                 self.annotate.toggle_comments();
             }
+            self.status_tray(ui);
             crate::chrome::drag_space(ui);
             if let Some(o) = &self.open
                 && !o.warnings.is_empty()
@@ -1414,6 +1558,210 @@ impl Viewer {
                 }
             }
         });
+    }
+
+    /// The status symbols at the end of the toolbar: work going on, an
+    /// update on offer, an error, a notice. Each opens what it stands
+    /// for, so nothing has to sit over the page to be noticed.
+    fn status_tray(&mut self, ui: &mut egui::Ui) {
+        if self.loading > 0 || self.saving > 0 {
+            let what = if self.saving > 0 {
+                "Saving…"
+            } else {
+                "Opening…"
+            };
+            ui.add(egui::Spinner::new().size(16.0)).on_hover_text(what);
+        }
+        self.update_tray(ui);
+        let error_colour = ui.visuals().error_fg_color;
+        for is_error in [true, false] {
+            let text = if is_error { &self.error } else { &self.notice };
+            let Some(text) = text.clone() else { continue };
+            let (icon, tip, tint) = if is_error {
+                (
+                    crate::icons::Icon::Warning,
+                    "Something went wrong",
+                    Some(error_colour),
+                )
+            } else {
+                (crate::icons::Icon::Info, "Notice", None)
+            };
+            let mut button = icon.button();
+            if let Some(tint) = tint {
+                button = egui::Button::new(icon.image().tint(tint)).min_size(Vec2::splat(30.0));
+            }
+            let response = ui.add(button).on_hover_text(tip);
+            let mut dismiss = false;
+            egui::Popup::menu(&response).show(|ui| {
+                ui.set_max_width(360.0);
+                ui.label(&text);
+                ui.horizontal(|ui| {
+                    if ui.button("Dismiss").clicked() {
+                        dismiss = true;
+                        ui.close();
+                    }
+                    if ui.button("Copy").clicked() {
+                        ui.ctx().copy_text(text.clone());
+                        ui.close();
+                    }
+                });
+            });
+            if dismiss {
+                if is_error {
+                    self.error = None;
+                } else {
+                    self.notice = None;
+                }
+            }
+        }
+    }
+
+    /// A new notice or error comes up for a few seconds in the corner of
+    /// the window, then stays behind its symbol in the toolbar.
+    fn toasts(&mut self, ctx: &egui::Context) {
+        let now = std::time::Instant::now();
+        if self.seen.0 != self.notice {
+            self.seen.0 = self.notice.clone();
+            if let Some(text) = &self.notice {
+                self.toast = Some((text.clone(), false, now));
+            }
+        }
+        if self.seen.1 != self.error {
+            self.seen.1 = self.error.clone();
+            // With no file open the error is already in the middle of the
+            // window.
+            if let Some(text) = self.error.as_ref().filter(|_| self.open.is_some()) {
+                self.toast = Some((text.clone(), true, now));
+            }
+        }
+        let Some((text, is_error, since)) = self.toast.clone() else {
+            return;
+        };
+        let lasts = std::time::Duration::from_secs(if is_error { 12 } else { 7 });
+        let current = if is_error { &self.error } else { &self.notice };
+        if since.elapsed() >= lasts || current.as_ref() != Some(&text) {
+            self.toast = None;
+            return;
+        }
+        ctx.request_repaint_after(lasts - since.elapsed());
+        let mut close = false;
+        egui::Area::new(egui::Id::unique("toast"))
+            .order(egui::Order::Foreground)
+            .anchor(Align2::RIGHT_BOTTOM, Vec2::new(-16.0, -16.0))
+            .show(ctx, |ui| {
+                egui::Frame::popup(ui.style())
+                    .inner_margin(12.0)
+                    .show(ui, |ui| {
+                        ui.set_max_width(380.0);
+                        ui.horizontal_top(|ui| {
+                            let (icon, colour) = if is_error {
+                                (crate::icons::Icon::Warning, ui.visuals().error_fg_color)
+                            } else {
+                                (crate::icons::Icon::Info, ui.visuals().text_color())
+                            };
+                            ui.add(icon.image().tint(colour));
+                            ui.add(egui::Label::new(&text).wrap());
+                            let x = crate::icons::Icon::Close
+                                .button()
+                                .min_size(Vec2::splat(22.0))
+                                .frame(false);
+                            if ui.add(x).on_hover_text("Hide").clicked() {
+                                close = true;
+                            }
+                        });
+                    });
+            });
+        if close {
+            // Hidden, not dismissed: it stays behind its toolbar symbol.
+            self.toast = None;
+        }
+    }
+
+    /// Find as a bar floating over the top right of the pages.
+    fn find_bar_ui(&mut self, ctx: &egui::Context, pages: Rect) {
+        if !self.find_bar || !self.settings.find_floating || self.open.is_none() {
+            self.find_bar = false;
+            return;
+        }
+        let mut close = false;
+        egui::Area::new(egui::Id::unique("find-bar"))
+            .order(egui::Order::Foreground)
+            .pivot(Align2::RIGHT_TOP)
+            .fixed_pos(pages.right_top() + Vec2::new(-24.0, 12.0))
+            .show(ctx, |ui| {
+                egui::Frame::popup(ui.style())
+                    .inner_margin(6.0)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 4.0;
+                            ui.add(
+                                crate::icons::Icon::Find
+                                    .image()
+                                    .tint(ui.visuals().weak_text_color()),
+                            );
+                            let search = ui.add(
+                                egui::TextEdit::singleline(&mut self.search_input)
+                                    .frame(egui::Frame::NONE)
+                                    .desired_width(220.0)
+                                    .hint_text("Find in document…"),
+                            );
+                            if self.focus_search {
+                                search.request_focus();
+                                self.focus_search = false;
+                            }
+                            if search.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                                self.run_search(ui.input(|i| i.modifiers.shift));
+                                search.request_focus();
+                            }
+                            if search.has_focus() && ui.input(|i| i.key_pressed(Key::Escape)) {
+                                close = true;
+                            }
+                            let n = self.search.hits.len();
+                            let count = match (self.search.query.is_empty(), self.search.current) {
+                                (true, _) => String::new(),
+                                (false, Some(i)) => format!("{} of {n}", i + 1),
+                                (false, None) if self.search.done => "No matches".into(),
+                                (false, None) => "Searching…".into(),
+                            };
+                            ui.add_sized(
+                                [74.0, 20.0],
+                                egui::Label::new(egui::RichText::new(count).weak()),
+                            );
+                            let small = |icon: crate::icons::Icon| {
+                                icon.button().min_size(Vec2::splat(24.0)).frame(false)
+                            };
+                            if ui
+                                .add(small(crate::icons::Icon::Up))
+                                .on_hover_text(format!(
+                                    "Previous match ({})",
+                                    self.keys("Shift+Enter")
+                                ))
+                                .clicked()
+                            {
+                                self.run_search(true);
+                            }
+                            if ui
+                                .add(small(crate::icons::Icon::Down))
+                                .on_hover_text(format!("Next match ({})", self.keys("Enter")))
+                                .clicked()
+                            {
+                                self.run_search(false);
+                            }
+                            if ui
+                                .add(small(crate::icons::Icon::Close))
+                                .on_hover_text("Close (Esc)")
+                                .clicked()
+                            {
+                                close = true;
+                            }
+                        });
+                    });
+            });
+        if close {
+            self.find_bar = false;
+            self.pool.stop_search();
+            self.search = Search::default();
+        }
     }
 
     /// Asks for the password of an encrypted file.
@@ -1545,10 +1893,9 @@ impl Viewer {
         let rect = ui.available_rect_before_wrap();
         ui.painter()
             .rect_filled(rect, CornerRadius::ZERO, ui.visuals().panel_fill);
-        let msg = self
-            .error
-            .clone()
-            .unwrap_or_else(|| "Open a PDF with Ctrl+O, or drop one here.".into());
+        let msg = self.error.clone().unwrap_or_else(|| {
+            format!("Open a PDF with {}, or drop one here.", self.keys("Mod+O"))
+        });
         if self.recent.files.is_empty() {
             ui.painter().text(
                 rect.center(),
@@ -1783,6 +2130,25 @@ impl Viewer {
             }
         };
         let previews = current_scale > 2 * PREVIEW_SCALE;
+        // While the zoom is still changing (a window being resized, a
+        // pinch) pages are shown stretched from the tiles there are;
+        // sharp ones are drawn once it settles.
+        if current_scale != self.last_scale {
+            self.last_scale = current_scale;
+            self.zoom_changed
+                .get_or_insert_with(std::time::Instant::now);
+        }
+        let settling = match self.zoom_changed {
+            Some(at) if at.elapsed() < ZOOM_SETTLE => {
+                ui.ctx().request_repaint_after(ZOOM_SETTLE - at.elapsed());
+                // A page with nothing to show yet is drawn at once.
+                o.tiles.bytes() > 0
+            }
+            _ => {
+                self.zoom_changed = None;
+                false
+            }
+        };
         let around = |above: f64, below: f64| {
             ViewRect::new(
                 view.x,
@@ -1791,9 +2157,13 @@ impl Viewer {
                 view.h * (1.0 + above + below),
             )
         };
-        add_tiles(&mut jobs, wanted.clone());
+        // Quick previews of the pages in view come first: they cost a
+        // fraction of a sharp tile and put the page on screen.
         if previews {
             add_tiles(&mut jobs, tiles_at_scale(&o.layout, view, PREVIEW_SCALE));
+        }
+        if !settling {
+            add_tiles(&mut jobs, wanted.clone());
         }
         let mut pages: Vec<usize> = o.layout.visible_pages(view.y, view.bottom()).collect();
         if let Some(sel) = self.selection {
@@ -1832,10 +2202,12 @@ impl Viewer {
                 }
             }
         }
-        add_tiles(
-            &mut jobs,
-            tiles_for_view(&o.layout, around(1.0, 2.0), f64::from(ppp)),
-        );
+        if !settling {
+            add_tiles(
+                &mut jobs,
+                tiles_for_view(&o.layout, around(1.0, 2.0), f64::from(ppp)),
+            );
+        }
         if previews {
             add_tiles(
                 &mut jobs,
@@ -1977,9 +2349,10 @@ impl Viewer {
 }
 
 impl eframe::App for Viewer {
-    #[cfg(target_os = "macos")]
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        #[cfg(target_os = "macos")]
         self.mac_input(raw_input);
+        raw_input.events.append(&mut self.injected);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
@@ -1988,12 +2361,13 @@ impl eframe::App for Viewer {
         self.mac_frame();
         let dropped = ctx.input(|i| i.raw.dropped_files.first().cloned());
         if let Some(f) = dropped {
-            match f.bytes() {
-                Ok(data) => {
-                    let path = Some(f.path().to_path_buf()).filter(|p| p.is_file());
-                    self.open_bytes(data, display_name(f.path()), path);
+            if f.path().is_file() {
+                self.open_path(f.path());
+            } else {
+                match f.bytes() {
+                    Ok(data) => self.open_bytes(data, display_name(f.path()), None),
+                    Err(e) => self.error = Some(format!("Could not read the dropped file: {e}")),
                 }
-                Err(e) => self.error = Some(format!("Could not read the dropped file: {e}")),
             }
         }
         if ctx.input(|i| i.viewport().close_requested()) && !self.closing && self.show_unsaved_tab()
@@ -2002,6 +2376,8 @@ impl eframe::App for Viewer {
             self.confirm = Some(Pending::Close);
         }
         crate::chrome::resize_edges(&ctx);
+        self.finish_loads();
+        self.finish_saves();
         self.receive();
         if self.confirm.is_none() {
             self.annot_keys(&ctx);
@@ -2023,30 +2399,10 @@ impl eframe::App for Viewer {
         let _ = (frame, title_bar);
         self.organize_window(&ctx);
         self.tab_bar(ui);
-        self.update_banner(ui);
+        self.update_tick(&ctx);
         self.tool_bar(ui);
         self.fields_bar(ui);
         self.safety_notice(ui);
-        if let Some(note) = self.notice.clone().filter(|_| self.open.is_some()) {
-            egui::Panel::bottom("notice").show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(note);
-                    if ui.small_button("Dismiss").clicked() {
-                        self.notice = None;
-                    }
-                });
-            });
-        }
-        if let Some(err) = self.error.clone().filter(|_| self.open.is_some()) {
-            egui::Panel::bottom("status").show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.colored_label(ui.visuals().error_fg_color, err);
-                    if ui.small_button("Dismiss").clicked() {
-                        self.error = None;
-                    }
-                });
-            });
-        }
         if self.settings.sidebar {
             self.sidebar_panel(ui);
         }
@@ -2054,7 +2410,7 @@ impl eframe::App for Viewer {
             self.inspector_panel(ui);
         }
         self.comments_panel(ui);
-        egui::CentralPanel::no_frame().show(ui, |ui| {
+        let pages = egui::CentralPanel::no_frame().show(ui, |ui| {
             if self.organize.grid {
                 egui::Frame::new()
                     .fill(ui.visuals().panel_fill)
@@ -2064,6 +2420,8 @@ impl eframe::App for Viewer {
                 self.page_view(ui);
             }
         });
+        self.find_bar_ui(&ctx, pages.response.rect);
+        self.toasts(&ctx);
         if self.show_warnings {
             self.warnings_window(&ctx);
         }

@@ -9,7 +9,13 @@
 //! it, and those only while the profile is unlocked.
 //!
 //! A sealed file shows the profile's name, so the list can be shown
-//! without a passphrase, and nothing else.
+//! without a passphrase, and nothing else of what the profile holds.
+//!
+//! Both kinds of file also carry lines about the profile itself, each
+//! starting `meta`: so far `meta created`, when it was first saved. They
+//! are not details: nothing that fills a form reads them, and a sealed
+//! file keeps them in the clear, outside what its tag covers, so the list
+//! can show them while the profile is locked.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -94,6 +100,55 @@ pub struct Item {
     pub state: State,
     /// Goes up whenever the details change.
     pub revision: u64,
+    /// When the profile was first saved, in seconds since 1970; zero
+    /// when that is not known.
+    pub created: u64,
+}
+
+/// The key of the line that says when a profile was first saved.
+const META_CREATED: &str = "meta created";
+
+/// The `meta` lines for a profile made at `created`.
+fn meta_lines(created: u64) -> String {
+    if created == 0 {
+        return String::new();
+    }
+    format!("{META_CREATED} = {created}\n")
+}
+
+/// When a profile file says it was first saved.
+fn read_created(text: &str) -> Option<u64> {
+    text.lines().find_map(|line| {
+        let (key, value) = line.split_once('=')?;
+        (key.trim() == META_CREATED).then(|| value.trim().parse().ok())?
+    })
+}
+
+fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// A date such as `13 Nov 2026` (UTC) for seconds since 1970.
+pub fn date_text(secs: u64) -> String {
+    if secs == 0 {
+        return "—".into();
+    }
+    // Days to a civil date (Howard Hinnant's algorithm).
+    let z = (secs / 86_400) as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    const NAMES: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    format!("{day} {} {year}", NAMES[(month - 1) as usize])
 }
 
 impl Item {
@@ -147,6 +202,9 @@ fn random<const N: usize>() -> Result<[u8; N], Problem> {
 
 /// A sealed profile as its file has it.
 struct SealedFile {
+    /// When the profile was first saved; zero when the file does not say.
+    /// Kept in the clear and outside the tag: it is shown, never trusted.
+    created: u64,
     name: String,
     iterations: u32,
     salt: [u8; 16],
@@ -186,6 +244,7 @@ impl SealedFile {
             }
         }
         Some(Self {
+            created: read_created(text).unwrap_or(0),
             name: name?,
             iterations: iterations.filter(|n| (1..=MOST_ITERATIONS).contains(n))?,
             salt: salt?.try_into().ok()?,
@@ -197,7 +256,8 @@ impl SealedFile {
 
     fn to_text(&self) -> String {
         format!(
-            "{SEALED}\nprofile = {}\nkdf = {KDF}\niterations = {}\nsalt = {}\niv = {}\ndata = {}\ntag = {}\n",
+            "{SEALED}\n{}profile = {}\nkdf = {KDF}\niterations = {}\nsalt = {}\niv = {}\ndata = {}\ntag = {}\n",
+            meta_lines(self.created),
             self.name,
             self.iterations,
             hex(&self.salt),
@@ -281,13 +341,26 @@ impl Store {
             } else {
                 None
             };
+            let said = read_created(&text);
             wipe_string(&mut text);
             if let Some((name, state)) = item {
+                // A file from before profiles carried the date has only
+                // its own; it gets the line the next time it is saved.
+                let created = said.or_else(|| {
+                    entry
+                        .metadata()
+                        .ok()
+                        .and_then(|m| m.created().or_else(|_| m.modified()).ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs())
+                });
+                let created = created.unwrap_or(0);
                 store.items.push(Item {
                     id: id.to_string(),
                     name,
                     state,
                     revision: 0,
+                    created,
                 });
             }
         }
@@ -315,6 +388,15 @@ impl Store {
         if let Some(dir) = &self.dir {
             std::fs::remove_dir_all(dir).unwrap();
         }
+    }
+
+    /// When the profile with this id was first saved: as it says, or
+    /// now for a new one.
+    fn created(&self, id: &str) -> u64 {
+        self.find(id)
+            .map(|i| i.created)
+            .filter(|at| *at > 0)
+            .unwrap_or_else(now)
     }
 
     fn sort(&mut self) {
@@ -441,7 +523,7 @@ impl Store {
     }
 
     /// Puts a saved profile in the list, in place of the one it replaces.
-    fn put(&mut self, id: String, name: String, state: State) -> String {
+    fn put(&mut self, id: String, name: String, state: State, created: u64) -> String {
         let revision = self.find(&id).map_or(0, |i| i.revision) + 1;
         self.items.retain(|i| i.id != id);
         self.items.push(Item {
@@ -449,6 +531,7 @@ impl Store {
             name,
             state,
             revision,
+            created,
         });
         self.sort();
         id
@@ -469,12 +552,13 @@ impl Store {
             Some(id) => id.to_string(),
             None => self.new_id()?,
         };
-        let mut text = format!("{PLAIN}\n{}", profile.to_text());
+        let created = self.created(&id);
+        let mut text = format!("{PLAIN}\n{}{}", meta_lines(created), profile.to_text());
         let written = write(&self.path(&id)?, text.as_bytes());
         wipe_string(&mut text);
         written?;
         let name = profile.name.clone();
-        Ok(self.put(id, name, State::Plain(profile)))
+        Ok(self.put(id, name, State::Plain(profile), created))
     }
 
     /// Saves a profile sealed: a new one, or over the one with this id,
@@ -518,7 +602,9 @@ impl Store {
         );
         wipe_string(&mut text);
         let (data, tag) = sealed.ok_or(Problem::Module)?;
+        let created = self.created(&id);
         let file = SealedFile {
+            created,
             name: profile.name.clone(),
             iterations: keys.iterations,
             salt: keys.salt,
@@ -547,6 +633,7 @@ impl Store {
                 keys,
                 used: Instant::now(),
             },
+            created,
         ))
     }
 
@@ -567,6 +654,41 @@ impl Store {
 mod tests {
     use super::*;
     use atelier_form::{Entry, EntryKind, Standard};
+
+    #[test]
+    fn the_date_made_stays_with_the_file_and_out_of_the_details() {
+        let dir = folder("created");
+        let mut s = Store::at(Some(dir.clone()));
+        s.iterations = 1000;
+        let plain = s.save_plain(None, profile("Home")).unwrap();
+        let sealed = s
+            .save_sealed(None, profile("Work"), Some("correct horse"))
+            .unwrap();
+        let made = s.find(&plain).unwrap().created;
+        assert!(made > 0 && on_disk(&dir).matches(META_CREATED).count() == 2);
+        // Saving again keeps the date; reading the folder finds it, for
+        // a locked profile too, and it is no detail of either.
+        s.find_mut(&plain).unwrap().created = 1_000_000;
+        s.save_plain(Some(&plain), profile("Home")).unwrap();
+        s.find_mut(&sealed).unwrap().created = 2_000_000;
+        s.save_sealed(Some(&sealed), profile("Work"), None).unwrap();
+        let mut again = Store::at(Some(dir.clone()));
+        again.iterations = 1000;
+        assert_eq!(again.find(&plain).unwrap().created, 1_000_000);
+        assert!(again.find(&sealed).unwrap().locked());
+        assert_eq!(again.find(&sealed).unwrap().created, 2_000_000);
+        assert_eq!(
+            again.find(&plain).unwrap().profile(),
+            Some(&profile("Home"))
+        );
+        again.unlock(&sealed, "correct horse").unwrap();
+        assert_eq!(
+            again.find(&sealed).unwrap().profile(),
+            Some(&profile("Work"))
+        );
+        assert_eq!(date_text(1_000_000), "12 Jan 1970");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     /// An empty folder of its own for a test.
     fn folder(test: &str) -> PathBuf {

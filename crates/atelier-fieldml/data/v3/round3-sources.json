@@ -1,0 +1,50 @@
+[
+  {
+    "id": "library-dearborn",
+    "split": "test",
+    "url": "https://dearborn.gov/sites/default/files/2023-09/Library%20Card%20Application%20-%20English.pdf",
+    "sha256": "10d98b3487e82281acdfc7558726d533bbaecae1391dc8ec16c90f2bdea9fbe8",
+    "bytes": 154477,
+    "publisher": "Dearborn Public Library",
+    "target": "library card applicant",
+    "provenance": "Public blank form; no submitted records. Picked, split and annotated before any model was run on it (round 3, 2026-11-13).",
+    "coverage": "Every native text field once per name, or every printable writing slot, including all third-party and conditional groups; checkboxes, inline sentence blanks and staff-only areas excluded.",
+    "annotated_fields": 38
+  },
+  {
+    "id": "sports-laparks",
+    "split": "test",
+    "url": "https://laparks.org/sites/default/files/reccenter/north-hills-community-park/media/soccer-registration-form.pdf",
+    "sha256": "ff7ea06a2b6001cfb844b322b355790e65e6f7df0677403d806b6fa43c22882d",
+    "bytes": 668705,
+    "publisher": "Los Angeles Recreation and Parks",
+    "target": "youth sports player",
+    "provenance": "Public blank form; no submitted records. Picked, split and annotated before any model was run on it (round 3, 2026-11-13).",
+    "coverage": "Every native text field once per name, or every printable writing slot, including all third-party and conditional groups; checkboxes, inline sentence blanks and staff-only areas excluded.",
+    "annotated_fields": 25
+  },
+  {
+    "id": "library-kcls",
+    "split": "test",
+    "url": "https://w3.kcls.org/PDF/applications/english.pdf",
+    "sha256": "51138ebc55377b7db19b7908a57db99a027ff4f889764554cf37a29340579c20",
+    "bytes": 210882,
+    "publisher": "King County Library System",
+    "target": "library card applicant",
+    "provenance": "Public blank form; no submitted records. Picked, split and annotated before any model was run on it (round 3, 2026-11-13).",
+    "coverage": "Every native text field once per name, or every printable writing slot, including all third-party and conditional groups; checkboxes, inline sentence blanks and staff-only areas excluded.",
+    "annotated_fields": 35
+  },
+  {
+    "id": "patient-jottful",
+    "split": "test",
+    "url": "https://assets.jottful.com/3824/new-patient-intake-form.pdf",
+    "sha256": "33ed30bb5d02d8c56c24b38d907be7aa840d1421835cebe8ddb8e2926f26eeaa",
+    "bytes": 110702,
+    "publisher": "Jottful sample practice form",
+    "target": "patient",
+    "provenance": "Public blank form; no submitted records. Picked, split and annotated before any model was run on it (round 3, 2026-11-13).",
+    "coverage": "Every native text field once per name, or every printable writing slot, including all third-party and conditional groups; checkboxes, inline sentence blanks and staff-only areas excluded.",
+    "annotated_fields": 37
+  }
+]

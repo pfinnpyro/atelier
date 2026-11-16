@@ -1,0 +1,13 @@
+# Training runs are regenerated from the commands in README.md and
+# APPLICATIONS.md; only their recorded summaries in data/ are kept.
+data/runs/
+
+# Publishers' blank forms are not ours to redistribute. The manifests pin
+# each one's URL and SHA-256; tools/fieldml_fetch.py fetches and checks them.
+data/sources/**/*.pdf
+data/v3/sources/*.pdf
+data/v4/sources/*.pdf
+data/v5/sources/*.pdf
+
+# Model weights written by evaluation runs; only data/analysis.bin ships.
+data/v*/runs/**/*.bin

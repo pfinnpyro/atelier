@@ -39,6 +39,29 @@ impl Viewer {
             || self.tabs.iter().flatten().any(|tab| pending(&tab.open))
     }
 
+    /// The open file showing exactly `doc`, in front or in another tab.
+    pub(super) fn open_showing(
+        &mut self,
+        doc: &std::sync::Arc<atelier_syntax::Document>,
+    ) -> Option<&mut Open> {
+        self.open
+            .iter_mut()
+            .chain(self.tabs.iter_mut().flatten().map(|tab| &mut tab.open))
+            .find(|o| std::sync::Arc::ptr_eq(&o.doc, doc))
+    }
+
+    /// Puts new memory limits into force, for every open file.
+    pub(super) fn apply_budgets(&mut self) {
+        self.budgets = crate::memory::Budgets::of(self.settings.memory);
+        atelier_render::set_image_cache_budget(self.budgets.images);
+        if let Some(o) = &mut self.open {
+            o.tiles.set_budget(self.budgets.tiles);
+        }
+        for tab in self.tabs.iter_mut().flatten() {
+            tab.open.tiles.set_budget(self.budgets.parked);
+        }
+    }
+
     /// The tab in front, when a file is open.
     pub(super) fn active_tab(&self) -> Option<usize> {
         self.tabs.iter().position(Option::is_none)
@@ -58,6 +81,19 @@ impl Viewer {
         self.pool.stop_search();
         self.pool.set_jobs(Vec::new());
         let rerun = open.orienting.take().map(|r| (r.quiet, r.turn));
+        // A file in a background tab keeps only a slim set of drawn pages
+        // around where it was, enough to show at once when it comes back;
+        // its decoded images and rasterized glyphs are let go.
+        let here = open
+            .layout
+            .page_at_y(f64::from(self.offset.y + self.view_size.y / 2.0));
+        open.tiles.retain(|k| k.page.abs_diff(here) <= 1);
+        open.tiles.set_budget(self.budgets.parked);
+        let tiles = &open.tiles;
+        open.stale.retain(|k| tiles.contains(k));
+        open.thumbs.retain(|p, _| p.abs_diff(here) <= 8);
+        open.text.retain(|p, _| p.abs_diff(here) <= 2);
+        atelier_render::trim_cache(&open.doc);
         Some(Parked {
             open,
             zoom_mode: self.zoom_mode,
@@ -74,6 +110,7 @@ impl Viewer {
     /// Puts a parked file in front.
     fn unpark(&mut self, p: Parked) {
         let mut open = p.open;
+        open.tiles.set_budget(self.budgets.tiles);
         // Work finished for it while it was parked was dropped; it is
         // asked for again.
         self.generation += 1;
@@ -252,6 +289,7 @@ impl Viewer {
         }
         let mut go = None;
         let mut close = None;
+        let close_tip = self.tip("Close tab", "Mod+W");
         egui::Panel::top("tabs").show(ui, |ui| {
             egui::ScrollArea::horizontal()
                 .id_salt("tab-row")
@@ -275,7 +313,7 @@ impl Viewer {
                                 .as_ref()
                                 .map_or(open.name.clone(), |p| p.display().to_string());
                             let (tab, close_button) =
-                                super::controls::document_tab(ui, i, &name, front);
+                                super::controls::document_tab(ui, i, &name, front, &close_tip);
                             let tab = tab.on_hover_text(hover);
                             if tab.clicked() {
                                 go = Some(i);

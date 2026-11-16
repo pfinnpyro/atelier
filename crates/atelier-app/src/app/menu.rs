@@ -164,7 +164,7 @@ impl Viewer {
         if ui
             .add_enabled(
                 has_selection,
-                egui::Button::new("Copy").shortcut_text("Ctrl+C"),
+                egui::Button::new("Copy").shortcut_text(self.keys("Mod+C")),
             )
             .clicked()
         {

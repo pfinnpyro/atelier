@@ -6,10 +6,12 @@ mod app;
 mod chrome;
 #[cfg(all(feature = "fips", windows))]
 mod cng;
+mod commands;
 mod default_app;
 mod icons;
 #[cfg(target_os = "macos")]
 mod macos;
+mod memory;
 #[cfg(target_os = "macos")]
 mod menu_bar;
 mod profiles;

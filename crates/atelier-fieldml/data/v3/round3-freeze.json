@@ -1,0 +1,48 @@
+{
+  "frozen_utc": "2026-11-14T01:02:02.429726+00:00",
+  "candidate": "round 2 (factorized v3, seed 1), temperature-calibrated on the reserved calibration families",
+  "model_file": "data/runs/personal-v3-round2/calibrated.bin",
+  "model_sha256": "a0092a8c0257e295d92f155b8ff42e0a3c09bdb37d00d35cfcf3910f89a28b85",
+  "uncalibrated_sha256": "a0092a8c0257e295d92f155b8ff42e0a3c09bdb37d00d35cfcf3910f89a28b85",
+  "acceptance_cutoff": 0.9,
+  "minimum_accepted_fields": 20,
+  "bar": "every rate above 90% (accuracy, personal recall, macro recall, accepted precision, accepted recall, mean accepted confidence); false fills, hard-negative false fills and ECE below 10%; on both the gold and extracted tracks",
+  "calibration_source_ids": [
+    "membership-rhadc",
+    "employment-humboldt",
+    "patient-ecw"
+  ],
+  "test_source_ids": [
+    "library-dearborn",
+    "sports-laparks",
+    "library-kcls",
+    "patient-jottful"
+  ],
+  "retired_test_ids": [
+    "rental-dixon",
+    "camp-vbac",
+    "volunteer-xavier",
+    "membership-jas"
+  ],
+  "note": "The test families were picked, downloaded and annotated before any model was run on them. This test is run once; whatever it shows, these four are retired from testing afterwards if anything is trained on them.",
+  "source_sha256": {
+    "crates/atelier-fieldml/src/personal.rs": "601fd97b6556c002000894e50d14410ac4a203c2bf83ce2e22458e17e77a74a0",
+    "crates/atelier-fieldml/src/synth.rs": "b5a5d557daa060d0c487ce7206c9a550903bcf31a3ef2f5766260af55371bc2a",
+    "crates/atelier-fieldml/src/lib.rs": "aafb226f32ca7cb621e5ec211741f73c91c9678e81ba903aefb1458fb20a4916",
+    "crates/atelier-fieldml/src/corpus.rs": "f24ce7623351368a9a1e63315c32536174d8b479900b86d2aba57ba00f22dfa9",
+    "crates/atelier-fieldml/examples/qualify_v3.rs": "d62e1e4142545c05864d9b0287b1f9c5240d814a2ce0e8bfcb397c4b5b5fb011",
+    "tools/fieldml_labels.py": "d589e6a85267d386826ca0dfafee5e8cd5dc458357ce7aa532bbd039840015d8",
+    "tools/fieldml_v3_round3.py": "148acfc7789993f1e40a115df6d7ff22c7f961400dbf6b3bf10e3ed13ea1bfa6"
+  },
+  "datasets": {
+    "round3-gold.tsv": "f6dd2cc7787955af5fa34f2b7a7fbdbf72e4e051dc48d24991819197b0815d93",
+    "round3-extracted.tsv": "49b10729da6996269de66ab3bf5949e70fcaa954d6f540050f4ec29289140f54",
+    "round3-sources.json": "a45954f9305bf0860c8950319fd764fb71ce8129da52d64d4ec48128f066d31f"
+  },
+  "pdf_sha256": {
+    "library-dearborn": "10d98b3487e82281acdfc7558726d533bbaecae1391dc8ec16c90f2bdea9fbe8",
+    "sports-laparks": "ff7ea06a2b6001cfb844b322b355790e65e6f7df0677403d806b6fa43c22882d",
+    "library-kcls": "51138ebc55377b7db19b7908a57db99a027ff4f889764554cf37a29340579c20",
+    "patient-jottful": "33ed30bb5d02d8c56c24b38d907be7aa840d1421835cebe8ddb8e2926f26eeaa"
+  }
+}

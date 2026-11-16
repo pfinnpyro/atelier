@@ -1,0 +1,91 @@
+{
+  "legacy_reference_sha256": "db0533208f20769aa1a493ff0a73b3cb4f93901f41e2f0208da0091015152042",
+  "new_sources": [
+    {
+      "id": "employment",
+      "split": "train",
+      "fields": 81,
+      "url": "https://assets.ctfassets.net/3fc4d4qtiiuc/67lL33fvdmk8cSs8Se0QQU/4060ea7a3d39e0539c183c641b688f68/EmploymentApplication.pdf",
+      "sha256": "be6768c45f4eca324d58ca72cbe137459c9995b605124503e783bb11af456581"
+    },
+    {
+      "id": "adoption-vet",
+      "split": "train",
+      "fields": 50,
+      "url": "https://affordablevetcaremo.com/wp-content/uploads/2023/09/Pet-Adoption-Application-Form.pdf",
+      "sha256": "112b347de2bc457d5a7382a2c411b7877b151bccb48682e1744d773d88bd2f51"
+    },
+    {
+      "id": "volunteer-freedom",
+      "split": "train",
+      "fields": 24,
+      "url": "https://freedomhouseillinois.org/wp-content/uploads/2024/11/volunteer-application-2022.pdf",
+      "sha256": "9afcbc110abd113feaf952626e72a6691042c841c8a9af437286a17d528ae88c"
+    },
+    {
+      "id": "membership-rotary",
+      "split": "train",
+      "fields": 19,
+      "url": "https://www.rotaryclubgreatneck.org/documents/en-ca/6af01fd2-63d9-4932-8942-f9a8bcc632f3/1",
+      "sha256": "36600c36b5dbafe434275fd80e668ffbb224d1c3b753f3e7a33e67e142c2d5e5"
+    },
+    {
+      "id": "rental-taylor",
+      "split": "validation",
+      "fields": 61,
+      "url": "https://d15zjc2r4e8kr7.cloudfront.net/5922/Taylor%20Rental%20App%202023.pdf",
+      "sha256": "6d9beb701f967f6902740078717ec6e42e639b47ca9953542a751d6261d8701b"
+    },
+    {
+      "id": "volunteer-turning",
+      "split": "validation",
+      "fields": 28,
+      "url": "https://tpmanatee.org/wp-content/uploads/2024/02/Turning-Points-Volunteer-Application-10-19-23.pdf",
+      "sha256": "6f0989f77aad21e1052ca6451f3d085a3cc8605e9860100b0671dea52bda7301"
+    },
+    {
+      "id": "camp-ymca",
+      "split": "validation",
+      "fields": 25,
+      "url": "https://ymca-cc.org/wp-content/uploads/2025/05/2025-Summer-Camp-Reg-Form-Updated-01MAY25.pdf",
+      "sha256": "b7ef665e9e84bd5734f9f2277b96ef2ae3bdf7527184ed6e390e22f063209828"
+    },
+    {
+      "id": "scholarship-sd91",
+      "split": "test",
+      "fields": 15,
+      "url": "https://www.sd91.bc.ca/documents/a9feca1f-89fe-483b-b1ef-1d477528553c/Scholarship_Application_Form.pdf",
+      "sha256": "120f03387cd382c18876411e633354983c0f3a94a3e7d6c006c68ac3ab3cfb2c"
+    },
+    {
+      "id": "patient-ripley",
+      "split": "test",
+      "fields": 28,
+      "url": "https://www.ripleydental.com/wp-content/uploads/patient-registration-form.pdf",
+      "sha256": "a4d80049995ae100d1db14b5effe9d8aeab91263f75bf61f1f50428943db3f55"
+    },
+    {
+      "id": "camp-pearce",
+      "split": "test",
+      "fields": 22,
+      "url": "https://pearcecc.com/wp-content/uploads/2020/01/ppc25-SummerCamp-RegForm-0312025-v2.pdf",
+      "sha256": "cbf6cbaacabb6d785e4eadf0dfda92dd1421310620ba921e5a8ea8241cd99927"
+    },
+    {
+      "id": "i9",
+      "split": "test",
+      "fields": 81,
+      "url": "https://www.uscis.gov/sites/default/files/document/forms/i-9.pdf",
+      "sha256": "780f348c34df694bb0b4dbbfaf9f22b99b9757b80d16a37ba89aadf069597281"
+    }
+  ],
+  "total_annotated_fields": 434,
+  "training_seeds": [
+    1,
+    7,
+    19
+  ],
+  "auto_fill_enabled": false,
+  "fixture_sets": 27,
+  "fixture_pdfs": 108
+}

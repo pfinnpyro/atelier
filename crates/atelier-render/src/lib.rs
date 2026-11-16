@@ -5,6 +5,7 @@
 //! common transparency features. Unsupported or malformed content is
 //! reported through render warnings where possible.
 
+mod cache;
 mod colorspace;
 mod font;
 mod function;
@@ -16,6 +17,7 @@ mod probe;
 mod shading;
 mod text;
 
+pub use cache::{set_image_cache_budget, trim_cache};
 pub use colorspace::ColorSpace;
 pub use font::TextFont;
 pub use interp::{

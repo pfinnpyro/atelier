@@ -57,6 +57,13 @@ pub struct Settings {
     pub preview: bool,
     /// The mark ticked check boxes show, for check boxes Atelier adds.
     pub check_mark: atelier_form::CheckMark,
+    /// How much memory drawn pages and decoded images may take.
+    pub memory: crate::memory::MemoryUse,
+    /// Find opens as a bar floating over the page (true) or in the sidebar.
+    pub find_floating: bool,
+    /// Shortcuts are written with key symbols (⌘⇧S) rather than names
+    /// (Cmd+Shift+S).
+    pub shortcut_glyphs: bool,
 }
 
 impl Default for Settings {
@@ -75,6 +82,10 @@ impl Default for Settings {
             // Someone running a preview build has chosen previews.
             preview: crate::update::current().is_preview(),
             check_mark: atelier_form::CheckMark::default(),
+            memory: crate::memory::MemoryUse::Auto,
+            find_floating: true,
+            // The Mac writes its shortcuts as symbols; elsewhere names.
+            shortcut_glyphs: cfg!(target_os = "macos"),
         }
     }
 }
@@ -151,6 +162,9 @@ impl Settings {
                 "sidebar" => s.sidebar = on,
                 "check-updates" => s.check_updates = on,
                 "channel" => s.preview = value.trim() == "preview",
+                "memory" => s.memory = crate::memory::MemoryUse::parse(value),
+                "find" => s.find_floating = value.trim() != "sidebar",
+                "shortcut-glyphs" => s.shortcut_glyphs = on,
                 "check-mark" => {
                     s.check_mark = atelier_form::CheckMark::parse(value).unwrap_or_default();
                 }
@@ -180,6 +194,12 @@ impl Settings {
         );
         text.push_str(&format!("certify-ink = {}\n", self.certify_ink));
         text.push_str(&format!("check-mark = {}\n", self.check_mark.key()));
+        text.push_str(&format!("memory = {}\n", self.memory.key()));
+        text.push_str(&format!(
+            "find = {}\n",
+            if self.find_floating { "bar" } else { "sidebar" }
+        ));
+        text.push_str(&format!("shortcut-glyphs = {}\n", self.shortcut_glyphs));
         for (index, display) in self.toolbar_display.iter().enumerate() {
             text.push_str(&format!("toolbar-{index} = {}\n", display.key()));
         }
@@ -223,6 +243,9 @@ mod tests {
             check_updates: false,
             preview: true,
             check_mark: atelier_form::CheckMark::Cross,
+            memory: crate::memory::MemoryUse::Low,
+            find_floating: false,
+            shortcut_glyphs: !cfg!(target_os = "macos"),
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(

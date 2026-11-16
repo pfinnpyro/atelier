@@ -1,0 +1,25 @@
+{
+ "frozen": "2026-11-14, before the first and only holdout run",
+ "settings": {
+  "epochs": 20,
+  "pair_epochs": 12,
+  "folds": 5,
+  "synthetic": 500,
+  "seed": 1,
+  "decode": "Subject"
+ },
+ "development": "leave-one-form-out over the 22 reviewed forms; data/v4/runs/dev",
+ "development_totals": [
+  "gold TOTAL                kind 772/891 (86.6%); role 640/891 (71.8%); group pairs P 65.8% R 76.4% F1 70.7%; fills right 144/175 gold, foreign 19, wrong kind 12",
+  "extracted TOTAL                kind 751/891 (84.3%); role 573/891 (64.3%); group pairs P 65.0% R 66.4% F1 65.7%; fills right 117/175 gold, foreign 19, wrong kind 18"
+ ],
+ "sha256": {
+  "src/analysis.rs": "75fbe143aa8fd6dd7d8ca92b3b83e76bbc824336153b638d96f068394e074bd0",
+  "src/personal.rs": "532a1481fd7bdef0864cb426cd76bbd09f36d015ac85a6034234e299a6c1ba77",
+  "src/synth.rs": "b5a5d557daa060d0c487ce7206c9a550903bcf31a3ef2f5766260af55371bc2a",
+  "src/lib.rs": "5b2470c34cfd76160bde282d6697c2a5161e84817c56f2e850426366d557f032",
+  "examples/analysis_v4.rs": "95c240a6dea170cee9a07487c4c50d3a3246852b26a22ffb9370f22930a394af",
+  "data/v4/corpus.tsv": "5bc2be49001c225ff7b4cf178dc350e897f74fd20800533d22a39ef60974b2db",
+  "data/v4/holdout-corpus.tsv": "241ca95a1eac475efa20c29262267b32e1627b8148219779c7eb8d313497c753"
+ }
+}

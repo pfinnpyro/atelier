@@ -6,10 +6,9 @@ mod predefined;
 mod system;
 mod text_font;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::Arc;
+use std::sync::RwLock;
 
 use atelier_font::{
     Encoding, FontProgram, Std14, glyph_name_to_unicode, standard_font, strip_subset,
@@ -81,11 +80,11 @@ pub struct PdfFont {
     widths: Box<[Option<f64>; 256]>,
     missing_width: f64,
     to_unicode: Option<CMap>,
-    outlines: RefCell<HashMap<u32, Option<Rc<Path>>>>,
+    outlines: RwLock<HashMap<u32, Option<Arc<Path>>>>,
     /// Rasterized glyphs, by glyph, scale and subpixel offset.
-    masks: RefCell<HashMap<MaskKey, Option<Rc<GlyphMask>>>>,
+    masks: RwLock<HashMap<MaskKey, Option<Arc<GlyphMask>>>>,
     /// Characters to codes, built the first time something encodes text.
-    reverse: std::cell::OnceCell<HashMap<char, Vec<u8>>>,
+    reverse: std::sync::OnceLock<HashMap<char, Vec<u8>>>,
 }
 
 /// Glyph id, the device matrix's a b c d in 1/256ths, and the origin's
@@ -235,9 +234,9 @@ impl PdfFont {
             widths: Box::new([None; 256]),
             missing_width: 0.0,
             to_unicode: None,
-            outlines: RefCell::new(HashMap::new()),
-            reverse: std::cell::OnceCell::new(),
-            masks: RefCell::new(HashMap::new()),
+            outlines: RwLock::new(HashMap::new()),
+            reverse: std::sync::OnceLock::new(),
+            masks: RwLock::new(HashMap::new()),
         }
     }
 
@@ -842,18 +841,31 @@ impl PdfFont {
     }
 
     /// The outline of a glyph in text space (1.0 = font size), cached.
-    pub fn outline(&self, gid: u32) -> Option<Rc<Path>> {
-        if let Some(hit) = self.outlines.borrow().get(&gid) {
+    pub fn outline(&self, gid: u32) -> Option<Arc<Path>> {
+        if let Some(hit) = read(&self.outlines).get(&gid) {
             return hit.clone();
         }
         let path = self
             .program
             .as_deref()
             .and_then(|p| p.outline(gid))
-            .map(Rc::new);
-        self.outlines.borrow_mut().insert(gid, path.clone());
+            .map(Arc::new);
+        write(&self.outlines).insert(gid, path.clone());
         path
     }
+
+    /// Drops the rasterized glyphs; they are made again when next drawn.
+    pub(crate) fn forget_glyphs(&self) {
+        write(&self.masks).clear();
+    }
+}
+
+fn read<T>(l: &RwLock<T>) -> std::sync::RwLockReadGuard<'_, T> {
+    l.read().unwrap_or_else(|e| e.into_inner())
+}
+
+fn write<T>(l: &RwLock<T>) -> std::sync::RwLockWriteGuard<'_, T> {
+    l.write().unwrap_or_else(|e| e.into_inner())
 }
 
 impl PdfFont {
@@ -862,7 +874,7 @@ impl PdfFont {
     /// cached at subpixel positions, so text set many times over
     /// rasterizes each glyph a few times only. `None` for glyphs with no
     /// outline, nothing to draw, or too big to cache.
-    pub fn glyph_mask(&self, gid: u32, m: &Transform) -> Option<(Rc<GlyphMask>, i64, i64)> {
+    pub fn glyph_mask(&self, gid: u32, m: &Transform) -> Option<(Arc<GlyphMask>, i64, i64)> {
         let fits = |v: f64| v.is_finite() && v.abs() < 1e7;
         if ![m.a, m.b, m.c, m.d, m.e, m.f].into_iter().all(fits) {
             return None;
@@ -877,11 +889,11 @@ impl PdfFont {
         let (iy, fy) = split(m.f, SUBPIXEL_Y);
         let scale = [m.a, m.b, m.c, m.d].map(|v| (v * 256.0).round() as i32);
         let key = (gid, scale, fx, fy);
-        if let Some(hit) = self.masks.borrow().get(&key) {
+        if let Some(hit) = read(&self.masks).get(&key) {
             return hit.clone().map(|g| (g.clone(), ix + g.dx, iy + g.dy));
         }
-        let mask = self.make_mask(gid, m, fx, fy).map(Rc::new);
-        let mut masks = self.masks.borrow_mut();
+        let mask = self.make_mask(gid, m, fx, fy).map(Arc::new);
+        let mut masks = write(&self.masks);
         if masks.len() >= MAX_MASKS {
             masks.clear();
         }

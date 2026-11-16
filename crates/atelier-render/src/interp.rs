@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use atelier_raster::{
     BlendMode, Color, Coverage, FillRule, ImageSampling, LineCap, LineJoin, Mask, Path,
@@ -13,6 +14,7 @@ use atelier_syntax::{
     ContentParser, Dict, Document, Name, ObjRef, Object, Operation, Page, Rect, Result, Stream,
 };
 
+use crate::cache::RenderCache;
 use crate::colorspace::{self, ColorSpace};
 use crate::font::PdfFont;
 use crate::function::Functions;
@@ -167,7 +169,7 @@ struct TextState {
     /// Horizontal scaling as a factor (Tz / 100).
     scale: f64,
     leading: f64,
-    font: Option<Rc<PdfFont>>,
+    font: Option<Arc<PdfFont>>,
     size: f64,
     render: u8,
     rise: f64,
@@ -342,7 +344,9 @@ struct Interpreter<'a> {
     /// Device-space outlines of glyphs shown with a clipping render mode in
     /// the current text object.
     text_clip: Option<PathBuilder>,
-    fonts: HashMap<ObjRef, Rc<PdfFont>>,
+    fonts: HashMap<ObjRef, Arc<PdfFont>>,
+    /// Fonts and images shared with every other draw of this document.
+    cache: Arc<RenderCache>,
     /// False when only collecting text.
     draw: bool,
     /// Collected glyphs, when extracting text.
@@ -387,6 +391,7 @@ impl<'a> Interpreter<'a> {
             tlm: Transform::IDENTITY,
             text_clip: None,
             fonts: HashMap::new(),
+            cache: RenderCache::of(doc),
             draw: true,
             text: None,
             graphics: None,
@@ -815,6 +820,14 @@ impl<'a> Interpreter<'a> {
             self.gs.fill_color()
         };
         if let Some(color) = color {
+            // Shapes outside this tile or the clip cost nothing.
+            let area = intersect_area(
+                self.drawable_area(),
+                path_area(device, self.pixmap.bounds()),
+            );
+            if area.2 == 0 || area.3 == 0 {
+                return;
+            }
             let clip = self.clip_mask(device);
             fill_path(self.pixmap, device, rule, color, clip.as_ref());
         }
@@ -1145,7 +1158,7 @@ impl<'a> Interpreter<'a> {
             .and_then(Object::as_name)
             .map(|n| n.as_bytes().to_vec());
         match subtype.as_deref() {
-            Some(b"Image") => self.image_xobject(&stream, resources),
+            Some(b"Image") => self.image_xobject(&stream, r, resources),
             Some(b"Form") => self.form(&stream, r, resources, depth),
             _ => {}
         }
@@ -1157,6 +1170,18 @@ impl<'a> Interpreter<'a> {
             return;
         }
         let doc = self.doc;
+        // A form that lies wholly outside this tile is not run at all,
+        // unless its text or shapes are being collected.
+        if self.draw && self.text.is_none() && self.graphics.is_none() && self.text_clip.is_none() {
+            let (_, bbox) = self.form_geometry(stream);
+            if let Some(bbox) = &bbox {
+                let area =
+                    intersect_area(self.drawable_area(), path_area(bbox, self.pixmap.bounds()));
+                if area.2 == 0 || area.3 == 0 {
+                    return;
+                }
+            }
+        }
         let group = doc
             .get_key(&stream.dict, b"Group")
             .ok()
@@ -1429,25 +1454,73 @@ impl<'a> Interpreter<'a> {
         self.path = saved_path;
     }
 
-    fn image_xobject(&mut self, stream: &Stream, resources: &Dict) {
+    /// Whether nothing drawn in the unit square (where images go) could
+    /// show: it lies outside the part of the page being drawn, or the clip.
+    fn image_hidden(&self) -> bool {
+        let unit = Path::rect(0.0, 0.0, 1.0, 1.0).transform(&self.gs.ctm);
+        let area = intersect_area(self.drawable_area(), path_area(&unit, self.pixmap.bounds()));
+        area.2 == 0 || area.3 == 0
+    }
+
+    fn image_fill(&self) -> Color {
+        self.gs
+            .forced
+            .or_else(|| self.gs.fill_space.to_rgb(&self.gs.fill))
+            .unwrap_or(Color::BLACK)
+    }
+
+    fn image_xobject(&mut self, stream: &Stream, r: Option<ObjRef>, resources: &Dict) {
         self.record_image();
-        if !self.draw {
+        // An image outside this tile is not even decoded.
+        if !self.draw || self.image_hidden() {
             return;
         }
-        let decoded = match self.doc.decode_stream(stream) {
-            Ok(d) => d,
-            Err(e) => {
-                self.warn(format!("image: {e}"));
-                return;
-            }
+        let doc = self.doc;
+        let fill = self.image_fill();
+        let decode = || {
+            let mut warnings = Vec::new();
+            let info = match doc.decode_stream(stream) {
+                Ok(d) => image::decode(
+                    doc,
+                    &stream.dict,
+                    &d.data,
+                    d.image_filter.as_ref(),
+                    resources,
+                    fill,
+                    &mut |w| warnings.push(w),
+                ),
+                Err(e) => {
+                    warnings.push(format!("image: {e}"));
+                    None
+                }
+            };
+            (info.map(Arc::new), warnings)
         };
-        let filter = decoded.image_filter.as_ref();
-        self.draw_decoded_image(&stream.dict, &decoded.data, filter, resources);
+        // Decoded once for the whole document: every tile the image
+        // crosses, at every zoom, uses the same pixels.
+        let (info, warnings) = match r {
+            Some(r) => {
+                let stencil = doc
+                    .get_key(&stream.dict, b"ImageMask")
+                    .ok()
+                    .and_then(|o| o.as_bool())
+                    .unwrap_or(false);
+                let colour = stencil.then(|| [fill.r, fill.g, fill.b, fill.a].map(f32::to_bits));
+                self.cache.clone().image((r, colour), decode)
+            }
+            None => decode(),
+        };
+        for w in warnings {
+            self.warn(w);
+        }
+        if let Some(info) = info {
+            self.draw_image_info(&stream.dict, &info, resources);
+        }
     }
 
     fn inline_image(&mut self, dict: &Dict, data: &[u8], resources: &Dict) {
         self.record_image();
-        if !self.draw {
+        if !self.draw || self.image_hidden() {
             return;
         }
         // Expand the abbreviated filter keys so the normal decoder applies.
@@ -1480,11 +1553,7 @@ impl<'a> Interpreter<'a> {
         filter: Option<&(atelier_syntax::ImageFilter, Dict)>,
         resources: &Dict,
     ) {
-        let fill = self
-            .gs
-            .forced
-            .or_else(|| self.gs.fill_space.to_rgb(&self.gs.fill))
-            .unwrap_or(Color::BLACK);
+        let fill = self.image_fill();
         let mut warnings = Vec::new();
         let info = image::decode(self.doc, dict, data, filter, resources, fill, &mut |w| {
             warnings.push(w)
@@ -1492,7 +1561,12 @@ impl<'a> Interpreter<'a> {
         for w in warnings {
             self.warn(w);
         }
-        let Some(info) = info else { return };
+        if let Some(info) = info {
+            self.draw_image_info(dict, &info, resources);
+        }
+    }
+
+    fn draw_image_info(&mut self, dict: &Dict, info: &image::ImageInfo, resources: &Dict) {
         // Upscaled images stay crisp unless the file asks for smoothing.
         let ctm = self.gs.ctm;
         let device_w = ctm.apply_vector(Point::new(1.0, 0.0)).length();
@@ -1600,7 +1674,7 @@ impl<'a> Interpreter<'a> {
         .then(&self.tm);
     }
 
-    fn font(&mut self, name: &Name, resources: &Dict) -> Option<Rc<PdfFont>> {
+    fn font(&mut self, name: &Name, resources: &Dict) -> Option<Arc<PdfFont>> {
         let Some((Object::Dict(dict), r)) = self.lookup(resources, b"Font", name) else {
             self.warn(format!("font {} is missing", name.as_str_lossy()));
             return None;
@@ -1608,8 +1682,20 @@ impl<'a> Interpreter<'a> {
         if let Some(f) = r.and_then(|r| self.fonts.get(&r)) {
             return Some(f.clone());
         }
-        let mut warnings = Vec::new();
-        let font = Rc::new(PdfFont::load(self.doc, &dict, &mut |w| warnings.push(w)));
+        let doc = self.doc;
+        // A font with an object of its own is loaded once for the whole
+        // document, and its rasterized glyphs are shared by every tile.
+        let (font, warnings) = match r {
+            Some(r) => self
+                .cache
+                .clone()
+                .font(r, |warn| PdfFont::load(doc, &dict, warn)),
+            None => {
+                let mut warnings = Vec::new();
+                let font = PdfFont::load(doc, &dict, &mut |w| warnings.push(w));
+                (Arc::new(font), warnings)
+            }
+        };
         for w in warnings {
             self.warn(w);
         }

@@ -1,0 +1,36 @@
+V3 test; fixed acceptance cutoff >0.90; minimum 20 accepted fields; all rates above 90%, false-fill and ECE below 10%.
+gold family rental-dixon: accuracy 89.83%; recall 4/9 (44.44%); macro 49.80%; falsefills 1/50 (2.00%); accepted 4/5 precision 80.00%; accepted recall 44.44%; mean accepted confidence 99.11%; ECE 9.70%; hard-negative falsefills 0/23; qualifies false
+gold family camp-vbac: accuracy 100.00%; recall 2/2 (100.00%); macro 100.00%; falsefills 0/25 (0.00%); accepted 2/2 precision 100.00%; accepted recall 100.00%; mean accepted confidence 98.96%; ECE 0.17%; hard-negative falsefills 0/10; qualifies false
+gold family volunteer-xavier: accuracy 92.31%; recall 8/9 (88.89%); macro 88.24%; falsefills 1/17 (5.88%); accepted 7/8 precision 87.50%; accepted recall 77.78%; mean accepted confidence 98.16%; ECE 6.54%; hard-negative falsefills 1/5; qualifies false
+gold family membership-jas: accuracy 94.34%; recall 5/8 (62.50%); macro 68.75%; falsefills 0/45 (0.00%); accepted 5/6 precision 83.33%; accepted recall 62.50%; mean accepted confidence 97.63%; ECE 4.28%; hard-negative falsefills 0/15; qualifies false
+gold TOTAL: accuracy 93.33%; recall 19/28 (67.86%); macro 62.10%; falsefills 2/137 (1.46%); accepted 18/21 precision 85.71%; accepted recall 64.29%; mean accepted confidence 98.31%; ECE 5.43%; hard-negative falsefills 1/53; qualifies false
+  Other: 135/137
+  FullName: 1/1
+  Honorific: 0/1
+  FirstName: 2/2
+  LastName: 3/3
+  BirthDate: 4/4
+  AddressLine1: 1/3
+  City: 0/2
+  State: 0/1
+  Zip: 1/3
+  Email: 3/3
+  Phone: 4/5
+extracted family rental-dixon: accuracy 89.83%; recall 4/9 (44.44%); macro 49.80%; falsefills 1/50 (2.00%); accepted 4/5 precision 80.00%; accepted recall 44.44%; mean accepted confidence 99.02%; ECE 8.60%; hard-negative falsefills 0/23; qualifies false
+extracted family camp-vbac: accuracy 100.00%; recall 2/2 (100.00%); macro 100.00%; falsefills 0/25 (0.00%); accepted 2/2 precision 100.00%; accepted recall 100.00%; mean accepted confidence 98.96%; ECE 0.09%; hard-negative falsefills 0/10; qualifies false
+extracted family volunteer-xavier: accuracy 84.62%; recall 6/9 (66.67%); macro 66.01%; falsefills 1/17 (5.88%); accepted 6/7 precision 85.71%; accepted recall 66.67%; mean accepted confidence 97.80%; ECE 11.17%; hard-negative falsefills 1/5; qualifies false
+extracted family membership-jas: accuracy 81.13%; recall 4/8 (50.00%); macro 54.58%; falsefills 6/45 (13.33%); accepted 4/8 precision 50.00%; accepted recall 50.00%; mean accepted confidence 97.50%; ECE 14.35%; hard-negative falsefills 6/15; qualifies false
+extracted TOTAL: accuracy 87.88%; recall 16/28 (57.14%); macro 54.10%; falsefills 8/137 (5.84%); accepted 16/22 precision 72.73%; accepted recall 57.14%; mean accepted confidence 98.07%; ECE 9.43%; hard-negative falsefills 7/53; qualifies false
+  Other: 129/137
+  FullName: 1/1
+  Honorific: 0/1
+  FirstName: 2/2
+  LastName: 3/3
+  BirthDate: 3/4
+  AddressLine1: 0/3
+  City: 0/2
+  State: 0/1
+  Zip: 1/3
+  Email: 2/3
+  Phone: 4/5
+BOTH TRACKS QUALIFY: false

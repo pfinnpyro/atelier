@@ -1,0 +1,304 @@
+Application benchmark v2
+26 classes, 8192 buckets, 4000 forms, 6 epochs per fit. Seeds: 1, 7, 19.
+Common: 2800 legacy synthetic + 200 W9 replays. 800 augmentation and 200 public slots vary explicitly.
+Public training: 50 replays each of employment, adoption-vet, volunteer-freedom, membership-rotary.
+Fresh validation: rental-taylor, volunteer-turning, camp-ymca.
+Fresh test: scholarship-sd91, patient-ripley, camp-pearce, i9.
+W7/W4 are legacy diagnostics, excluded from operating-point selection and fresh test.
+contextual-recall: Other loss weight 0.25; all other variants use weight 1.0.
+
+Reviewed correction forms: 0; 10 replays each, replacing augmentation slots only.
+
+legacy-v1 seed=1 validation-selected threshold=1.01
+  gold train: accuracy=74.14% personal=30/32 false_fills=43/142 accepted=0/0 correct; coverage=0.00% macro_recall=93.54%
+  gold validation: accuracy=59.65% personal=18/19 false_fills=45/95 accepted=0/0 correct; coverage=0.00% macro_recall=91.93%
+  gold test: accuracy=61.64% personal=25/30 false_fills=51/116 accepted=0/0 correct; coverage=0.00% macro_recall=76.11%
+  extracted train: accuracy=71.26% personal=24/32 false_fills=42/142 accepted=0/0 correct; coverage=0.00% macro_recall=78.63%
+  extracted validation: accuracy=58.77% personal=17/19 false_fills=45/95 accepted=0/0 correct; coverage=0.00% macro_recall=81.93%
+  extracted test: accuracy=60.96% personal=23/30 false_fills=50/116 accepted=0/0 correct; coverage=0.00% macro_recall=71.04%
+  synthetic train: accuracy=47.47% personal=6310/6947 false_fills=8841/11095 accepted=0/0 correct; coverage=0.00% macro_recall=80.78%
+  synthetic validation: accuracy=47.57% personal=2407/2641 false_fills=3407/4303 accepted=0/0 correct; coverage=0.00% macro_recall=80.83%
+  synthetic test: accuracy=48.68% personal=2406/2648 false_fills=3235/4127 accepted=0/0 correct; coverage=0.00% macro_recall=80.90%
+  family train employment: accuracy=75.31% personal=6/6 false_fills=20/75 accepted=0/0 correct; coverage=0.00% macro_recall=96.19%
+  family train adoption-vet: accuracy=68.00% personal=4/5 false_fills=15/45 accepted=0/0 correct; coverage=0.00% macro_recall=73.33%
+  family train volunteer-freedom: accuracy=75.00% personal=14/15 false_fills=5/9 accepted=0/0 correct; coverage=0.00% macro_recall=88.89%
+  family train membership-rotary: accuracy=84.21% personal=6/6 false_fills=3/13 accepted=0/0 correct; coverage=0.00% macro_recall=96.15%
+  family validation rental-taylor: accuracy=72.13% personal=7/7 false_fills=17/54 accepted=0/0 correct; coverage=0.00% macro_recall=96.06%
+  family validation volunteer-turning: accuracy=67.86% personal=10/10 false_fills=9/18 accepted=0/0 correct; coverage=0.00% macro_recall=95.00%
+  family validation camp-ymca: accuracy=20.00% personal=1/2 false_fills=19/23 accepted=0/0 correct; coverage=0.00% macro_recall=39.13%
+  family test scholarship-sd91: accuracy=66.67% personal=1/2 false_fills=4/13 accepted=0/0 correct; coverage=0.00% macro_recall=56.41%
+  family test patient-ripley: accuracy=42.86% personal=8/10 false_fills=14/18 accepted=0/0 correct; coverage=0.00% macro_recall=65.28%
+  family test camp-pearce: accuracy=50.00% personal=4/5 false_fills=10/17 accepted=0/0 correct; coverage=0.00% macro_recall=73.53%
+  family test i9: accuracy=70.37% personal=12/13 false_fills=23/68 accepted=0/0 correct; coverage=0.00% macro_recall=87.83%
+control seed=1 validation-selected threshold=1.01
+  gold train: accuracy=75.86% personal=30/32 false_fills=40/142 accepted=0/0 correct; coverage=0.00% macro_recall=93.68%
+  gold validation: accuracy=59.65% personal=18/19 false_fills=45/95 accepted=0/0 correct; coverage=0.00% macro_recall=91.93%
+  gold test: accuracy=60.96% personal=25/30 false_fills=52/116 accepted=0/0 correct; coverage=0.00% macro_recall=77.32%
+  extracted train: accuracy=71.26% personal=24/32 false_fills=42/142 accepted=0/0 correct; coverage=0.00% macro_recall=78.63%
+  extracted validation: accuracy=58.77% personal=17/19 false_fills=45/95 accepted=0/0 correct; coverage=0.00% macro_recall=81.93%
+  extracted test: accuracy=59.59% personal=22/30 false_fills=51/116 accepted=0/0 correct; coverage=0.00% macro_recall=68.41%
+  synthetic train: accuracy=47.63% personal=6299/6947 false_fills=8800/11095 accepted=0/0 correct; coverage=0.00% macro_recall=80.72%
+  synthetic validation: accuracy=47.91% personal=2403/2641 false_fills=3379/4303 accepted=0/0 correct; coverage=0.00% macro_recall=80.78%
+  synthetic test: accuracy=48.89% personal=2401/2648 false_fills=3216/4127 accepted=0/0 correct; coverage=0.00% macro_recall=80.82%
+  family train employment: accuracy=75.31% personal=6/6 false_fills=20/75 accepted=0/0 correct; coverage=0.00% macro_recall=96.19%
+  family train adoption-vet: accuracy=72.00% personal=4/5 false_fills=13/45 accepted=0/0 correct; coverage=0.00% macro_recall=74.22%
+  family train volunteer-freedom: accuracy=75.00% personal=14/15 false_fills=5/9 accepted=0/0 correct; coverage=0.00% macro_recall=88.89%
+  family train membership-rotary: accuracy=89.47% personal=6/6 false_fills=2/13 accepted=0/0 correct; coverage=0.00% macro_recall=97.44%
+  family validation rental-taylor: accuracy=72.13% personal=7/7 false_fills=17/54 accepted=0/0 correct; coverage=0.00% macro_recall=96.06%
+  family validation volunteer-turning: accuracy=67.86% personal=10/10 false_fills=9/18 accepted=0/0 correct; coverage=0.00% macro_recall=95.00%
+  family validation camp-ymca: accuracy=20.00% personal=1/2 false_fills=19/23 accepted=0/0 correct; coverage=0.00% macro_recall=39.13%
+  family test scholarship-sd91: accuracy=66.67% personal=1/2 false_fills=4/13 accepted=0/0 correct; coverage=0.00% macro_recall=56.41%
+  family test patient-ripley: accuracy=42.86% personal=8/10 false_fills=14/18 accepted=0/0 correct; coverage=0.00% macro_recall=65.28%
+  family test camp-pearce: accuracy=54.55% personal=5/5 false_fills=10/17 accepted=0/0 correct; coverage=0.00% macro_recall=90.20%
+  family test i9: accuracy=67.90% personal=11/13 false_fills=24/68 accepted=0/0 correct; coverage=0.00% macro_recall=78.61%
+control seed=7 validation-selected threshold=1.01
+  gold train: accuracy=73.56% personal=30/32 false_fills=44/142 accepted=0/0 correct; coverage=0.00% macro_recall=93.49%
+  gold validation: accuracy=60.53% personal=19/19 false_fills=45/95 accepted=0/0 correct; coverage=0.00% macro_recall=95.26%
+  gold test: accuracy=62.33% personal=25/30 false_fills=50/116 accepted=0/0 correct; coverage=0.00% macro_recall=76.17%
+  extracted train: accuracy=69.54% personal=25/32 false_fills=46/142 accepted=0/0 correct; coverage=0.00% macro_recall=79.40%
+  extracted validation: accuracy=58.77% personal=17/19 false_fills=45/95 accepted=0/0 correct; coverage=0.00% macro_recall=81.93%
+  extracted test: accuracy=61.64% personal=23/30 false_fills=49/116 accepted=0/0 correct; coverage=0.00% macro_recall=71.11%
+  synthetic train: accuracy=46.43% personal=6320/6947 false_fills=9038/11095 accepted=0/0 correct; coverage=0.00% macro_recall=80.89%
+  synthetic validation: accuracy=46.36% personal=2409/2641 false_fills=3493/4303 accepted=0/0 correct; coverage=0.00% macro_recall=80.81%
+  synthetic test: accuracy=47.73% personal=2408/2648 false_fills=3301/4127 accepted=0/0 correct; coverage=0.00% macro_recall=81.06%
+control seed=19 validation-selected threshold=1.01
+  gold train: accuracy=77.59% personal=29/32 false_fills=36/142 accepted=0/0 correct; coverage=0.00% macro_recall=92.91%
+  gold validation: accuracy=58.77% personal=19/19 false_fills=47/95 accepted=0/0 correct; coverage=0.00% macro_recall=95.05%
+  gold test: accuracy=62.33% personal=25/30 false_fills=50/116 accepted=0/0 correct; coverage=0.00% macro_recall=77.45%
+  extracted train: accuracy=73.56% personal=24/32 false_fills=38/142 accepted=0/0 correct; coverage=0.00% macro_recall=78.82%
+  extracted validation: accuracy=57.89% personal=17/19 false_fills=46/95 accepted=0/0 correct; coverage=0.00% macro_recall=81.82%
+  extracted test: accuracy=60.96% personal=22/30 false_fills=49/116 accepted=0/0 correct; coverage=0.00% macro_recall=68.55%
+  synthetic train: accuracy=48.75% personal=6298/6947 false_fills=8597/11095 accepted=0/0 correct; coverage=0.00% macro_recall=80.85%
+  synthetic validation: accuracy=48.96% personal=2404/2641 false_fills=3307/4303 accepted=0/0 correct; coverage=0.00% macro_recall=80.84%
+  synthetic test: accuracy=50.14% personal=2403/2648 false_fills=3133/4127 accepted=0/0 correct; coverage=0.00% macro_recall=81.07%
+hard-without-context seed=1 validation-selected threshold=1.01
+  gold train: accuracy=78.74% personal=23/32 false_fills=28/142 accepted=0/0 correct; coverage=0.00% macro_recall=69.67%
+  gold validation: accuracy=71.93% personal=11/19 false_fills=24/95 accepted=0/0 correct; coverage=0.00% macro_recall=60.81%
+  gold test: accuracy=58.90% personal=20/30 false_fills=50/116 accepted=0/0 correct; coverage=0.00% macro_recall=62.07%
+  extracted train: accuracy=76.44% personal=20/32 false_fills=29/142 accepted=0/0 correct; coverage=0.00% macro_recall=58.67%
+  extracted validation: accuracy=71.05% personal=10/19 false_fills=24/95 accepted=0/0 correct; coverage=0.00% macro_recall=50.81%
+  extracted test: accuracy=59.59% personal=19/30 false_fills=48/116 accepted=0/0 correct; coverage=0.00% macro_recall=59.64%
+  synthetic train: accuracy=100.00% personal=6947/6947 false_fills=0/11095 accepted=6938/6938 correct; coverage=99.87% macro_recall=100.00%
+  synthetic validation: accuracy=99.88% personal=2635/2641 false_fills=2/4303 accepted=2622/2622 correct; coverage=99.28% macro_recall=99.81%
+  synthetic test: accuracy=99.94% personal=2645/2648 false_fills=1/4127 accepted=2636/2636 correct; coverage=99.55% macro_recall=99.86%
+  family train employment: accuracy=79.01% personal=6/6 false_fills=17/75 accepted=0/0 correct; coverage=0.00% macro_recall=96.76%
+  family train adoption-vet: accuracy=80.00% personal=3/5 false_fills=8/45 accepted=0/0 correct; coverage=0.00% macro_recall=66.44%
+  family train volunteer-freedom: accuracy=62.50% personal=8/15 false_fills=2/9 accepted=0/0 correct; coverage=0.00% macro_recall=59.13%
+  family train membership-rotary: accuracy=94.74% personal=6/6 false_fills=1/13 accepted=0/0 correct; coverage=0.00% macro_recall=98.72%
+  family validation rental-taylor: accuracy=77.05% personal=1/7 false_fills=8/54 accepted=0/0 correct; coverage=0.00% macro_recall=23.15%
+  family validation volunteer-turning: accuracy=71.43% personal=9/10 false_fills=7/18 accepted=0/0 correct; coverage=0.00% macro_recall=86.11%
+  family validation camp-ymca: accuracy=60.00% personal=1/2 false_fills=9/23 accepted=0/0 correct; coverage=0.00% macro_recall=53.62%
+  family test scholarship-sd91: accuracy=80.00% personal=1/2 false_fills=2/13 accepted=0/0 correct; coverage=0.00% macro_recall=61.54%
+  family test patient-ripley: accuracy=50.00% personal=6/10 false_fills=10/18 accepted=0/0 correct; coverage=0.00% macro_recall=55.56%
+  family test camp-pearce: accuracy=50.00% personal=1/5 false_fills=7/17 accepted=0/0 correct; coverage=0.00% macro_recall=26.47%
+  family test i9: accuracy=60.49% personal=12/13 false_fills=31/68 accepted=0/0 correct; coverage=0.00% macro_recall=86.76%
+hard-without-context seed=7 validation-selected threshold=1.01
+  gold train: accuracy=72.99% personal=23/32 false_fills=38/142 accepted=0/0 correct; coverage=0.00% macro_recall=69.20%
+  gold validation: accuracy=75.44% personal=13/19 false_fills=22/95 accepted=0/0 correct; coverage=0.00% macro_recall=69.35%
+  gold test: accuracy=56.16% personal=20/30 false_fills=54/116 accepted=0/0 correct; coverage=0.00% macro_recall=61.80%
+  extracted train: accuracy=73.56% personal=20/32 false_fills=34/142 accepted=0/0 correct; coverage=0.00% macro_recall=58.44%
+  extracted validation: accuracy=75.44% personal=12/19 false_fills=21/95 accepted=0/0 correct; coverage=0.00% macro_recall=59.46%
+  extracted test: accuracy=56.85% personal=19/30 false_fills=52/116 accepted=0/0 correct; coverage=0.00% macro_recall=59.37%
+  synthetic train: accuracy=100.00% personal=6947/6947 false_fills=0/11095 accepted=6947/6947 correct; coverage=100.00% macro_recall=100.00%
+  synthetic validation: accuracy=99.84% personal=2633/2641 false_fills=3/4303 accepted=2629/2629 correct; coverage=99.55% macro_recall=99.73%
+  synthetic test: accuracy=99.88% personal=2642/2648 false_fills=2/4127 accepted=2642/2643 correct; coverage=99.77% macro_recall=99.77%
+hard-without-context seed=19 validation-selected threshold=1.01
+  gold train: accuracy=73.56% personal=22/32 false_fills=36/142 accepted=0/0 correct; coverage=0.00% macro_recall=67.63%
+  gold validation: accuracy=72.81% personal=12/19 false_fills=24/95 accepted=0/0 correct; coverage=0.00% macro_recall=65.81%
+  gold test: accuracy=58.90% personal=20/30 false_fills=50/116 accepted=0/0 correct; coverage=0.00% macro_recall=62.07%
+  extracted train: accuracy=74.71% personal=20/32 false_fills=32/142 accepted=0/0 correct; coverage=0.00% macro_recall=58.53%
+  extracted validation: accuracy=76.32% personal=11/19 false_fills=19/95 accepted=0/0 correct; coverage=0.00% macro_recall=56.33%
+  extracted test: accuracy=59.59% personal=19/30 false_fills=48/116 accepted=0/0 correct; coverage=0.00% macro_recall=59.64%
+  synthetic train: accuracy=100.00% personal=6947/6947 false_fills=0/11095 accepted=6947/6947 correct; coverage=100.00% macro_recall=100.00%
+  synthetic validation: accuracy=99.87% personal=2635/2641 false_fills=3/4303 accepted=2629/2629 correct; coverage=99.55% macro_recall=99.81%
+  synthetic test: accuracy=99.94% personal=2645/2648 false_fills=1/4127 accepted=2643/2645 correct; coverage=99.81% macro_recall=99.88%
+hard-negatives seed=1 validation-selected threshold=0.999
+  gold train: accuracy=86.78% personal=26/32 false_fills=17/142 accepted=5/5 correct; coverage=15.62% macro_recall=90.57%
+  gold validation: accuracy=78.07% personal=14/19 false_fills=20/95 accepted=4/4 correct; coverage=21.05% macro_recall=74.56%
+  gold test: accuracy=73.29% personal=19/30 false_fills=28/116 accepted=9/17 correct; coverage=30.00% macro_recall=60.96%
+  extracted train: accuracy=82.76% personal=19/32 false_fills=17/142 accepted=0/0 correct; coverage=0.00% macro_recall=55.90%
+  extracted validation: accuracy=78.07% personal=10/19 false_fills=16/95 accepted=0/0 correct; coverage=0.00% macro_recall=49.98%
+  extracted test: accuracy=69.18% personal=20/30 false_fills=35/116 accepted=0/0 correct; coverage=0.00% macro_recall=61.78%
+  synthetic train: accuracy=100.00% personal=6947/6947 false_fills=0/11095 accepted=6947/6947 correct; coverage=100.00% macro_recall=100.00%
+  synthetic validation: accuracy=99.94% personal=2637/2641 false_fills=0/4303 accepted=2636/2636 correct; coverage=99.81% macro_recall=99.87%
+  synthetic test: accuracy=99.99% personal=2647/2648 false_fills=0/4127 accepted=2645/2645 correct; coverage=99.89% macro_recall=99.90%
+  family train employment: accuracy=85.19% personal=6/6 false_fills=12/75 accepted=2/2 correct; coverage=33.33% macro_recall=97.71%
+  family train adoption-vet: accuracy=88.00% personal=2/5 false_fills=3/45 accepted=0/0 correct; coverage=0.00% macro_recall=58.67%
+  family train volunteer-freedom: accuracy=87.50% personal=12/15 false_fills=0/9 accepted=1/1 correct; coverage=6.67% macro_recall=85.71%
+  family train membership-rotary: accuracy=89.47% personal=6/6 false_fills=2/13 accepted=2/2 correct; coverage=33.33% macro_recall=97.44%
+  family validation rental-taylor: accuracy=83.61% personal=3/7 false_fills=6/54 accepted=0/0 correct; coverage=0.00% macro_recall=48.61%
+  family validation volunteer-turning: accuracy=71.43% personal=10/10 false_fills=8/18 accepted=4/4 correct; coverage=40.00% macro_recall=95.56%
+  family validation camp-ymca: accuracy=72.00% personal=1/2 false_fills=6/23 accepted=0/0 correct; coverage=0.00% macro_recall=57.97%
+  family test scholarship-sd91: accuracy=86.67% personal=1/2 false_fills=1/13 accepted=0/0 correct; coverage=0.00% macro_recall=64.10%
+  family test patient-ripley: accuracy=67.86% personal=8/10 false_fills=7/18 accepted=5/8 correct; coverage=50.00% macro_recall=70.14%
+  family test camp-pearce: accuracy=59.09% personal=1/5 false_fills=5/17 accepted=0/0 correct; coverage=0.00% macro_recall=28.43%
+  family test i9: accuracy=76.54% personal=9/13 false_fills=15/68 accepted=4/9 correct; coverage=30.77% macro_recall=70.72%
+hard-negatives seed=7 validation-selected threshold=1.01
+  gold train: accuracy=84.48% personal=25/32 false_fills=20/142 accepted=0/0 correct; coverage=0.00% macro_recall=89.09%
+  gold validation: accuracy=78.95% personal=15/19 false_fills=20/95 accepted=0/0 correct; coverage=0.00% macro_recall=79.56%
+  gold test: accuracy=74.66% personal=21/30 false_fills=28/116 accepted=0/0 correct; coverage=0.00% macro_recall=65.45%
+  extracted train: accuracy=79.89% personal=18/32 false_fills=21/142 accepted=7/7 correct; coverage=21.88% macro_recall=54.05%
+  extracted validation: accuracy=78.07% personal=10/19 false_fills=16/95 accepted=1/1 correct; coverage=5.26% macro_recall=51.65%
+  extracted test: accuracy=69.86% personal=21/30 false_fills=35/116 accepted=12/27 correct; coverage=40.00% macro_recall=64.35%
+  synthetic train: accuracy=100.00% personal=6947/6947 false_fills=0/11095 accepted=6947/6947 correct; coverage=100.00% macro_recall=100.00%
+  synthetic validation: accuracy=99.94% personal=2637/2641 false_fills=0/4303 accepted=2636/2636 correct; coverage=99.81% macro_recall=99.89%
+  synthetic test: accuracy=100.00% personal=2648/2648 false_fills=0/4127 accepted=2645/2645 correct; coverage=99.89% macro_recall=100.00%
+hard-negatives seed=19 validation-selected threshold=0.999
+  gold train: accuracy=86.78% personal=26/32 false_fills=17/142 accepted=7/7 correct; coverage=21.88% macro_recall=90.19%
+  gold validation: accuracy=77.19% personal=15/19 false_fills=22/95 accepted=4/4 correct; coverage=21.05% macro_recall=79.35%
+  gold test: accuracy=73.97% personal=20/30 false_fills=28/116 accepted=10/24 correct; coverage=33.33% macro_recall=62.89%
+  extracted train: accuracy=81.61% personal=19/32 false_fills=19/142 accepted=0/0 correct; coverage=0.00% macro_recall=57.47%
+  extracted validation: accuracy=78.07% personal=11/19 false_fills=17/95 accepted=0/0 correct; coverage=0.00% macro_recall=54.88%
+  extracted test: accuracy=69.86% personal=20/30 false_fills=34/116 accepted=0/0 correct; coverage=0.00% macro_recall=61.85%
+  synthetic train: accuracy=100.00% personal=6947/6947 false_fills=0/11095 accepted=6947/6947 correct; coverage=100.00% macro_recall=100.00%
+  synthetic validation: accuracy=99.94% personal=2637/2641 false_fills=0/4303 accepted=2635/2635 correct; coverage=99.77% macro_recall=99.87%
+  synthetic test: accuracy=99.97% personal=2646/2648 false_fills=0/4127 accepted=2643/2643 correct; coverage=99.81% macro_recall=99.86%
+public-without-context seed=1 validation-selected threshold=1.01
+  gold train: accuracy=100.00% personal=32/32 false_fills=0/142 accepted=0/0 correct; coverage=0.00% macro_recall=100.00%
+  gold validation: accuracy=73.68% personal=11/19 false_fills=22/95 accepted=0/0 correct; coverage=0.00% macro_recall=62.68%
+  gold test: accuracy=62.33% personal=16/30 false_fills=41/116 accepted=0/0 correct; coverage=0.00% macro_recall=53.05%
+  extracted train: accuracy=95.98% personal=25/32 false_fills=0/142 accepted=0/0 correct; coverage=0.00% macro_recall=83.21%
+  extracted validation: accuracy=74.56% personal=10/19 false_fills=20/95 accepted=0/0 correct; coverage=0.00% macro_recall=52.89%
+  extracted test: accuracy=62.33% personal=15/30 false_fills=40/116 accepted=0/0 correct; coverage=0.00% macro_recall=50.55%
+  synthetic train: accuracy=100.00% personal=6947/6947 false_fills=0/11095 accepted=6946/6946 correct; coverage=99.99% macro_recall=100.00%
+  synthetic validation: accuracy=99.88% personal=2635/2641 false_fills=2/4303 accepted=2625/2625 correct; coverage=99.39% macro_recall=99.81%
+  synthetic test: accuracy=99.93% personal=2645/2648 false_fills=2/4127 accepted=2640/2641 correct; coverage=99.70% macro_recall=99.88%
+  family train employment: accuracy=100.00% personal=6/6 false_fills=0/75 accepted=0/0 correct; coverage=0.00% macro_recall=100.00%
+  family train adoption-vet: accuracy=100.00% personal=5/5 false_fills=0/45 accepted=0/0 correct; coverage=0.00% macro_recall=100.00%
+  family train volunteer-freedom: accuracy=100.00% personal=15/15 false_fills=0/9 accepted=0/0 correct; coverage=0.00% macro_recall=100.00%
+  family train membership-rotary: accuracy=100.00% personal=6/6 false_fills=0/13 accepted=0/0 correct; coverage=0.00% macro_recall=100.00%
+  family validation rental-taylor: accuracy=78.69% personal=0/7 false_fills=6/54 accepted=0/0 correct; coverage=0.00% macro_recall=11.11%
+  family validation volunteer-turning: accuracy=78.57% personal=10/10 false_fills=6/18 accepted=0/0 correct; coverage=0.00% macro_recall=96.67%
+  family validation camp-ymca: accuracy=56.00% personal=1/2 false_fills=10/23 accepted=0/0 correct; coverage=0.00% macro_recall=52.17%
+  family test scholarship-sd91: accuracy=80.00% personal=1/2 false_fills=2/13 accepted=0/0 correct; coverage=0.00% macro_recall=61.54%
+  family test patient-ripley: accuracy=53.57% personal=6/10 false_fills=9/18 accepted=0/0 correct; coverage=0.00% macro_recall=56.25%
+  family test camp-pearce: accuracy=40.91% personal=1/5 false_fills=9/17 accepted=0/0 correct; coverage=0.00% macro_recall=24.51%
+  family test i9: accuracy=67.90% personal=8/13 false_fills=21/68 accepted=0/0 correct; coverage=0.00% macro_recall=60.83%
+public-without-context seed=7 validation-selected threshold=1.01
+  gold train: accuracy=100.00% personal=32/32 false_fills=0/142 accepted=0/0 correct; coverage=0.00% macro_recall=100.00%
+  gold validation: accuracy=72.81% personal=12/19 false_fills=24/95 accepted=0/0 correct; coverage=0.00% macro_recall=65.81%
+  gold test: accuracy=61.64% personal=15/30 false_fills=41/116 accepted=0/0 correct; coverage=0.00% macro_recall=51.13%
+  extracted train: accuracy=94.83% personal=25/32 false_fills=2/142 accepted=0/0 correct; coverage=0.00% macro_recall=83.11%
+  extracted validation: accuracy=73.68% personal=11/19 false_fills=22/95 accepted=0/0 correct; coverage=0.00% macro_recall=56.02%
+  extracted test: accuracy=61.64% personal=14/30 false_fills=40/116 accepted=0/0 correct; coverage=0.00% macro_recall=48.63%
+  synthetic train: accuracy=100.00% personal=6947/6947 false_fills=0/11095 accepted=6946/6946 correct; coverage=99.99% macro_recall=100.00%
+  synthetic validation: accuracy=99.84% personal=2632/2641 false_fills=2/4303 accepted=2625/2625 correct; coverage=99.39% macro_recall=99.69%
+  synthetic test: accuracy=99.90% personal=2644/2648 false_fills=3/4127 accepted=2642/2644 correct; coverage=99.77% macro_recall=99.84%
+public-without-context seed=19 validation-selected threshold=1.01
+  gold train: accuracy=100.00% personal=32/32 false_fills=0/142 accepted=0/0 correct; coverage=0.00% macro_recall=100.00%
+  gold validation: accuracy=73.68% personal=13/19 false_fills=24/95 accepted=0/0 correct; coverage=0.00% macro_recall=69.14%
+  gold test: accuracy=62.33% personal=16/30 false_fills=41/116 accepted=0/0 correct; coverage=0.00% macro_recall=53.05%
+  extracted train: accuracy=96.55% personal=26/32 false_fills=0/142 accepted=0/0 correct; coverage=0.00% macro_recall=84.16%
+  extracted validation: accuracy=76.32% personal=12/19 false_fills=20/95 accepted=0/0 correct; coverage=0.00% macro_recall=59.56%
+  extracted test: accuracy=63.01% personal=15/30 false_fills=39/116 accepted=0/0 correct; coverage=0.00% macro_recall=50.62%
+  synthetic train: accuracy=100.00% personal=6947/6947 false_fills=0/11095 accepted=6936/6936 correct; coverage=99.84% macro_recall=100.00%
+  synthetic validation: accuracy=99.84% personal=2633/2641 false_fills=3/4303 accepted=2623/2623 correct; coverage=99.32% macro_recall=99.73%
+  synthetic test: accuracy=99.93% personal=2645/2648 false_fills=2/4127 accepted=2635/2636 correct; coverage=99.51% macro_recall=99.88%
+contextual seed=1 validation-selected threshold=0.999
+  gold train: accuracy=100.00% personal=32/32 false_fills=0/142 accepted=26/26 correct; coverage=81.25% macro_recall=100.00%
+  gold validation: accuracy=76.32% personal=14/19 false_fills=22/95 accepted=4/4 correct; coverage=21.05% macro_recall=74.35%
+  gold test: accuracy=73.29% personal=15/30 false_fills=24/116 accepted=7/19 correct; coverage=23.33% macro_recall=48.41%
+  extracted train: accuracy=94.83% personal=23/32 false_fills=0/142 accepted=14/14 correct; coverage=43.75% macro_recall=64.16%
+  extracted validation: accuracy=76.32% personal=9/19 false_fills=17/95 accepted=1/1 correct; coverage=5.26% macro_recall=44.88%
+  extracted test: accuracy=70.55% personal=15/30 false_fills=28/116 accepted=8/20 correct; coverage=26.67% macro_recall=49.43%
+  synthetic train: accuracy=100.00% personal=6947/6947 false_fills=0/11095 accepted=6947/6947 correct; coverage=100.00% macro_recall=100.00%
+  synthetic validation: accuracy=99.96% personal=2638/2641 false_fills=0/4303 accepted=2636/2636 correct; coverage=99.81% macro_recall=99.91%
+  synthetic test: accuracy=99.97% personal=2646/2648 false_fills=0/4127 accepted=2644/2644 correct; coverage=99.85% macro_recall=99.91%
+  family train employment: accuracy=100.00% personal=6/6 false_fills=0/75 accepted=6/6 correct; coverage=100.00% macro_recall=100.00%
+  family train adoption-vet: accuracy=100.00% personal=5/5 false_fills=0/45 accepted=4/4 correct; coverage=80.00% macro_recall=100.00%
+  family train volunteer-freedom: accuracy=100.00% personal=15/15 false_fills=0/9 accepted=10/10 correct; coverage=66.67% macro_recall=100.00%
+  family train membership-rotary: accuracy=100.00% personal=6/6 false_fills=0/13 accepted=6/6 correct; coverage=100.00% macro_recall=100.00%
+  family validation rental-taylor: accuracy=81.97% personal=3/7 false_fills=7/54 accepted=0/0 correct; coverage=0.00% macro_recall=48.38%
+  family validation volunteer-turning: accuracy=78.57% personal=10/10 false_fills=6/18 accepted=4/4 correct; coverage=40.00% macro_recall=96.67%
+  family validation camp-ymca: accuracy=60.00% personal=1/2 false_fills=9/23 accepted=0/0 correct; coverage=0.00% macro_recall=53.62%
+  family test scholarship-sd91: accuracy=93.33% personal=1/2 false_fills=0/13 accepted=0/0 correct; coverage=0.00% macro_recall=66.67%
+  family test patient-ripley: accuracy=67.86% personal=9/10 false_fills=8/18 accepted=5/10 correct; coverage=50.00% macro_recall=81.94%
+  family test camp-pearce: accuracy=50.00% personal=1/5 false_fills=7/17 accepted=0/1 correct; coverage=0.00% macro_recall=26.47%
+  family test i9: accuracy=77.78% personal=4/13 false_fills=9/68 accepted=2/8 correct; coverage=15.38% macro_recall=30.61%
+contextual seed=7 validation-selected threshold=1.01
+  gold train: accuracy=100.00% personal=32/32 false_fills=0/142 accepted=0/0 correct; coverage=0.00% macro_recall=100.00%
+  gold validation: accuracy=75.44% personal=13/19 false_fills=22/95 accepted=0/0 correct; coverage=0.00% macro_recall=69.35%
+  gold test: accuracy=71.92% personal=14/30 false_fills=25/116 accepted=0/0 correct; coverage=0.00% macro_recall=45.78%
+  extracted train: accuracy=94.83% personal=23/32 false_fills=0/142 accepted=14/14 correct; coverage=43.75% macro_recall=64.16%
+  extracted validation: accuracy=78.07% personal=10/19 false_fills=16/95 accepted=1/1 correct; coverage=5.26% macro_recall=49.98%
+  extracted test: accuracy=69.18% personal=14/30 false_fills=29/116 accepted=8/18 correct; coverage=26.67% macro_recall=46.79%
+  synthetic train: accuracy=100.00% personal=6947/6947 false_fills=0/11095 accepted=6947/6947 correct; coverage=100.00% macro_recall=100.00%
+  synthetic validation: accuracy=99.96% personal=2638/2641 false_fills=0/4303 accepted=2638/2638 correct; coverage=99.89% macro_recall=99.93%
+  synthetic test: accuracy=99.97% personal=2646/2648 false_fills=0/4127 accepted=2646/2647 correct; coverage=99.92% macro_recall=99.86%
+contextual seed=19 validation-selected threshold=0.999
+  gold train: accuracy=100.00% personal=32/32 false_fills=0/142 accepted=26/26 correct; coverage=81.25% macro_recall=100.00%
+  gold validation: accuracy=74.56% personal=14/19 false_fills=24/95 accepted=4/4 correct; coverage=21.05% macro_recall=74.14%
+  gold test: accuracy=73.97% personal=14/30 false_fills=22/116 accepted=7/13 correct; coverage=23.33% macro_recall=45.98%
+  extracted train: accuracy=94.83% personal=23/32 false_fills=0/142 accepted=15/15 correct; coverage=46.88% macro_recall=64.16%
+  extracted validation: accuracy=75.44% personal=10/19 false_fills=19/95 accepted=1/1 correct; coverage=5.26% macro_recall=49.67%
+  extracted test: accuracy=69.86% personal=15/30 false_fills=29/116 accepted=8/19 correct; coverage=26.67% macro_recall=50.64%
+  synthetic train: accuracy=100.00% personal=6947/6947 false_fills=0/11095 accepted=6947/6947 correct; coverage=100.00% macro_recall=100.00%
+  synthetic validation: accuracy=99.96% personal=2638/2641 false_fills=0/4303 accepted=2629/2629 correct; coverage=99.55% macro_recall=99.91%
+  synthetic test: accuracy=99.96% personal=2645/2648 false_fills=0/4127 accepted=2642/2642 correct; coverage=99.77% macro_recall=99.81%
+contextual-recall seed=1 validation-selected threshold=0.999
+  gold train: accuracy=100.00% personal=32/32 false_fills=0/142 accepted=26/26 correct; coverage=81.25% macro_recall=100.00%
+  gold validation: accuracy=73.68% personal=14/19 false_fills=25/95 accepted=3/3 correct; coverage=15.79% macro_recall=74.04%
+  gold test: accuracy=68.49% personal=14/30 false_fills=30/116 accepted=8/19 correct; coverage=26.67% macro_recall=45.45%
+  extracted train: accuracy=94.83% personal=23/32 false_fills=0/142 accepted=14/14 correct; coverage=43.75% macro_recall=64.16%
+  extracted validation: accuracy=73.68% personal=10/19 false_fills=21/95 accepted=1/1 correct; coverage=5.26% macro_recall=49.46%
+  extracted test: accuracy=65.75% personal=15/30 false_fills=35/116 accepted=8/23 correct; coverage=26.67% macro_recall=50.24%
+  synthetic train: accuracy=99.99% personal=6947/6947 false_fills=1/11095 accepted=6947/6947 correct; coverage=100.00% macro_recall=100.00%
+  synthetic validation: accuracy=99.96% personal=2638/2641 false_fills=0/4303 accepted=2637/2637 correct; coverage=99.85% macro_recall=99.91%
+  synthetic test: accuracy=99.99% personal=2647/2648 false_fills=0/4127 accepted=2645/2645 correct; coverage=99.89% macro_recall=99.95%
+  family train employment: accuracy=100.00% personal=6/6 false_fills=0/75 accepted=6/6 correct; coverage=100.00% macro_recall=100.00%
+  family train adoption-vet: accuracy=100.00% personal=5/5 false_fills=0/45 accepted=4/4 correct; coverage=80.00% macro_recall=100.00%
+  family train volunteer-freedom: accuracy=100.00% personal=15/15 false_fills=0/9 accepted=10/10 correct; coverage=66.67% macro_recall=100.00%
+  family train membership-rotary: accuracy=100.00% personal=6/6 false_fills=0/13 accepted=6/6 correct; coverage=100.00% macro_recall=100.00%
+  family validation rental-taylor: accuracy=80.33% personal=3/7 false_fills=8/54 accepted=0/0 correct; coverage=0.00% macro_recall=48.15%
+  family validation volunteer-turning: accuracy=71.43% personal=10/10 false_fills=8/18 accepted=3/3 correct; coverage=30.00% macro_recall=95.56%
+  family validation camp-ymca: accuracy=60.00% personal=1/2 false_fills=9/23 accepted=0/0 correct; coverage=0.00% macro_recall=53.62%
+  family test scholarship-sd91: accuracy=93.33% personal=1/2 false_fills=0/13 accepted=0/0 correct; coverage=0.00% macro_recall=66.67%
+  family test patient-ripley: accuracy=60.71% personal=8/10 false_fills=9/18 accepted=5/9 correct; coverage=50.00% macro_recall=68.75%
+  family test camp-pearce: accuracy=50.00% personal=1/5 false_fills=7/17 accepted=0/1 correct; coverage=0.00% macro_recall=26.47%
+  family test i9: accuracy=71.60% personal=4/13 false_fills=14/68 accepted=3/9 correct; coverage=23.08% macro_recall=29.95%
+contextual-recall seed=7 validation-selected threshold=0.999
+  gold train: accuracy=100.00% personal=32/32 false_fills=0/142 accepted=24/24 correct; coverage=75.00% macro_recall=100.00%
+  gold validation: accuracy=71.05% personal=14/19 false_fills=28/95 accepted=2/2 correct; coverage=10.53% macro_recall=73.72%
+  gold test: accuracy=72.60% personal=16/30 false_fills=26/116 accepted=8/18 correct; coverage=26.67% macro_recall=53.40%
+  extracted train: accuracy=95.40% personal=24/32 false_fills=0/142 accepted=14/14 correct; coverage=43.75% macro_recall=70.83%
+  extracted validation: accuracy=73.68% personal=10/19 false_fills=21/95 accepted=1/1 correct; coverage=5.26% macro_recall=49.46%
+  extracted test: accuracy=66.44% personal=15/30 false_fills=34/116 accepted=8/18 correct; coverage=26.67% macro_recall=50.31%
+  synthetic train: accuracy=99.99% personal=6947/6947 false_fills=1/11095 accepted=6947/6948 correct; coverage=100.00% macro_recall=100.00%
+  synthetic validation: accuracy=99.97% personal=2639/2641 false_fills=0/4303 accepted=2639/2639 correct; coverage=99.92% macro_recall=99.96%
+  synthetic test: accuracy=99.99% personal=2647/2648 false_fills=0/4127 accepted=2647/2648 correct; coverage=99.96% macro_recall=99.95%
+contextual-recall seed=19 validation-selected threshold=0.999
+  gold train: accuracy=100.00% personal=32/32 false_fills=0/142 accepted=25/25 correct; coverage=78.12% macro_recall=100.00%
+  gold validation: accuracy=73.68% personal=14/19 false_fills=25/95 accepted=2/2 correct; coverage=10.53% macro_recall=74.04%
+  gold test: accuracy=69.86% personal=16/30 false_fills=30/116 accepted=7/13 correct; coverage=23.33% macro_recall=53.14%
+  extracted train: accuracy=95.40% personal=24/32 false_fills=0/142 accepted=15/15 correct; coverage=46.88% macro_recall=70.83%
+  extracted validation: accuracy=74.56% personal=10/19 false_fills=20/95 accepted=1/1 correct; coverage=5.26% macro_recall=49.56%
+  extracted test: accuracy=65.75% personal=15/30 false_fills=35/116 accepted=8/20 correct; coverage=26.67% macro_recall=50.24%
+  synthetic train: accuracy=100.00% personal=6947/6947 false_fills=0/11095 accepted=6947/6947 correct; coverage=100.00% macro_recall=100.00%
+  synthetic validation: accuracy=99.94% personal=2637/2641 false_fills=0/4303 accepted=2630/2630 correct; coverage=99.58% macro_recall=99.87%
+  synthetic test: accuracy=99.97% personal=2646/2648 false_fills=0/4127 accepted=2640/2640 correct; coverage=99.70% macro_recall=99.86%
+legacy diagnostic legacy-v1 public-w9: accuracy=100.00% personal=3/3 false_fills=0/12 accepted=0/0 correct; coverage=0.00% macro_recall=100.00%
+legacy diagnostic legacy-v1 public-w7: accuracy=72.92% personal=6/7 false_fills=12/41 accepted=0/0 correct; coverage=0.00% macro_recall=83.84%
+legacy diagnostic legacy-v1 public-w4: accuracy=97.67% personal=3/4 false_fills=0/39 accepted=0/0 correct; coverage=0.00% macro_recall=80.00%
+legacy diagnostic control public-w9: accuracy=100.00% personal=3/3 false_fills=0/12 accepted=0/0 correct; coverage=0.00% macro_recall=100.00%
+legacy diagnostic control public-w7: accuracy=70.83% personal=6/7 false_fills=13/41 accepted=0/0 correct; coverage=0.00% macro_recall=83.54%
+legacy diagnostic control public-w4: accuracy=97.67% personal=3/4 false_fills=0/39 accepted=0/0 correct; coverage=0.00% macro_recall=80.00%
+legacy diagnostic hard-without-context public-w9: accuracy=100.00% personal=3/3 false_fills=0/12 accepted=0/0 correct; coverage=0.00% macro_recall=100.00%
+legacy diagnostic hard-without-context public-w7: accuracy=77.08% personal=3/7 false_fills=7/41 accepted=0/0 correct; coverage=0.00% macro_recall=47.87%
+legacy diagnostic hard-without-context public-w4: accuracy=83.72% personal=4/4 false_fills=7/39 accepted=0/0 correct; coverage=0.00% macro_recall=96.41%
+legacy diagnostic hard-negatives public-w9: accuracy=100.00% personal=3/3 false_fills=0/12 accepted=3/3 correct; coverage=100.00% macro_recall=100.00%
+legacy diagnostic hard-negatives public-w7: accuracy=77.08% personal=5/7 false_fills=9/41 accepted=2/5 correct; coverage=28.57% macro_recall=72.26%
+legacy diagnostic hard-negatives public-w4: accuracy=100.00% personal=4/4 false_fills=0/39 accepted=2/2 correct; coverage=50.00% macro_recall=100.00%
+legacy diagnostic public-without-context public-w9: accuracy=100.00% personal=3/3 false_fills=0/12 accepted=0/0 correct; coverage=0.00% macro_recall=100.00%
+legacy diagnostic public-without-context public-w7: accuracy=83.33% personal=3/7 false_fills=4/41 accepted=0/0 correct; coverage=0.00% macro_recall=48.78%
+legacy diagnostic public-without-context public-w4: accuracy=100.00% personal=4/4 false_fills=0/39 accepted=0/0 correct; coverage=0.00% macro_recall=100.00%
+legacy diagnostic contextual public-w9: accuracy=100.00% personal=3/3 false_fills=0/12 accepted=3/3 correct; coverage=100.00% macro_recall=100.00%
+legacy diagnostic contextual public-w7: accuracy=77.08% personal=5/7 false_fills=9/41 accepted=2/3 correct; coverage=28.57% macro_recall=72.26%
+legacy diagnostic contextual public-w4: accuracy=100.00% personal=4/4 false_fills=0/39 accepted=2/2 correct; coverage=50.00% macro_recall=100.00%
+legacy diagnostic contextual-recall public-w9: accuracy=100.00% personal=3/3 false_fills=0/12 accepted=3/3 correct; coverage=100.00% macro_recall=100.00%
+legacy diagnostic contextual-recall public-w7: accuracy=83.33% personal=6/7 false_fills=7/41 accepted=1/2 correct; coverage=14.29% macro_recall=85.37%
+legacy diagnostic contextual-recall public-w4: accuracy=100.00% personal=4/4 false_fills=0/39 accepted=2/2 correct; coverage=50.00% macro_recall=100.00%
+
+Gold uses manually reviewed labels/sections. Extracted uses readable PDF tooltips or page geometry and heuristic section boundaries at known field slots; printable slots are manually located, so this is NOT automatic field detection.
+Each input track selects its threshold only on that track’s validation families, using the same fixed grid; test data never sets a threshold. It is not calibrated probability or a safety guarantee.
+Synthetic splits share grammar; public source families are disjoint. Test results do not select models, thresholds or seeds.
+Other includes third parties, work contacts, former/secondary addresses and unsupported conditional details.

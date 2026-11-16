@@ -23,7 +23,7 @@ pub(super) enum Status {
 pub(super) struct Updater {
     status: Arc<Mutex<Status>>,
     /// The banner for a new version was closed.
-    dismissed: bool,
+    pub(super) dismissed: bool,
 }
 
 impl Default for Updater {
@@ -116,48 +116,62 @@ fn size_of(release: &Release) -> u64 {
 impl Viewer {
     /// The bar along the bottom when a new version is out, and quitting
     /// once the installer has taken over.
-    pub(super) fn update_banner(&mut self, ui: &mut egui::Ui) {
+    /// Follows an update on its way in: keeps the progress moving, and
+    /// closes the window once the installer has taken over.
+    pub(super) fn update_tick(&mut self, ctx: &egui::Context) {
         let status = self.updater.status();
         if matches!(status, Status::Ready(Installed::InstallerRunning)) {
             self.closing = true;
-            ui.ctx().send_viewport_cmd(ViewportCommand::Close);
+            ctx.send_viewport_cmd(ViewportCommand::Close);
             return;
         }
         if let Status::Downloading(_, _) = status {
-            ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(200));
+            ctx.request_repaint_after(std::time::Duration::from_millis(200));
         }
-        let Status::Available(release) = status else {
+    }
+
+    /// The update symbol in the toolbar's status area, shown while a
+    /// newer version is on offer. It opens what the update is and what
+    /// to do about it; nothing covers the page.
+    pub(super) fn update_tray(&mut self, ui: &mut egui::Ui) {
+        let Status::Available(release) = self.updater.status() else {
             return;
         };
         if self.updater.dismissed {
             return;
         }
-        egui::Panel::bottom("update").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(format!("Atelier {} is available.", release.version)).strong(),
-                );
-                if ui.small_button("What's new").clicked() {
+        let accent = ui.visuals().hyperlink_color;
+        let button = egui::Button::new(crate::icons::Icon::Update.image().tint(accent))
+            .min_size(egui::Vec2::splat(30.0));
+        let response = ui
+            .add(button)
+            .on_hover_text(format!("Atelier {} is available", release.version));
+        egui::Popup::menu(&response).show(|ui| {
+            ui.set_min_width(220.0);
+            ui.label(RichText::new(format!("Atelier {} is available.", release.version)).strong());
+            if ui.button("What's new").clicked() {
+                self.window = Some(super::settings_window::Window::About);
+                ui.close();
+            }
+            if update::supported() {
+                let dirty = self.update_has_unsaved_work();
+                if ui
+                    .add_enabled(!dirty, egui::Button::new("Update now"))
+                    .on_disabled_hover_text("Save your changes first.")
+                    .clicked()
+                {
+                    self.updater.install(release.clone(), self.ctx.clone());
                     self.window = Some(super::settings_window::Window::About);
+                    ui.close();
                 }
-                if update::supported() {
-                    let dirty = self.update_has_unsaved_work();
-                    if ui
-                        .add_enabled(!dirty, egui::Button::new("Update now").small())
-                        .on_disabled_hover_text("Save your changes first.")
-                        .clicked()
-                    {
-                        self.updater.install(release.clone(), self.ctx.clone());
-                        self.window = Some(super::settings_window::Window::About);
-                    }
-                } else if ui.small_button("Download").clicked() {
-                    update::open_page(&release.page);
-                }
-                if ui.small_button("Later").clicked() {
-                    self.updater.dismissed = true;
-                }
-            });
+            } else if ui.button("Download").clicked() {
+                update::open_page(&release.page);
+                ui.close();
+            }
+            if ui.button("Not now").clicked() {
+                self.updater.dismissed = true;
+                ui.close();
+            }
         });
     }
 

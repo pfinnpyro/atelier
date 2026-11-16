@@ -1186,7 +1186,10 @@ impl Viewer {
         o.session.add_annot(page, annot);
         self.annotate.tool = Tool::Select;
         self.rebuild(&HashSet::from([page]), false);
-        self.notice = Some("Ink signature added. Certificate backing applies only after exporting a signed copy. Ctrl+Z to undo.".into());
+        self.notice = Some(format!(
+            "Ink signature added. Certificate backing applies only after exporting a signed copy. {} to undo.",
+            self.keys("Mod+Z")
+        ));
         if self.settings.certify_ink {
             self.open_security(true);
         }
@@ -1381,7 +1384,7 @@ impl Viewer {
         if ui
             .add_enabled(
                 any,
-                egui::Button::new("Undo the last mark").shortcut_text("Ctrl+Z"),
+                egui::Button::new("Undo the last mark").shortcut_text(self.keys("Mod+Z")),
             )
             .clicked()
         {

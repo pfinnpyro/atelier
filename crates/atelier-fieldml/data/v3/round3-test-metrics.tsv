@@ -1,0 +1,3 @@
+track	split	fields	correct	personal	positives	false_fills	negatives	accepted_correct	accepted	macro_recall	mean_accepted_confidence	ece	hard_false_fills	hard_negatives	qualifies
+gold	test	135	122	28	34	7	101	23	29	0.773927	0.995836	0.094226	5	61	false
+extracted	test	135	93	27	34	35	101	23	52	0.740007	0.990861	0.292631	29	61	false

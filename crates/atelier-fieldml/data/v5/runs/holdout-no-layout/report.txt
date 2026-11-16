@@ -1,0 +1,13 @@
+v4 HOLDOUT crates/atelier-fieldml/data/v5/holdout-corpus.tsv (trained on all 26 development forms, run once); Settings { epochs: 20, pair_epochs: 12, folds: 5, synthetic: 500, seed: 1, kind_decay: 0.997, role_decay: 0.997, block_weight: 0.5, join: 0.0, cut: 0.5, members: 3 }; Subject
+gold employment-bridgeport kind 85/108 (78.7%); role 106/108 (98.1%); group pairs P 59.8% R 79.4% F1 68.2%; detail F1 85.9%; fills right 9/11 gold, foreign 0, wrong kind 0
+gold youth-bartlett       kind 44/54 (81.5%); role 8/54 (14.8%); group pairs P 13.9% R 51.0% F1 21.8%; detail F1 25.3%; fills right 1/3 gold, foreign 13, wrong kind 1
+gold parking-charleston   kind 19/19 (100.0%); role 19/19 (100.0%); group pairs P 32.7% R 100.0% F1 49.3%; detail F1 100.0%; fills right 7/7 gold, foreign 0, wrong kind 0
+gold adoption-columbia    kind 47/47 (100.0%); role 47/47 (100.0%); group pairs P 17.4% R 100.0% F1 29.6%; detail F1 100.0%; fills right 4/4 gold, foreign 0, wrong kind 0
+gold TOTAL                kind 195/228 (85.5%); role 180/228 (78.9%); group pairs P 27.0% R 78.4% F1 40.2%; detail F1 69.9%; fills right 21/25 gold, foreign 13, wrong kind 1
+
+extracted employment-bridgeport kind 85/108 (78.7%); role 79/108 (73.1%); group pairs P 61.9% R 78.9% F1 69.4%; detail F1 74.9%; fills right 8/11 gold, foreign 3, wrong kind 0
+extracted youth-bartlett       kind 40/54 (74.1%); role 0/54 (0.0%); group pairs P 56.9% R 38.6% F1 46.0%; detail F1 60.5%; fills right 0/3 gold, foreign 7, wrong kind 0
+extracted parking-charleston   kind 19/19 (100.0%); role 19/19 (100.0%); group pairs P 32.7% R 100.0% F1 49.3%; detail F1 100.0%; fills right 7/7 gold, foreign 0, wrong kind 0
+extracted adoption-columbia    kind 44/47 (93.6%); role 29/47 (61.7%); group pairs P 42.6% R 100.0% F1 59.7%; detail F1 100.0%; fills right 4/4 gold, foreign 0, wrong kind 0
+extracted TOTAL                kind 188/228 (82.5%); role 127/228 (55.7%); group pairs P 51.1% R 75.3% F1 60.9%; detail F1 77.5%; fills right 19/25 gold, foreign 10, wrong kind 0
+
