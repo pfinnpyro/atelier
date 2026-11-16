@@ -289,12 +289,14 @@ fn words(text: &PageText, rotate: u16) -> Words {
             end_blank(&mut blank, &mut out);
             if is_box {
                 out.phrases.extend(phrase.take());
-                // The square stands on the baseline and is about as wide
-                // as the glyph.
+                // The square stands on the baseline, in the middle of the
+                // glyph's width and a little narrower than it: the field
+                // sits on the printed square, not around it.
                 let h = g.rect.y1 - g.rect.y0;
-                let side = (g.rect.x1 - g.rect.x0).clamp(h * 0.5, h * 0.9);
+                let room = (g.rect.x1 - g.rect.x0).clamp(h * 0.5, h * 0.9);
+                let side = ((g.rect.x1 - g.rect.x0) * 0.8).clamp(h * 0.5, h * 0.8);
                 let cx = (g.rect.x0 + g.rect.x1) / 2.0;
-                let y0 = g.rect.y0 + h * 0.15;
+                let y0 = g.rect.y0 + h * 0.15 + (room - side) / 2.0;
                 out.boxes.push(Rect {
                     x0: cx - side / 2.0,
                     y0,
@@ -379,28 +381,72 @@ fn merge(mut lines: Vec<Ruling>) -> Vec<Ruling> {
     out
 }
 
+/// How far inside a cell's border its shading may stop: word processors
+/// shade a cell out to its border and again, a few points in, behind the
+/// text.
+const PADDING: f64 = 6.0;
+
+/// Whether `drawn`, lines that were drawn as lines, have one running
+/// alongside `edge` within `reach` of it for nearly its whole length.
+fn beside_a_line(edge: &Ruling, drawn: &[Ruling], reach: f64) -> bool {
+    let need = edge.len() * 0.9;
+    drawn.iter().any(|d| {
+        (d.at - edge.at).abs() <= reach && d.to.min(edge.to) - d.from.max(edge.from) >= need
+    })
+}
+
 /// The page's lines as read: horizontal ones (at a height, from left to
-/// right) and vertical ones (at an x, from bottom to top).
-fn rulings(lines: &[PageLine], rotate: u16) -> (Vec<Ruling>, Vec<Ruling>) {
-    let (mut h, mut v) = (Vec::new(), Vec::new());
+/// right) and vertical ones (at an x, from bottom to top), and for each
+/// horizontal one whether it was drawn as a line and is not just the
+/// edge of a shaded box.
+///
+/// The edge of a shaded box is a ruling like any other, except where a
+/// drawn line runs alongside it a little way off: then it is the shading
+/// behind a cell's text, stopping short of the cell's border, and the
+/// border is the ruling.
+fn rulings(lines: &[PageLine], rotate: u16) -> (Vec<Ruling>, Vec<Ruling>, Vec<bool>) {
+    // Drawn lines, then edges of shading, each across and upright.
+    let mut found: [[Vec<Ruling>; 2]; 2] = Default::default();
     for l in lines {
         let (a, b) = (upright(l.from, rotate), upright(l.to, rotate));
         let (dx, dy) = ((b.x - a.x).abs(), (b.y - a.y).abs());
+        let shading = usize::from(l.width <= 0.0);
         if dy <= 0.6 && dx > dy * 20.0 {
-            h.push(Ruling {
+            found[shading][0].push(Ruling {
                 at: (a.y + b.y) / 2.0,
                 from: a.x.min(b.x),
                 to: a.x.max(b.x),
             });
         } else if dx <= 0.6 && dy > dx * 20.0 {
-            v.push(Ruling {
+            found[shading][1].push(Ruling {
                 at: (a.x + b.x) / 2.0,
                 from: a.y.min(b.y),
                 to: a.y.max(b.y),
             });
         }
     }
-    (merge(h), merge(v))
+    let [[h, v], [shaded_h, shaded_v]] = found;
+    let (drawn_h, drawn_v) = (merge(h), merge(v));
+    let keep = |edges: Vec<Ruling>, drawn: &[Ruling]| -> Vec<Ruling> {
+        edges
+            .into_iter()
+            .filter(|e| beside_a_line(e, drawn, JOIN) || !beside_a_line(e, drawn, PADDING))
+            .collect()
+    };
+    let mut all_h = drawn_h.clone();
+    all_h.extend(keep(shaded_h, &drawn_h));
+    let mut all_v = drawn_v.clone();
+    all_v.extend(keep(shaded_v, &drawn_v));
+    let (h, v) = (merge(all_h), merge(all_v));
+    let is_drawn = h
+        .iter()
+        .map(|r| {
+            drawn_h
+                .iter()
+                .any(|d| (d.at - r.at).abs() <= JOIN && d.to.min(r.to) - d.from.max(r.from) > 1.0)
+        })
+        .collect();
+    (h, v, is_drawn)
 }
 
 // ----- Cells and tables --------------------------------------------------
@@ -460,6 +506,25 @@ fn cells(h: &[Ruling], v: &[Ruling]) -> (Vec<Rect>, HashSet<usize>) {
     // The order of a hash set is not the same from run to run.
     out.sort_by(|a, b| b.y1.total_cmp(&a.y1).then(a.x0.total_cmp(&b.x0)));
     out.dedup();
+    // A box drawn just inside another, such as shading behind a cell's
+    // text, is the same cell: the outer one is kept.
+    let inner: Vec<bool> = out
+        .iter()
+        .enumerate()
+        .map(|(i, a)| {
+            out.iter().enumerate().any(|(j, b)| {
+                i != j
+                    && a.x0 >= b.x0 - 1.0
+                    && a.x1 <= b.x1 + 1.0
+                    && a.y0 >= b.y0 - 1.0
+                    && a.y1 <= b.y1 + 1.0
+                    && area(a) > area(b) * 0.8
+                    && (area(a) < area(b) || i > j)
+            })
+        })
+        .collect();
+    let mut keep = inner.iter().map(|inner| !inner);
+    out.retain(|_| keep.next().unwrap_or(true));
     (out, touched)
 }
 
@@ -727,7 +792,7 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
     let page_area = area(&page).max(1.0);
     let words = words(input.text, rotate);
     let phrases = &words.phrases;
-    let (h, v) = rulings(input.lines, rotate);
+    let (h, v, drawn) = rulings(input.lines, rotate);
     let images: Vec<Rect> = input
         .images
         .iter()
@@ -774,6 +839,24 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
             holds[j] = true;
             held_by[i] = Some(j);
         }
+    }
+
+    // A check box printed as a character does the same for its cell.
+    let box_cell: Vec<Option<usize>> = words
+        .boxes
+        .iter()
+        .map(|b| {
+            let (cx, cy) = ((b.x0 + b.x1) / 2.0, (b.y0 + b.y1) / 2.0);
+            cell_rects
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| contains(c, cx, cy))
+                .min_by(|a, b| area(a.1).total_cmp(&area(b.1)))
+                .map(|(ci, _)| ci)
+        })
+        .collect();
+    for ci in box_cell.iter().flatten() {
+        holds[*ci] = true;
     }
 
     // Tables: groups of cells in at least two rows and two columns.
@@ -868,6 +951,20 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
         }
         None
     };
+    // The label beside a blank and the heading over it. What stands over
+    // a blank is not its heading when it stands over the row's label as
+    // well (the title of a section, across the whole form) or has a blank
+    // of its own beside it (the label of the row above).
+    let labels_of = |ci: usize| -> (Option<usize>, Option<usize>) {
+        let side = labelled(ci, Side::Left);
+        let head = labelled(ci, Side::Above).filter(|&h| {
+            let over_label = side.is_some_and(|s| cell_rects[h].x0 < cell_rects[s].x1 - 1.0);
+            let own_blank =
+                neighbour(&cell_rects, &members[&group[h]], h, Side::Right).is_some_and(is_blank);
+            !over_label && !own_blank
+        });
+        (side, head)
+    };
     // How many blanks each heading stands over with no label of their own
     // beside them, so those can be told apart by number.
     let mut headed: HashMap<usize, Vec<usize>> = HashMap::new();
@@ -876,8 +973,7 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
             && inside[ci].is_empty()
             && !holds[ci]
             && is_blank(ci)
-            && labelled(ci, Side::Left).is_none()
-            && let Some(head) = labelled(ci, Side::Above)
+            && let (None, Some(head)) = labels_of(ci)
         {
             headed.entry(head).or_default().push(ci);
         }
@@ -887,18 +983,49 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
             return None;
         }
         let name = |c: usize| name_from(&cell_text(c));
-        match (labelled(ci, Side::Left), labelled(ci, Side::Above)) {
+        match labels_of(ci) {
             (Some(s), Some(h)) => Some(format!("{} {}", name(s), name(h))),
             (Some(s), None) => Some(name(s)),
             (None, Some(h)) => {
-                let under = &headed[&h];
-                match under.iter().position(|c| *c == ci) {
-                    Some(n) if under.len() > 1 => Some(format!("{} {}", name(h), n + 1)),
-                    _ => Some(name(h)),
+                // Only blanks to write in are counted under a heading; a
+                // cell that holds a check box is asked about here too.
+                let place = headed
+                    .get(&h)
+                    .filter(|under| under.len() > 1)
+                    .and_then(|under| under.iter().position(|c| *c == ci));
+                match place {
+                    Some(n) => Some(format!("{} {}", name(h), n + 1)),
+                    None => Some(name(h)),
                 }
             }
             (None, None) => None,
         }
+    };
+
+    // What a check box alone in its cell is for: the label in the next
+    // cell, on the side the row puts its labels. A row that starts with a
+    // label has each label before its box; one that starts with a box has
+    // each label after.
+    let box_label = |ci: usize| -> Option<String> {
+        let others = &members[&group[ci]];
+        if !inside[ci].is_empty() || others.len() < 2 {
+            return None;
+        }
+        let mut first = ci;
+        for _ in 0..others.len() {
+            match neighbour(&cell_rects, others, first, Side::Left) {
+                Some(n) => first = n,
+                None => break,
+            }
+        }
+        let side = if is_blank(first) {
+            Side::Right
+        } else {
+            Side::Left
+        };
+        let n = neighbour(&cell_rects, others, ci, side)?;
+        let text = cell_text(n);
+        (!holds[n] && text.chars().any(char::is_alphabetic)).then(|| name_from(&text))
     };
 
     let mut found: Vec<Found> = Vec::new();
@@ -937,7 +1064,7 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
                 found.push(Found {
                     rect: inset(c, 0.5),
                     kind: NewFieldKind::Checkbox,
-                    label: None,
+                    label: box_label(place),
                     or_label: grid_label(place),
                     source: Source::CheckBox,
                     table: table.map(|t| t.0),
@@ -1013,9 +1140,17 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
     // half of a grid's captions have such a blank beside them.
     let beside_blank = |ci: usize| -> bool {
         let others = &members[&group[ci]];
-        [Side::Right, Side::Below]
-            .into_iter()
-            .any(|side| neighbour(&cell_rects, others, ci, side).is_some_and(is_blank))
+        let c = &cell_rects[ci];
+        // Underneath, any of them: a heading across a row of narrow cells
+        // has no one cell under most of it.
+        neighbour(&cell_rects, others, ci, Side::Right).is_some_and(is_blank)
+            || others.iter().any(|&o| {
+                let b = &cell_rects[o];
+                o != ci
+                    && (b.y1 - c.y0).abs() <= JOIN
+                    && c.x1.min(b.x1) - c.x0.max(b.x0) > 1.0
+                    && is_blank(o)
+            })
     };
     let mut paired: HashMap<usize, usize> = HashMap::new();
     for c in &captioned {
@@ -1047,7 +1182,8 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
     let mut blanks: Vec<(Ruling, bool)> = h
         .iter()
         .enumerate()
-        .filter(|(i, _)| !touched.contains(i))
+        // The edge of a shaded box is not a line to write on.
+        .filter(|(i, _)| !touched.contains(i) && drawn[*i])
         .map(|(_, l)| (*l, false))
         .collect();
     blanks.extend(
@@ -1133,14 +1269,14 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
     }
 
     // Check boxes printed as characters.
-    for b in &words.boxes {
+    for (b, cell) in words.boxes.iter().zip(&box_cell) {
         found.push(Found {
             rect: *b,
             kind: NewFieldKind::Checkbox,
-            label: None,
-            or_label: None,
+            label: cell.and_then(box_label),
+            or_label: cell.and_then(grid_label),
             source: Source::CheckBox,
-            table: None,
+            table: cell.and_then(|c| placed.get(&c)).map(|t| t.0),
         });
     }
 
@@ -1440,7 +1576,7 @@ fn mostly_picture(graphics: &PageGraphics, bounds: &Rect) -> bool {
 /// the fields it already has.
 pub fn detect_page(doc: &Document, page: &Page, text: &PageText, taken: &[Rect]) -> Detected {
     let mut graphics = extract_graphics(doc, page).unwrap_or_default();
-    let (h, v) = rulings(&graphics.lines, page.rotate);
+    let (h, v, _) = rulings(&graphics.lines, page.rotate);
     let mut scan = None;
     if h.is_empty() && v.is_empty() && mostly_picture(&graphics, &page.crop_box) {
         // A scan: read the lines from the picture, which is then what the
@@ -1787,6 +1923,194 @@ mod tests {
         }
     }
 
+    /// A box filled with shading: its four edges, which have no width.
+    fn shaded(x0: f64, y0: f64, x1: f64, y1: f64) -> Vec<PageLine> {
+        boxed(x0, y0, x1, y1)
+            .into_iter()
+            .map(|l| PageLine { width: 0.0, ..l })
+            .collect()
+    }
+
+    /// One 10 point character whose box is `wide` across, on a baseline.
+    fn glyph(c: char, x: f64, y: f64, wide: f64) -> TextGlyph {
+        let p = Point::new;
+        TextGlyph {
+            text: c.to_string(),
+            quad: [
+                p(x, y - 2.0),
+                p(x + wide, y - 2.0),
+                p(x + wide, y + 8.0),
+                p(x, y + 8.0),
+            ],
+            baseline: (p(x, y), p(x + wide, y)),
+            size: 10.0,
+            font: "F".into(),
+            invisible: false,
+        }
+    }
+
+    #[test]
+    fn shading_behind_a_label_does_not_make_its_cell_a_blank() {
+        use NewFieldKind::Text;
+        // A word processor's table: label cells shaded out to their
+        // borders and again, a few points in, behind the text; borders
+        // drawn as lines, row by row.
+        let ys = [600.0, 616.0, 632.0, 648.0];
+        let mut lines = Vec::new();
+        for row in ys.windows(2) {
+            let (y0, y1) = (row[0], row[1]);
+            lines.extend(shaded(50.2, y0, 163.8, y1 - 0.5));
+            lines.extend(shaded(53.5, y0, 160.5, y1 - 0.5));
+            lines.extend(shaded(300.2, y0, 413.8, y1 - 0.5));
+            lines.extend(shaded(303.5, y0, 410.5, y1 - 0.5));
+            for x in [50.0, 164.0, 300.0, 414.0, 550.0] {
+                lines.push(PageLine {
+                    width: 0.5,
+                    ..line(x, y0, x, y1 - 0.5)
+                });
+            }
+        }
+        for y in [599.8, 615.8, 631.8, 647.8] {
+            lines.push(PageLine {
+                width: 0.5,
+                ..line(50.0, y, 550.0, y)
+            });
+        }
+        let mut glyphs = Vec::new();
+        for (label, x, y) in [
+            ("First:", 54.0, 636.0),
+            ("Second:", 304.0, 636.0),
+            ("Third:", 54.0, 620.0),
+            ("Fourth:", 304.0, 620.0),
+            ("Fifth:", 54.0, 604.0),
+            ("Sixth:", 304.0, 604.0),
+        ] {
+            glyphs.extend(text(label, x, y));
+        }
+        let d = run(glyphs, &lines, 0, &[]);
+        // One table of true cells, with no slivers of padding in it.
+        assert_eq!(d.tables.len(), 1);
+        assert_eq!((d.tables[0].rows, d.tables[0].cols), (3, 4));
+        assert_eq!(
+            listed(&d),
+            [
+                (Text, "First", [165, 633, 299, 647]),
+                (Text, "Second", [415, 633, 549, 647]),
+                (Text, "Third", [165, 617, 299, 631]),
+                (Text, "Fourth", [415, 617, 549, 631]),
+                (Text, "Fifth", [165, 601, 299, 615]),
+                (Text, "Sixth", [415, 601, 549, 615]),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_edge_of_shading_is_not_a_line_to_write_on() {
+        // A shaded band under a caption, with no lines drawn at all.
+        let lines = shaded(100.0, 500.0, 400.0, 520.0);
+        let d = run(text("Notes:", 40.0, 504.0), &lines, 0, &[]);
+        assert!(
+            d.fields.iter().all(|f| f.source != Source::Underline),
+            "{:?}",
+            listed(&d)
+        );
+        // The band itself is still a box to write in.
+        assert_eq!(names(&d), ["Notes"]);
+    }
+
+    #[test]
+    fn check_characters_in_cells_are_the_check_boxes_named_by_their_row() {
+        use NewFieldKind::Checkbox;
+        // Label, box, label, box; then a question with Yes and No.
+        let xs = [50.0, 150.0, 180.0, 300.0, 330.0];
+        let lines = grid(&xs, &[600.0, 620.0, 640.0]);
+        let mut glyphs = text("Red", 55.0, 626.0);
+        glyphs.push(glyph('\u{2610}', 160.0, 626.0, 10.0));
+        glyphs.extend(text("Green", 185.0, 626.0));
+        glyphs.push(glyph('\u{2610}', 310.0, 626.0, 10.0));
+        glyphs.extend(text("Blue", 55.0, 606.0));
+        glyphs.push(glyph('\u{2610}', 160.0, 606.0, 10.0));
+        let d = run(glyphs, &lines, 0, &[]);
+        // Each box takes the label before it, the way the row is laid
+        // out, not the nearer text after it; and the cells that hold the
+        // boxes are not offered as blanks.
+        assert_eq!(
+            listed(&d),
+            [
+                (Checkbox, "Red", [161, 626, 169, 634]),
+                (Checkbox, "Green", [311, 626, 319, 634]),
+                (Checkbox, "Blue", [161, 606, 169, 614]),
+                // The blanks after the last box are for more about it.
+                (NewFieldKind::Text, "Blue 2", [181, 601, 299, 619]),
+                (NewFieldKind::Text, "Blue 3", [301, 601, 329, 619]),
+            ]
+        );
+        assert!(d.fields[..3].iter().all(|f| f.table == Some(0)));
+    }
+
+    #[test]
+    fn check_boxes_under_a_heading_with_nothing_beside_them_take_the_heading() {
+        // A column headed "Done" with a box in each row and no row labels.
+        let lines = grid(&[50.0, 150.0], &[580.0, 600.0, 620.0, 640.0]);
+        let mut glyphs = text("Done", 55.0, 626.0);
+        glyphs.push(glyph('\u{2610}', 95.0, 606.0, 10.0));
+        glyphs.push(glyph('\u{2610}', 95.0, 586.0, 10.0));
+        let d = run(glyphs, &lines, 0, &[]);
+        assert_eq!(names(&d), ["Done", "Done 2"]);
+        assert!(
+            d.fields
+                .iter()
+                .all(|f| f.field.kind == NewFieldKind::Checkbox)
+        );
+    }
+
+    #[test]
+    fn a_row_that_starts_with_a_box_has_its_labels_after_the_boxes() {
+        let lines = grid(&[50.0, 80.0, 200.0, 230.0, 350.0], &[600.0, 620.0, 640.0]);
+        let mut glyphs = vec![glyph('\u{2610}', 60.0, 626.0, 10.0)];
+        glyphs.extend(text("Morning", 85.0, 626.0));
+        glyphs.push(glyph('\u{2610}', 210.0, 626.0, 10.0));
+        glyphs.extend(text("Evening", 235.0, 626.0));
+        glyphs.push(glyph('\u{2610}', 60.0, 606.0, 10.0));
+        glyphs.extend(text("Night", 85.0, 606.0));
+        let d = run(glyphs, &lines, 0, &[]);
+        assert_eq!(names(&d)[..3], ["Morning", "Evening", "Night"]);
+    }
+
+    #[test]
+    fn titles_and_other_rows_labels_do_not_head_a_blank() {
+        // A title across the whole grid, then label and blank pairs: one
+        // pair to a row, then two.
+        let mut lines = boxed(50.0, 660.0, 550.0, 680.0);
+        lines.extend(grid(&[50.0, 150.0, 550.0], &[640.0, 660.0]));
+        lines.extend(grid(&[50.0, 150.0, 300.0, 400.0, 550.0], &[620.0, 640.0]));
+        let mut glyphs = text("About you", 55.0, 666.0);
+        glyphs.extend(text("Name", 55.0, 646.0));
+        glyphs.extend(text("Town", 55.0, 626.0));
+        glyphs.extend(text("County", 305.0, 626.0));
+        let d = run(glyphs, &lines, 0, &[]);
+        // Not "Name About you"; and the blank after "County" is not
+        // headed by "Name", whose own blank is the one above it.
+        assert_eq!(names(&d), ["Name", "Town", "County"]);
+    }
+
+    #[test]
+    fn a_heading_with_a_colon_over_a_row_of_boxes_is_not_a_blank() {
+        let mut lines = grid(&[50.0, 550.0], &[620.0, 640.0]);
+        lines.extend(grid(
+            &[50.0, 150.0, 180.0, 300.0, 330.0, 550.0],
+            &[600.0, 620.0],
+        ));
+        let mut glyphs = text("Colour:", 55.0, 626.0);
+        glyphs.extend(text("Red", 55.0, 606.0));
+        glyphs.push(glyph('\u{2610}', 160.0, 606.0, 10.0));
+        glyphs.extend(text("Green", 185.0, 606.0));
+        glyphs.push(glyph('\u{2610}', 310.0, 606.0, 10.0));
+        let d = run(glyphs, &lines, 0, &[]);
+        // The blank that ends the row is for more about the last choice.
+        assert_eq!(names(&d), ["Red", "Green", "Green 2"]);
+    }
+
     #[test]
     fn a_table_full_of_text_suggests_nothing() {
         let lines = grid(&[100.0, 250.0, 400.0], &[600.0, 620.0, 640.0]);
@@ -1980,7 +2304,7 @@ mod tests {
         // A short stroke, as of a letter.
         paint(300, 150, 310, 152);
         let lines = lines_in_pixmap(&pixmap, &page, scale);
-        let (h, v) = rulings(&lines, 0);
+        let (h, v, _) = rulings(&lines, 0);
         assert!(v.is_empty(), "{v:?}");
         assert_eq!(h.len(), 1, "{h:?}");
         assert!((h[0].at - 50.0).abs() < 0.6, "{h:?}");
