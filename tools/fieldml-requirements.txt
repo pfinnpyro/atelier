@@ -1,2 +1,2 @@
-pypdf==6.1.1
+pypdf==6.21.4
 pymupdf==1.26.5
