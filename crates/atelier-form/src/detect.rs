@@ -508,6 +508,41 @@ fn groups(cells: &[Rect]) -> Vec<usize> {
     (0..cells.len()).map(|i| find(&mut parent, i)).collect()
 }
 
+/// Whether box `a` lies inside box `b` and is clearly the smaller: a
+/// check square drawn in a cell, a box in a frame.
+fn nested(a: &Rect, b: &Rect) -> bool {
+    a.x0 >= b.x0 - 0.5
+        && a.x1 <= b.x1 + 0.5
+        && a.y0 >= b.y0 - 0.5
+        && a.y1 <= b.y1 + 0.5
+        && area(a) <= area(b) * 0.8
+}
+
+/// The cell among `others` that shares the given side of cell `c`: the
+/// one touching most of it. Cells are as read, with y up.
+fn neighbour(cells: &[Rect], others: &[usize], c: usize, side: Side) -> Option<usize> {
+    let a = &cells[c];
+    let mut best: Option<(usize, f64)> = None;
+    for &o in others {
+        if o == c {
+            continue;
+        }
+        let b = &cells[o];
+        let along_y = a.y1.min(b.y1) - a.y0.max(b.y0);
+        let along_x = a.x1.min(b.x1) - a.x0.max(b.x0);
+        let (touches, shared, least) = match side {
+            Side::Left => ((b.x1 - a.x0).abs() <= JOIN, along_y, a.y1 - a.y0),
+            Side::Right => ((b.x0 - a.x1).abs() <= JOIN, along_y, a.y1 - a.y0),
+            Side::Above => ((b.y0 - a.y1).abs() <= JOIN, along_x, a.x1 - a.x0),
+            Side::Below => ((b.y1 - a.y0).abs() <= JOIN, along_x, a.x1 - a.x0),
+        };
+        if touches && shared >= least * 0.5 && best.is_none_or(|(_, s)| shared > s) {
+            best = Some((o, shared));
+        }
+    }
+    best.map(|b| b.0)
+}
+
 // ----- Labels ------------------------------------------------------------
 
 #[derive(Clone, Copy, PartialEq)]
@@ -665,6 +700,9 @@ struct Found {
     rect: Rect,
     kind: NewFieldKind,
     label: Option<String>,
+    /// The label to fall back on when no text beside it names it: what
+    /// its place in a grid says it is for.
+    or_label: Option<String>,
     source: Source,
     table: Option<usize>,
 }
@@ -721,6 +759,22 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
             .collect::<Vec<_>>()
             .join(" ")
     };
+
+    // Boxes drawn inside a cell, such as a check square: the cell is then
+    // a frame around them and not itself a blank.
+    let mut holds = vec![false; cell_rects.len()];
+    let mut held_by: Vec<Option<usize>> = vec![None; cell_rects.len()];
+    for (i, inner) in cell_rects.iter().enumerate() {
+        let frame = cell_rects
+            .iter()
+            .enumerate()
+            .filter(|(j, outer)| *j != i && nested(inner, outer))
+            .min_by(|a, b| area(a.1).total_cmp(&area(b.1)));
+        if let Some((j, _)) = frame {
+            holds[j] = true;
+            held_by[i] = Some(j);
+        }
+    }
 
     // Tables: groups of cells in at least two rows and two columns.
     let mut members: HashMap<usize, Vec<usize>> = HashMap::new();
@@ -780,13 +834,71 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
             cells,
         });
     }
-    // The text of a table's cell at a row and column.
-    let text_at = |table: usize, row: usize, col: usize| -> Option<String> {
-        placed
-            .iter()
-            .find(|(_, p)| **p == (table, row, col))
-            .map(|(c, _)| cell_text(*c))
-            .filter(|t| !t.trim().is_empty())
+    // A cell someone is meant to fill: nothing printed in it, or only
+    // boxes drawn in it, and room to write or tick.
+    let is_blank = |ci: usize| -> bool {
+        let c = &cell_rects[ci];
+        let room = (c.x1 - c.x0 >= MIN_TEXT_W && c.y1 - c.y0 >= MIN_TEXT_H) || is_check_size(c);
+        !pictured(c) && (holds[ci] || (inside[ci].is_empty() && room))
+    };
+    // What a blank cell of a grid is for, from the cells around it: the
+    // nearest label to its left in its row and the nearest above it in its
+    // column, looking past other blanks. A form sets a label beside or
+    // over each blank; a table has a heading over each column and often
+    // one at the start of each row. Numbers are what was filled in, not
+    // labels, and a banner across several columns heads no one column.
+    let labelled = |ci: usize, side: Side| -> Option<usize> {
+        let others = &members[&group[ci]];
+        let mut at = ci;
+        for _ in 0..others.len() {
+            let next = neighbour(&cell_rects, others, at, side)?;
+            let (a, b) = (&cell_rects[ci], &cell_rects[next]);
+            if side == Side::Above && b.x1 - b.x0 > (a.x1 - a.x0) * 1.5 {
+                return None;
+            }
+            // Text in a cell with boxes drawn in it labels those boxes.
+            if !holds[next] && cell_text(next).chars().any(char::is_alphabetic) {
+                return Some(next);
+            }
+            if !inside[next].is_empty() && !holds[next] && side == Side::Above {
+                // Something printed that is not a label ends the column.
+                return None;
+            }
+            at = next;
+        }
+        None
+    };
+    // How many blanks each heading stands over with no label of their own
+    // beside them, so those can be told apart by number.
+    let mut headed: HashMap<usize, Vec<usize>> = HashMap::new();
+    for ci in 0..cell_rects.len() {
+        if members[&group[ci]].len() > 1
+            && inside[ci].is_empty()
+            && !holds[ci]
+            && is_blank(ci)
+            && labelled(ci, Side::Left).is_none()
+            && let Some(head) = labelled(ci, Side::Above)
+        {
+            headed.entry(head).or_default().push(ci);
+        }
+    }
+    let grid_label = |ci: usize| -> Option<String> {
+        if members[&group[ci]].len() < 2 {
+            return None;
+        }
+        let name = |c: usize| name_from(&cell_text(c));
+        match (labelled(ci, Side::Left), labelled(ci, Side::Above)) {
+            (Some(s), Some(h)) => Some(format!("{} {}", name(s), name(h))),
+            (Some(s), None) => Some(name(s)),
+            (None, Some(h)) => {
+                let under = &headed[&h];
+                match under.iter().position(|c| *c == ci) {
+                    Some(n) if under.len() > 1 => Some(format!("{} {}", name(h), n + 1)),
+                    _ => Some(name(h)),
+                }
+            }
+            (None, None) => None,
+        }
     };
 
     let mut found: Vec<Found> = Vec::new();
@@ -806,9 +918,17 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
         if pictured(c) {
             continue;
         }
+        if holds[ci] && inside[ci].is_empty() {
+            // A frame around a check square or another box: the box drawn
+            // inside is the blank.
+            continue;
+        }
         if inside[ci].is_empty() {
-            let table = placed.get(&ci).copied();
-            let source = if table.is_some() {
+            // A box drawn inside a cell belongs to that cell's place in
+            // the grid.
+            let place = held_by[ci].unwrap_or(ci);
+            let table = placed.get(&place).copied();
+            let source = if placed.contains_key(&ci) {
                 Source::TableCell
             } else {
                 Source::Box
@@ -818,24 +938,16 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
                     rect: inset(c, 0.5),
                     kind: NewFieldKind::Checkbox,
                     label: None,
+                    or_label: grid_label(place),
                     source: Source::CheckBox,
                     table: table.map(|t| t.0),
                 });
             } else if w >= MIN_TEXT_W && hgt >= MIN_TEXT_H && area(c) <= page_area * 0.35 {
-                let label = table.and_then(|(t, row, col)| {
-                    let head = text_at(t, 0, col).filter(|_| row > 0);
-                    let side = text_at(t, row, 0).filter(|_| col > 0);
-                    match (side, head) {
-                        (Some(s), Some(h)) => Some(format!("{s} {h}")),
-                        (Some(s), None) => Some(s),
-                        (None, Some(h)) => Some(format!("{h} {row}")),
-                        (None, None) => None,
-                    }
-                });
                 found.push(Found {
                     rect: inset(c, 1.0),
                     kind: text_kind(c),
-                    label,
+                    label: grid_label(ci),
+                    or_label: None,
                     source,
                     table: table.map(|t| t.0),
                 });
@@ -895,14 +1007,35 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
     for c in &captioned {
         *captions.entry(group[c.cell]).or_default() += 1;
     }
+    // Where a grid sets each label in a cell of its own with the blank in
+    // the next cell, to the right or underneath, the room left over in a
+    // label's cell is not somewhere to write. That is so when at least
+    // half of a grid's captions have such a blank beside them.
+    let beside_blank = |ci: usize| -> bool {
+        let others = &members[&group[ci]];
+        [Side::Right, Side::Below]
+            .into_iter()
+            .any(|side| neighbour(&cell_rects, others, ci, side).is_some_and(is_blank))
+    };
+    let mut paired: HashMap<usize, usize> = HashMap::new();
+    for c in &captioned {
+        if beside_blank(c.cell) {
+            *paired.entry(group[c.cell]).or_default() += 1;
+        }
+    }
     for c in captioned {
         let g = group[c.cell];
         let usual = captions[&g] * 10 >= with_text[&g] * 6;
+        let is_label = paired.get(&g).is_some_and(|n| n * 2 >= captions[&g]);
+        if is_label && beside_blank(c.cell) {
+            continue;
+        }
         if (c.sure || usual) && c.rect.x1 - c.rect.x0 >= MIN_TEXT_W {
             found.push(Found {
                 kind: text_kind(&c.rect),
                 rect: c.rect,
                 label: Some(c.label),
+                or_label: None,
                 source: Source::Box,
                 table: placed.get(&c.cell).map(|t| t.0),
             });
@@ -993,6 +1126,7 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
                 NewFieldKind::Text
             },
             label: named.map(|p| p.text.clone()),
+            or_label: None,
             source: Source::Underline,
             table: None,
         });
@@ -1004,6 +1138,7 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
             rect: *b,
             kind: NewFieldKind::Checkbox,
             label: None,
+            or_label: None,
             source: Source::CheckBox,
             table: None,
         });
@@ -1021,7 +1156,8 @@ pub fn detect(input: &PageInput<'_>) -> Detected {
         f.label = sides
             .iter()
             .find_map(|s| label(phrases, &f.rect, *s))
-            .map(|p| p.text.clone());
+            .map(|p| p.text.clone())
+            .or_else(|| f.or_label.take());
     }
 
     // Blanks labelled for a signature or for initials are those.
@@ -1438,6 +1574,217 @@ mod tests {
         // Inside the cell's borders.
         let r = d.fields[0].field.rect;
         assert_eq!((r.x0, r.y0, r.x1, r.y1), (201.0, 621.0, 299.0, 639.0));
+    }
+
+    /// Each field as (kind, name, box), the box in whole points.
+    fn listed(d: &Detected) -> Vec<(NewFieldKind, &str, [i64; 4])> {
+        d.fields
+            .iter()
+            .map(|f| {
+                let r = f.field.rect;
+                let b = [r.x0, r.y0, r.x1, r.y1].map(|v| v.round() as i64);
+                (f.field.kind, f.field.name.as_str(), b)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_form_laid_out_as_a_table_fills_the_blank_cells_not_the_labels() {
+        use NewFieldKind::Text;
+        // Label, blank, label, blank across each row.
+        let lines = grid(
+            &[50.0, 150.0, 300.0, 400.0, 550.0],
+            &[600.0, 624.0, 648.0, 672.0],
+        );
+        let mut glyphs = text("Name:", 55.0, 656.0);
+        glyphs.extend(text("Date:", 305.0, 656.0));
+        glyphs.extend(text("Address", 55.0, 632.0));
+        glyphs.extend(text("Phone", 305.0, 632.0));
+        glyphs.extend(text("City", 55.0, 608.0));
+        glyphs.extend(text("State", 305.0, 608.0));
+        let d = run(glyphs, &lines, 0, &[]);
+        // Each blank is named by the label in the cell before it, and the
+        // room after "Name:" in its own cell is not a blank.
+        assert_eq!(
+            listed(&d),
+            [
+                (Text, "Name", [151, 649, 299, 671]),
+                (Text, "Date", [401, 649, 549, 671]),
+                (Text, "Address", [151, 625, 299, 647]),
+                (Text, "Phone", [401, 625, 549, 647]),
+                (Text, "City", [151, 601, 299, 623]),
+                (Text, "State", [401, 601, 549, 623]),
+            ]
+        );
+        assert!(d.fields.iter().all(|f| f.source == Source::TableCell));
+    }
+
+    #[test]
+    fn labels_set_at_the_top_of_tall_cells_are_still_labels() {
+        use NewFieldKind::Multiline;
+        let lines = grid(&[50.0, 200.0, 550.0], &[560.0, 600.0, 640.0, 680.0]);
+        let mut glyphs = text("Name", 55.0, 668.0);
+        glyphs.extend(text("Address", 55.0, 628.0));
+        glyphs.extend(text("Phone", 55.0, 588.0));
+        let d = run(glyphs, &lines, 0, &[]);
+        assert_eq!(
+            listed(&d),
+            [
+                (Multiline, "Name", [201, 641, 549, 679]),
+                (Multiline, "Address", [201, 601, 549, 639]),
+                (Multiline, "Phone", [201, 561, 549, 599]),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_row_of_labels_over_a_row_of_blanks_names_the_blanks() {
+        use NewFieldKind::Text;
+        let lines = grid(
+            &[50.0, 200.0, 350.0, 550.0],
+            &[600.0, 616.0, 646.0, 662.0, 692.0],
+        );
+        let mut glyphs = text("Name", 55.0, 680.0);
+        glyphs.extend(text("Date", 205.0, 680.0));
+        glyphs.extend(text("Phone", 355.0, 680.0));
+        glyphs.extend(text("Street", 55.0, 634.0));
+        glyphs.extend(text("City", 205.0, 634.0));
+        glyphs.extend(text("State", 355.0, 634.0));
+        let d = run(glyphs, &lines, 0, &[]);
+        assert_eq!(
+            listed(&d),
+            [
+                (Text, "Name", [51, 647, 199, 661]),
+                (Text, "Date", [201, 647, 349, 661]),
+                (Text, "Phone", [351, 647, 549, 661]),
+                (Text, "Street", [51, 601, 199, 615]),
+                (Text, "City", [201, 601, 349, 615]),
+                (Text, "State", [351, 601, 549, 615]),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_column_of_blanks_under_one_heading_is_numbered() {
+        // A heading row and no labels down the side.
+        let lines = grid(&[100.0, 250.0, 400.0], &[600.0, 620.0, 640.0, 660.0]);
+        let mut glyphs = text("Item", 105.0, 646.0);
+        glyphs.extend(text("Cost", 255.0, 646.0));
+        let d = run(glyphs, &lines, 0, &[]);
+        assert_eq!(names(&d), ["Item 1", "Cost 1", "Item 2", "Cost 2"]);
+    }
+
+    #[test]
+    fn what_was_filled_in_is_not_taken_for_a_label() {
+        // A table with its quantities printed and its prices to fill in:
+        // the name of the row labels the blank, not the number beside it.
+        let lines = grid(&[100.0, 200.0, 300.0, 400.0], &[600.0, 620.0, 640.0, 660.0]);
+        let mut glyphs = text("Item", 105.0, 646.0);
+        glyphs.extend(text("Qty", 205.0, 646.0));
+        glyphs.extend(text("Price", 305.0, 646.0));
+        glyphs.extend(text("Bolts", 105.0, 626.0));
+        glyphs.extend(text("12", 205.0, 626.0));
+        glyphs.extend(text("Nuts", 105.0, 606.0));
+        glyphs.extend(text("40", 205.0, 606.0));
+        let d = run(glyphs, &lines, 0, &[]);
+        assert_eq!(names(&d), ["Bolts Price", "Nuts Price"]);
+    }
+
+    #[test]
+    fn a_banner_across_a_table_heads_no_column() {
+        let mut lines = grid(&[50.0, 150.0, 300.0], &[600.0, 624.0, 648.0]);
+        // A full-width row on top for the title of the section.
+        lines.extend([line(50.0, 672.0, 300.0, 672.0)]);
+        lines.extend([
+            line(50.0, 648.0, 50.0, 672.0),
+            line(300.0, 648.0, 300.0, 672.0),
+        ]);
+        let mut glyphs = text("Applicant", 55.0, 656.0);
+        glyphs.extend(text("Name", 55.0, 632.0));
+        glyphs.extend(text("Phone", 55.0, 608.0));
+        let d = run(glyphs, &lines, 0, &[]);
+        assert_eq!(names(&d), ["Name", "Phone"]);
+    }
+
+    #[test]
+    fn a_check_square_in_a_cell_is_the_check_box_not_the_cell() {
+        use NewFieldKind::Checkbox;
+        // A narrow column of cells, each with a square drawn in it, and
+        // the label in the next cell.
+        let mut lines = grid(&[50.0, 74.0, 300.0], &[600.0, 624.0, 648.0, 672.0]);
+        lines.extend(boxed(56.0, 654.0, 68.0, 666.0));
+        lines.extend(boxed(56.0, 630.0, 68.0, 642.0));
+        lines.extend(boxed(56.0, 606.0, 68.0, 618.0));
+        let mut glyphs = text("Yes", 80.0, 656.0);
+        glyphs.extend(text("No", 80.0, 632.0));
+        glyphs.extend(text("Maybe", 80.0, 608.0));
+        let d = run(glyphs, &lines, 0, &[]);
+        // The squares, a little inside their own lines; not the 24-point
+        // cells around them.
+        assert_eq!(
+            listed(&d),
+            [
+                (Checkbox, "Yes", [57, 655, 68, 666]),
+                (Checkbox, "No", [57, 631, 68, 642]),
+                (Checkbox, "Maybe", [57, 607, 68, 618]),
+            ]
+        );
+        assert!(
+            d.fields
+                .iter()
+                .all(|f| f.source == Source::CheckBox && f.table == Some(0))
+        );
+    }
+
+    #[test]
+    fn check_squares_in_a_wide_cell_are_found_and_the_cell_is_left_alone() {
+        use NewFieldKind::Checkbox;
+        let mut lines = grid(&[50.0, 200.0, 550.0], &[570.0, 600.0, 630.0, 660.0]);
+        // "Married?" with Yes and No squares; then a square on its own,
+        // far from its label; then an ordinary blank.
+        lines.extend(boxed(210.0, 639.0, 222.0, 651.0));
+        lines.extend(boxed(300.0, 639.0, 312.0, 651.0));
+        lines.extend(boxed(210.0, 609.0, 222.0, 621.0));
+        let mut glyphs = text("Married?", 55.0, 641.0);
+        glyphs.extend(text("Yes", 226.0, 641.0));
+        glyphs.extend(text("No", 316.0, 641.0));
+        glyphs.extend(text("Veteran", 55.0, 611.0));
+        glyphs.extend(text("Employer", 55.0, 581.0));
+        let d = run(glyphs, &lines, 0, &[]);
+        assert_eq!(
+            listed(&d),
+            [
+                (Checkbox, "Yes", [211, 640, 222, 651]),
+                (Checkbox, "No", [301, 640, 312, 651]),
+                // Named by the label of its row, two inches to its left.
+                (Checkbox, "Veteran", [211, 610, 222, 621]),
+                (NewFieldKind::Text, "Employer", [201, 571, 549, 599]),
+            ]
+        );
+    }
+
+    #[test]
+    fn captioned_boxes_keep_their_blanks_beside_the_odd_empty_cell() {
+        // Boxes with a caption along the top and room to write under it,
+        // one of them left without a caption: the others are still blanks.
+        let lines = grid(&[50.0, 200.0, 350.0, 500.0], &[600.0, 640.0, 680.0]);
+        let mut glyphs = Vec::new();
+        for (label, x, y) in [
+            ("Name", 55.0, 668.0),
+            ("Date", 205.0, 668.0),
+            ("Phone", 355.0, 668.0),
+            ("Street", 55.0, 628.0),
+            ("City", 205.0, 628.0),
+        ] {
+            glyphs.extend(text(label, x, y));
+        }
+        let d = run(glyphs, &lines, 0, &[]);
+        let mut found = names(&d);
+        found.sort_unstable();
+        assert_eq!(found.len(), 6, "{:?}", listed(&d));
+        for caption in ["City", "Date", "Name", "Phone", "Street"] {
+            assert!(found.contains(&caption), "{caption} in {found:?}");
+        }
     }
 
     #[test]

@@ -157,6 +157,9 @@ impl Viewer {
             quiet,
             turn,
             read: ocr.as_ref().map(|r| r.read.clone()),
+            turned: HashSet::new(),
+            from_image: 0,
+            from_ocr: 0,
         });
         let wake = self.ctx.clone();
         self.pool
@@ -186,13 +189,70 @@ impl Viewer {
         }
     }
 
-    /// Turns the pages auto-orient found to be on their side or upside
-    /// down.
-    pub(super) fn oriented(&mut self, opened: u64, rotations: &[Option<(u16, Basis)>]) {
+    /// Turns pages auto-orient has just judged to be on their side or
+    /// upside down, while it goes on reading the rest. The view stays on
+    /// what was being read: the same page, as far down it as before.
+    pub(super) fn turn_oriented(&mut self, judged: &[(usize, Option<(u16, Basis)>)]) {
         let Some(o) = &mut self.open else { return };
-        if o.opened != opened {
+        let Some(run) = &mut o.orienting else { return };
+        if !run.turn {
             return;
         }
+        let mut now = HashSet::new();
+        for &(p, r) in judged {
+            if let Some((r, basis)) = r
+                && r != o.session.rotation(p)
+            {
+                o.session.rotate(p, i32::from(r));
+                now.insert(p);
+                if run.turned.insert(p) {
+                    match basis {
+                        Basis::Image => run.from_image += 1,
+                        Basis::Ocr => run.from_ocr += 1,
+                        Basis::Text => {}
+                    }
+                }
+            }
+        }
+        if now.is_empty() {
+            return;
+        }
+        if run.quiet {
+            o.session.quiet_rotations();
+        }
+        // Where the view is: which page, and how far down it.
+        let top = f64::from(self.scroll_to.unwrap_or(self.offset).y);
+        let page = o.layout.page_at_y(top + f64::from(self.view_size.y) / 2.0);
+        let place = o
+            .layout
+            .page_rect(page)
+            .filter(|r| r.h > 0.0)
+            .map(|r| ((top - r.y) / r.h, now.contains(&page)));
+        self.rebuild(&now, true);
+        // A page that turned under the reader starts again from its top,
+        // which is what `rebuild` leaves; otherwise go back to the place.
+        if let Some((down, false)) = place
+            && let Some(r) = self.open.as_ref().and_then(|o| o.layout.page_rect(page))
+        {
+            self.scroll_to = Some(eframe::egui::Vec2::new(
+                self.offset.x,
+                (r.y + down * r.h).max(0.0) as f32,
+            ));
+        }
+    }
+
+    /// Auto-orient has finished: turns whatever is left to turn and says
+    /// what was done.
+    pub(super) fn oriented(&mut self, opened: u64, rotations: &[Option<(u16, Basis)>]) {
+        if self.open.as_ref().is_none_or(|o| o.opened != opened) {
+            return;
+        }
+        // Most pages turned as they were judged; this takes in any that
+        // were turned back by hand since, or judged before the run was
+        // being watched.
+        let all: Vec<_> = rotations.iter().copied().enumerate().collect();
+        self.turn_oriented(&all);
+        let Some(o) = &mut self.open else { return };
         let Some(run) = o.orienting.take() else {
             return;
         };
@@ -201,25 +261,7 @@ impl Viewer {
             .iter()
             .filter(|r| !matches!(r, Some((_, Basis::Text | Basis::Ocr))))
             .count();
-        let mut turned = HashSet::new();
-        let (mut from_image, mut from_ocr) = (0, 0);
-        for (p, r) in rotations.iter().enumerate() {
-            if let Some((r, basis)) = *r
-                && run.turn
-                && r != o.session.rotation(p)
-            {
-                o.session.rotate(p, i32::from(r));
-                turned.insert(p);
-                match basis {
-                    Basis::Image => from_image += 1,
-                    Basis::Ocr => from_ocr += 1,
-                    Basis::Text => {}
-                }
-            }
-        }
-        if run.quiet {
-            o.session.quiet_rotations();
-        }
+        let (turned, from_image, from_ocr) = (&run.turned, run.from_image, run.from_ocr);
         let unknown = rotations.iter().filter(|r| r.is_none()).count();
         let mut msg = match turned.len() {
             0 => "Auto-orient: every page is already upright.".to_string(),
@@ -280,20 +322,21 @@ impl Viewer {
         if read > 0 && !self.search.query.is_empty() {
             self.start_search(self.search.query.clone());
         }
-        if !turned.is_empty() {
-            self.rebuild(&turned, true);
-        }
     }
 }
 
 /// An auto-orient run: pages done so far, how many there are, whether it
-/// runs quietly, whether it turns pages, and pages read with OCR so far.
+/// runs quietly, whether it turns pages, pages read with OCR so far, and
+/// the pages it has turned so far and what each turn went by.
 pub(super) struct Orienting {
     pub done: Arc<AtomicUsize>,
     pub total: usize,
     pub quiet: bool,
     pub turn: bool,
     pub read: Option<Arc<AtomicUsize>>,
+    turned: HashSet<usize>,
+    from_image: usize,
+    from_ocr: usize,
 }
 
 impl Orienting {
@@ -559,5 +602,149 @@ mod tests {
     fn page_lists_join_runs() {
         assert_eq!(page_list_name(&[0]), "1");
         assert_eq!(page_list_name(&[2, 0, 1, 5, 7, 8]), "1-3, 6, 8-9");
+    }
+}
+
+#[cfg(test)]
+mod orient_tests {
+    use super::*;
+
+    /// Three pages of different shapes.
+    const PDF: &[u8] = b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 100 200] >> endobj\n4 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >> endobj\n5 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] >> endobj\n%%EOF";
+
+    fn viewer() -> Viewer {
+        let ctx = eframe::egui::Context::default();
+        let mut viewer = Viewer::initialize(
+            &eframe::CreationContext::_new_kittest(ctx),
+            Settings {
+                check_updates: false,
+                ocr: false,
+                orient_on_open: false,
+                ..Default::default()
+            },
+        );
+        viewer.open_with_password(PDF.to_vec(), "orient-test.pdf".into(), "", None);
+        assert!(viewer.open.is_some());
+        viewer
+    }
+
+    /// A run under way, as `start_run` leaves it, without its threads.
+    fn begin(viewer: &mut Viewer, quiet: bool, turn: bool) {
+        let o = viewer.open.as_mut().unwrap();
+        o.orienting = Some(Orienting {
+            done: Arc::new(AtomicUsize::new(0)),
+            total: 3,
+            quiet,
+            turn,
+            read: None,
+            turned: HashSet::new(),
+            from_image: 0,
+            from_ocr: 0,
+        });
+    }
+
+    fn rotations(viewer: &Viewer) -> Vec<u16> {
+        let o = viewer.open.as_ref().unwrap();
+        (0..3).map(|p| o.session.rotation(p)).collect()
+    }
+
+    #[test]
+    fn pages_turn_as_they_are_judged_not_at_the_end() {
+        let mut viewer = viewer();
+        begin(&mut viewer, false, true);
+        let width = |v: &Viewer, p| v.open.as_ref().unwrap().layout.geom(p).unwrap().size().0;
+        let (first, last) = (width(&viewer, 0), width(&viewer, 2));
+
+        // The first page is judged sideways: it turns at once, and is laid
+        // out again, while the run is still going.
+        viewer.turn_oriented(&[(0, Some((90, Basis::Image)))]);
+        assert_eq!(rotations(&viewer), [90, 0, 0]);
+        assert!(viewer.open.as_ref().unwrap().orienting.is_some());
+        assert_ne!(width(&viewer, 0), first);
+        assert_eq!(width(&viewer, 2), last);
+
+        // An upright page and one with nothing to go by change nothing.
+        let generation = viewer.open.as_ref().unwrap().generation;
+        viewer.turn_oriented(&[(1, Some((0, Basis::Text))), (2, None)]);
+        assert_eq!(rotations(&viewer), [90, 0, 0]);
+        assert_eq!(viewer.open.as_ref().unwrap().generation, generation);
+
+        // Two judged in the same frame turn in one rebuild.
+        viewer.turn_oriented(&[(1, Some((180, Basis::Ocr))), (2, Some((270, Basis::Text)))]);
+        assert_eq!(rotations(&viewer), [90, 180, 270]);
+        assert_eq!(viewer.open.as_ref().unwrap().generation, generation + 1);
+
+        // The end of the run turns nothing more and counts every turn once.
+        let opened = viewer.open.as_ref().unwrap().opened;
+        viewer.oriented(
+            opened,
+            &[
+                Some((90, Basis::Image)),
+                Some((180, Basis::Ocr)),
+                Some((270, Basis::Text)),
+            ],
+        );
+        assert_eq!(rotations(&viewer), [90, 180, 270]);
+        assert_eq!(viewer.open.as_ref().unwrap().generation, generation + 1);
+        assert!(viewer.open.as_ref().unwrap().orienting.is_none());
+        assert_eq!(
+            viewer.notice.as_deref(),
+            Some(
+                "Auto-orient turned 3 pages (1 by the words OCR read, 1 by the look of the scan)."
+            )
+        );
+        assert!(viewer.is_dirty());
+    }
+
+    #[test]
+    fn a_quiet_run_turns_pages_without_leaving_unsaved_changes() {
+        let mut viewer = viewer();
+        begin(&mut viewer, true, true);
+        viewer.turn_oriented(&[(1, Some((90, Basis::Text)))]);
+        assert_eq!(rotations(&viewer), [0, 90, 0]);
+        assert!(!viewer.is_dirty());
+        let opened = viewer.open.as_ref().unwrap().opened;
+        viewer.oriented(opened, &[None, Some((90, Basis::Text)), None]);
+        assert!(!viewer.is_dirty());
+        assert_eq!(
+            viewer.notice.as_deref(),
+            Some("Auto-orient turned 1 page. They stay that way in the file only if you save it.")
+        );
+    }
+
+    #[test]
+    fn a_run_that_only_reads_turns_nothing_and_stale_results_are_ignored() {
+        let mut viewer = viewer();
+        // OCR without turning.
+        begin(&mut viewer, true, false);
+        viewer.turn_oriented(&[(0, Some((90, Basis::Ocr)))]);
+        assert_eq!(rotations(&viewer), [0, 0, 0]);
+        // Results for another opening of the file change nothing.
+        let opened = viewer.open.as_ref().unwrap().opened;
+        viewer.oriented(opened + 1, &[Some((90, Basis::Text)), None, None]);
+        assert!(viewer.open.as_ref().unwrap().orienting.is_some());
+        // With no run under way, nothing turns either.
+        viewer.open.as_mut().unwrap().orienting = None;
+        viewer.turn_oriented(&[(0, Some((90, Basis::Text)))]);
+        assert_eq!(rotations(&viewer), [0, 0, 0]);
+    }
+
+    #[test]
+    fn the_view_keeps_its_place_when_pages_above_it_turn() {
+        let mut viewer = viewer();
+        begin(&mut viewer, false, true);
+        // Looking a little way down the last page.
+        let before = viewer.open.as_ref().unwrap().layout.page_rect(2).unwrap();
+        viewer.view_size = eframe::egui::Vec2::new(400.0, 50.0);
+        viewer.offset = eframe::egui::Vec2::new(0.0, (before.y + before.h * 0.25) as f32);
+        viewer.scroll_to = None;
+        viewer.turn_oriented(&[(0, Some((90, Basis::Text)))]);
+        let after = viewer.open.as_ref().unwrap().layout.page_rect(2).unwrap();
+        assert_ne!(after.y, before.y);
+        let to = f64::from(viewer.scroll_to.unwrap().y);
+        assert!(
+            (to - (after.y + after.h * 0.25)).abs() < 1.0,
+            "{to} {after:?}"
+        );
     }
 }

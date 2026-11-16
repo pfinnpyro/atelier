@@ -1009,6 +1009,7 @@ impl Viewer {
         let ppp = f64::from(self.ctx.pixels_per_point());
         let mut reveal = None;
         let mut oriented = None;
+        let mut oriented_pages = Vec::new();
         let mut detected = Vec::new();
         let mut detect_ended = None;
         while let Ok(done) = self.pool.done.try_recv() {
@@ -1120,6 +1121,11 @@ impl Viewer {
                 } if opened == o.opened => {
                     o.outline = Some((items, from_headings));
                 }
+                Done::OrientedPage {
+                    generation,
+                    page,
+                    rotation,
+                } if generation == o.opened => oriented_pages.push((page, rotation)),
                 Done::Oriented {
                     generation,
                     rotations,
@@ -1183,6 +1189,8 @@ impl Viewer {
         if let Some(run) = detect_ended {
             self.detect_ended(run);
         }
+        // Pages judged since the last frame turn together, in one rebuild.
+        self.turn_oriented(&oriented_pages);
         if let Some((opened, rotations)) = oriented {
             self.oriented(opened, &rotations);
         } else {
