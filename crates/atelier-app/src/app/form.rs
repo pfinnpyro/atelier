@@ -438,10 +438,13 @@ impl Viewer {
                 if f.kind != FieldKind::Signature || f.value != Value::None {
                     continue;
                 }
-                for j in 0..f.widgets.len() {
+                for (j, w) in f.widgets.iter().enumerate() {
+                    if w.is_hidden() {
+                        continue;
+                    }
                     if let Some(r) = self
                         .widget_rect((i, j), origin)
-                        .filter(|r| r.intersects(view) && !f.widgets[j].is_hidden())
+                        .filter(|r| r.intersects(view))
                     {
                         painter.rect_filled(r, 0.0, FIELD_TINT);
                     }

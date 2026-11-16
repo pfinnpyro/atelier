@@ -63,6 +63,7 @@ pub enum Command {
 }
 
 impl Command {
+    #[cfg(any(target_os = "macos", test))]
     pub fn id(self) -> String {
         match self {
             Command::OpenRecent(i) => format!("recent:{i}"),
@@ -71,6 +72,7 @@ impl Command {
     }
 
     /// The command a menu item's id stands for.
+    #[cfg(any(target_os = "macos", test))]
     pub fn from_id(id: &str) -> Option<Command> {
         if let Some(i) = id.strip_prefix("recent:") {
             return i.parse().ok().map(Command::OpenRecent);
@@ -238,6 +240,7 @@ pub const APP: &[Entry] = &[
     Item(C::Quit, "Quit Atelier", "Mod+Q"),
 ];
 
+#[cfg(any(target_os = "macos", test))]
 fn walk(entries: &'static [Entry], out: &mut Vec<Command>) {
     for e in entries {
         match e {
@@ -249,6 +252,7 @@ fn walk(entries: &'static [Entry], out: &mut Vec<Command>) {
 }
 
 /// Every command a menu holds (not the recent files).
+#[cfg(any(target_os = "macos", test))]
 pub fn all() -> impl Iterator<Item = Command> {
     let mut out = Vec::new();
     for m in MENUS {
