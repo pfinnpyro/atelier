@@ -248,10 +248,165 @@ pub fn sha384(data: &[u8]) -> [u8; 48] {
     out
 }
 
+/// SHA-256 taken in pieces, for input too long to hold at once.
+pub struct Sha256 {
+    h: [u32; 8],
+    block: [u8; 64],
+    filled: usize,
+    total: u64,
+}
+
+impl Default for Sha256 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Sha256 {
+    pub fn new() -> Self {
+        Self {
+            h: INIT256,
+            block: [0; 64],
+            filled: 0,
+            total: 0,
+        }
+    }
+
+    pub fn update(&mut self, mut data: &[u8]) {
+        self.total += data.len() as u64;
+        if self.filled > 0 {
+            let n = data.len().min(64 - self.filled);
+            self.block[self.filled..self.filled + n].copy_from_slice(&data[..n]);
+            self.filled += n;
+            data = &data[n..];
+            if self.filled < 64 {
+                return;
+            }
+            compress256(&mut self.h, &self.block);
+            self.filled = 0;
+        }
+        let mut blocks = data.chunks_exact(64);
+        for block in &mut blocks {
+            compress256(&mut self.h, block);
+        }
+        let rest = blocks.remainder();
+        self.block[..rest.len()].copy_from_slice(rest);
+        self.filled = rest.len();
+    }
+
+    pub fn finish(mut self) -> [u8; 32] {
+        let bits = self.total * 8;
+        let mut last = [0u8; 128];
+        last[..self.filled].copy_from_slice(&self.block[..self.filled]);
+        last[self.filled] = 0x80;
+        let n = if self.filled < 56 { 64 } else { 128 };
+        last[n - 8..n].copy_from_slice(&bits.to_be_bytes());
+        for block in last[..n].chunks_exact(64) {
+            compress256(&mut self.h, block);
+        }
+        self.block.fill(0);
+        last.fill(0);
+        std::hint::black_box((&self.block, &last));
+        output256(&self.h)
+    }
+}
+
+/// The SHA-2 hashes by name, for code that is told which to use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Hash {
+    Sha256,
+    Sha384,
+    Sha512,
+}
+
+impl Hash {
+    /// The size of the hash in bytes.
+    pub fn size(self) -> usize {
+        match self {
+            Hash::Sha256 => 32,
+            Hash::Sha384 => 48,
+            Hash::Sha512 => 64,
+        }
+    }
+
+    /// The size of the blocks the hash works in, which HMAC needs.
+    fn block(self) -> usize {
+        match self {
+            Hash::Sha256 => 64,
+            Hash::Sha384 | Hash::Sha512 => 128,
+        }
+    }
+
+    pub fn digest(self, data: &[u8]) -> Vec<u8> {
+        match self {
+            Hash::Sha256 => sha256(data).to_vec(),
+            Hash::Sha384 => sha384(data).to_vec(),
+            Hash::Sha512 => sha512(data).to_vec(),
+        }
+    }
+
+    /// HMAC (RFC 2104) of `data` under `key` with this hash.
+    pub fn hmac(self, key: &[u8], data: &[u8]) -> Vec<u8> {
+        let mut block = vec![0u8; self.block()];
+        if key.len() > block.len() {
+            let hashed = self.digest(key);
+            block[..hashed.len()].copy_from_slice(&hashed);
+        } else {
+            block[..key.len()].copy_from_slice(key);
+        }
+        let mut inner: Vec<u8> = block.iter().map(|b| b ^ 0x36).collect();
+        inner.extend_from_slice(data);
+        let mut outer: Vec<u8> = block.iter().map(|b| b ^ 0x5c).collect();
+        outer.extend_from_slice(&self.digest(&inner));
+        let out = self.digest(&outer);
+        for secret in [&mut block, &mut inner, &mut outer] {
+            secret.fill(0);
+            std::hint::black_box(&secret);
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::hex;
+
+    #[test]
+    fn pieces_hash_like_the_whole() {
+        let data: Vec<u8> = (0..1000u32).map(|i| (i * 31) as u8).collect();
+        for step in [1, 3, 55, 56, 63, 64, 65, 200, 1000] {
+            let mut h = Sha256::new();
+            for piece in data.chunks(step) {
+                h.update(piece);
+            }
+            assert_eq!(h.finish(), sha256(&data), "pieces of {step}");
+        }
+        assert_eq!(Sha256::new().finish(), sha256(b""));
+    }
+
+    #[test]
+    fn hmac_with_each_hash() {
+        // RFC 4231, test case 2.
+        let (key, data) = (b"Jefe", b"what do ya want for nothing?");
+        assert_eq!(
+            hex(&Hash::Sha256.hmac(key, data)),
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+        );
+        assert_eq!(
+            hex(&Hash::Sha384.hmac(key, data)),
+            "af45d2e376484031617f78d2b58a6b1b9c7ef464f5a01b47e42ec3736322445e\
+             8e2240ca5e69e2c78b3239ecfab21649"
+        );
+        // A key longer than a block is hashed first (test case 6).
+        assert_eq!(
+            hex(&Hash::Sha256.hmac(
+                &[0xaa; 131],
+                b"Test Using Larger Than Block-Size Key - Hash Key First"
+            )),
+            "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"
+        );
+    }
 
     #[test]
     fn fips_vectors() {

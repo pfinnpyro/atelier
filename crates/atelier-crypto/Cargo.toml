@@ -1,6 +1,6 @@
 [package]
 name = "atelier-crypto"
-description = "The hashes and ciphers PDF encryption uses: MD5, SHA-2, RC4 and AES"
+description = "The hashes and ciphers PDF encryption uses (MD5, SHA-2, RC4, AES) and the approved algorithms OpenPGP protection uses (AES-GCM, HKDF, AES key wrap, ECDH and ECDSA on NIST P-256 and P-384)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

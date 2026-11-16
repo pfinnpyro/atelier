@@ -159,6 +159,51 @@ Tests cover signing and tampering, PKCS#12 and PEM failures, chain/date checks, 
 Windows CMS with ephemeral test keys. Historical Mac tests do not validate this working
 tree on macOS. See the [roadmap](docs/roadmap.md) for scope, evidence and outstanding gates.
 
+## OpenPGP protection
+
+**Protect with OpenPGP…** in the Save dropdown encrypts a copy of the whole document
+for people's keys, a passphrase, or both. This is a new scheme, not PDF's own
+encryption, and other PDF viewers do not open it yet: they show a cover page that says
+so. It is built only from published standards, so anyone can implement it.
+
+- **What a protected file is.** The complete PDF is encrypted as one OpenPGP message
+  (RFC 9580) and carried as the encrypted payload of a small wrapper PDF (ISO 32000-2,
+  7.6.7; payload filter name `AtelierOpenPGP`, version 1). Nothing of the document
+  shows from outside, not its structure, page count or metadata, and any change to
+  the encrypted data is detected before a byte is shown. Signatures inside stay valid,
+  since the file inside is kept byte for byte. The attachment `document.pdf.pgp` is an
+  ordinary OpenPGP message: any RFC 9580 program that supports the algorithms below
+  decrypts it to the original PDF. (GnuPG 2.4 does not implement RFC 9580's AEAD
+  packets; Sequoia, rpgp, OpenPGP.js 6 and GopenPGP 3 do.)
+- **Algorithms.** Only ones NIST approves: version 6 keys on NIST P-256 or P-384
+  (ECDSA to certify, one-pass ECDH with the SP 800-56A single-step SHA-2 derivation
+  and the AES key wrap to encrypt), HKDF-SHA256, and AES-256 in GCM over 256 KiB
+  chunks. RSA, Curve25519, OCB, CFB, compression and version 4 keys are refused by
+  name. Certificates are used only after every self-signature has been checked, and
+  revoked or expired ones are refused.
+- **Keys.** The same window makes your key, exports its certificate (the public half,
+  which you give to others), backs the key up, and keeps other people's certificates.
+  Your key is sealed under a passphrase the way form profiles are, is decrypted only
+  into memory to open a document, and is locked again straight after. Check a
+  certificate's fingerprint with its owner before relying on it; Atelier does not.
+- **Opening and saving.** Opening a protected file asks for your key's passphrase or
+  the document's. Saving seals the changed document again for exactly the same readers
+  (the session-key reuse RFC 9580 provides for, with a fresh salt), so it never lands
+  on disk in the clear and you need neither the others' certificates nor the
+  passphrase. That also means saving cannot add or drop a reader: anyone who could
+  read the file before can read it after. To change who can read it, export a new
+  protected copy. An unprotected copy is written only when you ask for one.
+- **Passphrases.** OpenPGP turns a passphrase into a key with its own iterated S2K,
+  which is not a NIST-approved function. The ordinary packages offer it; the FIPS
+  packages encrypt to keys only and do not open by passphrase.
+- **Not yet.** The file is decrypted and sealed whole, in memory, on the interface
+  thread, so very large files pause the window. Argon2 passphrases, secret keys locked
+  inside an OpenPGP file, signing the message, and a macOS menu bar entry are not done.
+
+The same is available from the command line: `atelier keygen`, `atelier protect` and
+`atelier unprotect`, and every other command opens a protected file given `--key` or
+`--passphrase`. A key made by `keygen` is written unlocked; keep the file safe.
+
 ## Organizing pages
 
 Use **Organize** in the toolbar to open a page grid. Select pages using the
@@ -266,10 +311,15 @@ HMAC-SHA256. Which code does that depends on the package:
   eight characters. About Atelier says when a copy is the FIPS build, and a FIPS
   build updates only to FIPS packages.
 
-Profiles sealed by either open in the other. The FIPS build covers form profiles
-only: password-protecting a PDF, checking an update's checksum and reading encrypted
-PDFs still use Atelier's own code, as the PDF format's own scheme is not a FIPS one,
-and signatures go through OpenSSL as before. Using a validated module does not make
+Profiles sealed by either open in the other. The FIPS build covers form profiles and
+OpenPGP protection (see above; there CNG does the hashing, HKDF, AES-GCM, key
+agreement, signatures and random numbers, and the AES key wrap is the standard's loop
+around CNG's AES). Password-protecting a PDF with its own scheme, checking an update's
+checksum and reading encrypted PDFs still use Atelier's own code, as the PDF format's
+own scheme is not a FIPS one, and signatures go through OpenSSL as before. In the
+ordinary packages OpenPGP uses Atelier's own implementations of the same approved
+algorithms, tested against published vectors, OpenSSL, CNG and another OpenPGP
+implementation, and self-tested at start, but not validated or independently reviewed. Using a validated module does not make
 Atelier itself validated; whether a FIPS build satisfies a given policy is for
 whoever accredits the system. macOS and Linux have no FIPS package yet.
 
@@ -352,6 +402,13 @@ atelier extract <file.pdf> <pages> -o <out.pdf>
                                          save the pages listed as a new file
 atelier merge <file.pdf> <more.pdf...> -o <out.pdf>
                                          add the other files' pages at the end
+atelier keygen <name> -o <base> [--curve p256|p384]
+                                         make an OpenPGP key: <base>.cert.asc to give
+                                         out, <base>.key.asc to keep (not locked)
+atelier protect <file.pdf> -o <out.pdf> [--to <cert.asc>]... [--passphrase <pw>]
+                                         encrypt the whole file with OpenPGP
+atelier unprotect <file.pdf> -o <out.pdf>
+                                         save the PDF inside a protected file
 ```
 
 ## Comparing against a reference renderer

@@ -17,6 +17,7 @@ mod reference_effects;
 mod revision_changes;
 mod signature;
 mod signature_policy;
+mod wrapper;
 mod write;
 mod xref;
 
@@ -29,6 +30,9 @@ pub use lexer::{Lexer, Token};
 pub use object::{Dict, Name, ObjRef, Object, PdfString, Stream, text_from_bytes};
 pub use page::{Page, Rect};
 pub use parser::Parser;
+pub use wrapper::{
+    Cover, EncryptedPayload, OPENPGP_PAYLOAD, OPENPGP_PAYLOAD_VERSION, wrap_encrypted_payload,
+};
 pub use write::{Update, serialize};
 pub use xref::XrefEntry;
 

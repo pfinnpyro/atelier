@@ -38,5 +38,7 @@ jobs:
         run: |
           cargo clippy -p atelier-app --all-targets --features fips
           cargo test -p atelier-app --features fips
+          cargo clippy -p atelier-pgp -p atelier-cli --all-targets --features atelier-pgp/fips,atelier-cli/fips
+          cargo test -p atelier-pgp -p atelier-cli --features atelier-pgp/fips,atelier-cli/fips
       - name: PDF repair and render smoke corpus
         run: python tools/qa_pdf_edges.py "${{ runner.temp }}/atelier-pdf-qa"

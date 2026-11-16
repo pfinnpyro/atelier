@@ -17,12 +17,13 @@ winresource = "0.1"
 [features]
 # Build for places that must use validated cryptography: form profiles
 # are then sealed by the operating system's FIPS-validated module (Windows
-# CNG) and not by Atelier's own code. Windows only so far.
-fips = ["dep:windows-sys"]
+# CNG) and not by Atelier's own code, and so is OpenPGP. Windows only so far.
+fips = ["dep:windows-sys", "atelier-pgp/fips"]
 
 [dependencies]
 atelier-crypto.workspace = true
 atelier-form.workspace = true
+atelier-pgp.workspace = true
 atelier-raster.workspace = true
 atelier-render.workspace = true
 atelier-script.workspace = true

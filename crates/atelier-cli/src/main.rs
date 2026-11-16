@@ -59,8 +59,20 @@ Usage:
                                            save the pages listed as a new file
   atelier merge <file.pdf> <more.pdf...> -o <out.pdf>
                                            add the other files' pages at the end
+  atelier keygen <name> -o <base> [--curve p256|p384]
+                                           make an OpenPGP key (NIST P-256 unless told
+                                           otherwise) for `Name <address>`: writes
+                                           <base>.cert.asc to give to others and
+                                           <base>.key.asc to keep, which is NOT locked
+  atelier protect <file.pdf> -o <out.pdf> [--to <cert.asc>]... [--passphrase <pw>]
+                                           encrypt the whole file with OpenPGP for the
+                                           owners of the certificates, a passphrase,
+                                           or both; other viewers see a cover page
+  atelier unprotect <file.pdf> -o <out.pdf>
+                                           save the PDF inside a protected file
 
-Every command takes --password <pw> for encrypted files.";
+Every command takes --password <pw> for files with PDF's own encryption, and
+--key <key.asc> or --passphrase <pw> for files protected with OpenPGP.";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -80,19 +92,79 @@ fn run(args: &[String]) -> Result<(), String> {
         password = args.get(i + 1).ok_or("--password needs a value")?.clone();
         args.drain(i..i + 2);
     }
+    let key_files = take_all(&mut args, "--key")?;
+    let cert_files = take_all(&mut args, "--to")?;
+    let passphrase = take_all(&mut args, "--passphrase")?.pop();
     let args = &args[..];
     let (Some(command), Some(path)) = (args.first(), args.get(1)) else {
         return Err(format!("missing arguments\n\n{USAGE}"));
     };
-    let bytes = std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?;
-    let doc = match Document::open_with_password(bytes, password.as_bytes()) {
-        Err(Error::Password) if password.is_empty() => {
-            return Err("this PDF is protected by a password; pass --password".into());
-        }
-        Err(Error::Password) => return Err("wrong password".into()),
-        other => other.map_err(|e| e.to_string())?,
-    };
     let mut out = std::io::stdout().lock();
+    if command == "keygen" {
+        return keygen(path, &args[2..], &mut out);
+    }
+    let bytes = std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?;
+    let open = |bytes: Vec<u8>| match Document::open_with_password(bytes, password.as_bytes()) {
+        Err(Error::Password) if password.is_empty() => {
+            Err("this PDF is protected by a password; pass --password".to_string())
+        }
+        Err(Error::Password) => Err("wrong password".to_string()),
+        other => other.map_err(|e| e.to_string()),
+    };
+    let mut doc = open(bytes)?;
+    // A file protected with OpenPGP is a cover page around the real one.
+    if let Some(payload) = atelier_pgp::protected_payload(&doc).map_err(|e| e.to_string())? {
+        let keys = key_files
+            .iter()
+            .map(|f| {
+                let data = std::fs::read(f).map_err(|e| format!("cannot read {f}: {e}"))?;
+                atelier_pgp::SecretKey::parse(atelier_pgp::provider(), &data)
+                    .map_err(|e| format!("{f}: {e}"))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        if keys.is_empty() && passphrase.is_none() {
+            let said = atelier_pgp::payload_summary(&payload).map_err(|e| e.to_string())?;
+            let mut ways = Vec::new();
+            if !said.recipients.is_empty() {
+                ways.push("--key <key.asc>");
+            }
+            if said.passphrase {
+                ways.push("--passphrase <pw>");
+            }
+            let mut message = format!(
+                "this PDF is protected with OpenPGP; pass {}",
+                ways.join(" or ")
+            );
+            for fingerprint in said.recipients {
+                let hex: String = fingerprint.iter().map(|b| format!("{b:02X}")).collect();
+                message.push_str(&format!("\n  encrypted to key {hex}"));
+            }
+            return Err(message);
+        }
+        let keys: Vec<&atelier_pgp::SecretKey> = keys.iter().collect();
+        let pdf = atelier_pgp::unprotect_pdf(
+            atelier_pgp::provider(),
+            &payload,
+            &keys,
+            passphrase.as_deref().map(str::as_bytes),
+        )
+        .map_err(|e| e.to_string())?;
+        doc = open(pdf)?;
+        if command == "unprotect" {
+            return save(&doc, &args[2..], "unprotect", &mut out);
+        }
+    } else if command == "unprotect" {
+        return Err("this PDF is not protected with OpenPGP".into());
+    }
+    if command == "protect" {
+        return protect(
+            &doc,
+            &args[2..],
+            &cert_files,
+            passphrase.as_deref(),
+            &mut out,
+        );
+    }
 
     let result = match command.as_str() {
         "info" => info(&doc, &mut out),
@@ -122,6 +194,125 @@ fn run(args: &[String]) -> Result<(), String> {
 }
 
 type Out<'a> = std::io::StdoutLock<'a>;
+
+/// Takes every `flag value` pair out of the arguments.
+fn take_all(args: &mut Vec<String>, flag: &str) -> Result<Vec<String>, String> {
+    let mut found = Vec::new();
+    while let Some(i) = args.iter().position(|a| a == flag) {
+        if i + 1 >= args.len() {
+            return Err(format!("{flag} needs a value"));
+        }
+        found.push(args.remove(i + 1));
+        args.remove(i);
+    }
+    Ok(found)
+}
+
+fn output_file(args: &[String], command: &str) -> Result<String, String> {
+    match args {
+        [flag, file] if flag == "-o" => Ok(file.clone()),
+        _ => Err(format!("{command} needs -o <out> and nothing else")),
+    }
+}
+
+fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+fn keygen(name: &str, args: &[String], out: &mut Out) -> Result<(), String> {
+    let mut curve = atelier_pgp::Curve::P256;
+    let mut base = None;
+    let mut i = 0;
+    while i < args.len() {
+        let value = args.get(i + 1);
+        match (args[i].as_str(), value.map(String::as_str)) {
+            ("-o", Some(v)) => base = Some(v.to_string()),
+            ("--curve", Some("p256")) => curve = atelier_pgp::Curve::P256,
+            ("--curve", Some("p384")) => curve = atelier_pgp::Curve::P384,
+            ("--curve", _) => return Err("--curve takes p256 or p384".into()),
+            (a, _) => return Err(format!("unexpected `{a}`")),
+        }
+        i += 2;
+    }
+    let base = base.ok_or("keygen needs -o <base>")?;
+    let key = atelier_pgp::SecretKey::generate(atelier_pgp::provider(), curve, name, now())
+        .map_err(|e| e.to_string())?;
+    let (cert_file, key_file) = (format!("{base}.cert.asc"), format!("{base}.key.asc"));
+    for file in [&cert_file, &key_file] {
+        if std::path::Path::new(file).exists() {
+            return Err(format!("{file} already exists"));
+        }
+    }
+    std::fs::write(&cert_file, key.certificate().to_armored())
+        .map_err(|e| format!("cannot write {cert_file}: {e}"))?;
+    std::fs::write(&key_file, key.to_armored())
+        .map_err(|e| format!("cannot write {key_file}: {e}"))?;
+    writeln!(out, "Key {}", key.certificate().fingerprint_hex()).map_err(io)?;
+    writeln!(
+        out,
+        "Wrote {cert_file}: give this to people who will encrypt for you"
+    )
+    .map_err(io)?;
+    writeln!(
+        out,
+        "Wrote {key_file}: keep this to yourself. It is not locked with a passphrase,\n\
+         so anyone who can read the file can read what is encrypted for you."
+    )
+    .map_err(io)
+}
+
+fn protect(
+    doc: &Document,
+    args: &[String],
+    cert_files: &[String],
+    passphrase: Option<&str>,
+    out: &mut Out,
+) -> Result<(), String> {
+    let output = output_file(args, "protect")?;
+    if cert_files.is_empty() && passphrase.is_none() {
+        return Err("protect needs --to <cert.asc>, --passphrase <pw>, or both".into());
+    }
+    let certs = cert_files
+        .iter()
+        .map(|f| {
+            let data = std::fs::read(f).map_err(|e| format!("cannot read {f}: {e}"))?;
+            atelier_pgp::Certificate::parse(atelier_pgp::provider(), &data)
+                .map_err(|e| format!("{f}: {e}"))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let to: Vec<&atelier_pgp::Certificate> = certs.iter().collect();
+    let bytes = atelier_pgp::protect_pdf(
+        atelier_pgp::provider(),
+        doc.data(),
+        &to,
+        passphrase.map(str::as_bytes),
+        now(),
+    )
+    .map_err(|e| e.to_string())?;
+    std::fs::write(&output, &bytes).map_err(|e| format!("cannot write {output}: {e}"))?;
+    for cert in &certs {
+        let who = cert.user_ids().first().map_or("(no name)", String::as_str);
+        writeln!(out, "Encrypted for {who} {}", cert.fingerprint_hex()).map_err(io)?;
+    }
+    if passphrase.is_some() {
+        writeln!(out, "Encrypted under the passphrase").map_err(io)?;
+    }
+    writeln!(out, "Wrote {output} ({} bytes)", bytes.len()).map_err(io)
+}
+
+/// Writes the document's bytes as they are.
+fn save(doc: &Document, args: &[String], command: &str, out: &mut Out) -> Result<(), String> {
+    let output = output_file(args, command)?;
+    std::fs::write(&output, doc.data()).map_err(|e| format!("cannot write {output}: {e}"))?;
+    writeln!(
+        out,
+        "Wrote {output} ({} bytes), not encrypted",
+        doc.data().len()
+    )
+    .map_err(io)
+}
 
 fn io(e: std::io::Error) -> String {
     e.to_string()

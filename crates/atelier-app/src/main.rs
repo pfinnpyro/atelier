@@ -9,6 +9,7 @@ mod cng;
 mod commands;
 mod default_app;
 mod icons;
+mod keys;
 #[cfg(target_os = "macos")]
 mod macos;
 mod memory;

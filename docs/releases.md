@@ -16,7 +16,7 @@ The release must be published with GitHub's prerelease flag.
 `python tools/package_release.py windows-x64 --installer --fips` builds the viewer with
 the `fips` feature and writes `atelier-windows-x64-fips.zip`, `atelier-windows-x64-fips.exe`,
 `atelier-cli-windows-x64-fips.exe` and `atelier-setup-windows-x64-fips.exe` to
-`dist/<version>/windows-x64-fips/`. In that build form profiles are sealed by Windows
+`dist/<version>/windows-x64-fips/`. In that build form profiles are sealed, and OpenPGP protection is done, by Windows
 CNG instead of Atelier's own code (see the README). The release workflow builds and
 tests both sets and attaches both to the release; each build updates to its own kind,
 and a FIPS build ignores releases without FIPS packages. `--fips` is refused for macOS
