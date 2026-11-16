@@ -1,7 +1,7 @@
 //! Conservative write policy, independent of cryptographic trust.
 //! Transform declarations are not evidence that a certificate or signature is valid.
 //! Declaration meanings follow ISO 32000-1 sections 12.8.2.2 and 12.8.2.4:
-//! https://opensource.adobe.com/dc-acrobat-sdk-docs/standards/pdfstandards/pdf/PDF32000_2008.pdf
+//! <https://opensource.adobe.com/dc-acrobat-sdk-docs/standards/pdfstandards/pdf/PDF32000_2008.pdf>
 use crate::{Dict, Document, Error, Object, Result};
 
 #[derive(Debug, Clone, Default)]

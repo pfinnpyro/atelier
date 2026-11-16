@@ -768,8 +768,9 @@ mod tests {
         assert_eq!(s.find(&id).unwrap().profile(), Some(&profile("Home")));
         let disk = on_disk(&dir);
         assert!(disk.contains("profile = Home"));
-        for secret in ["Ada", "Lovelace", "PO Box", "London", "M-4471", "Member"] {
-            assert!(!disk.contains(secret), "{secret} is on disk");
+        let secrets = ["Ada", "Lovelace", "PO Box", "London", "M-4471", "Member"];
+        for (i, secret) in secrets.iter().enumerate() {
+            assert!(!disk.contains(secret), "detail {i} is on disk");
         }
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
 

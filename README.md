@@ -39,10 +39,16 @@ cmap-resources (BSD-3-Clause; see
 | --- | --- |
 | `atelier-filters` | Our own Flate (inflate and a compressor), LZW, ASCII85, ASCIIHex and RunLength, PNG and TIFF predictors, and image decoders: JPEG (baseline and progressive), CCITT fax, JBIG2 and JPEG 2000 |
 | `atelier-color` | Colour management: ICC profiles (matrix/TRC and LUT based), CalGray, CalRGB and Lab, and press-like DeviceCMYK |
+| `atelier-crypto` | The hashes and ciphers PDF encryption uses (MD5, SHA-2, RC4, AES), the passphrase sealing form profiles use, and the approved algorithms OpenPGP protection uses (AES-GCM, HKDF, AES key wrap, ECDH and ECDSA on NIST P-256 and P-384) |
 | `atelier-syntax` | Lexer, object model, xref tables, xref streams, object streams, incremental updates, broken-file repair, page tree, content stream parsing |
 | `atelier-font` | Our font readers: TrueType and OpenType, CFF (including CID-keyed) and Type 1 outlines, character maps and metrics, plus the standard encodings, the Adobe Glyph List and the 14 standard fonts' widths |
 | `atelier-raster` | Our rasterizer: exact-area anti-aliased fills (non-zero and even-odd), strokes with joins, caps and dashes, clip masks, image drawing |
 | `atelier-render` | Content stream interpreter, graphics state, colour spaces, Form XObjects, images, PDF fonts (simple, CID, Type 3, CMaps including Adobe's predefined CJK ones, ToUnicode), text drawing and extraction |
+| `atelier-form` | Interactive forms (AcroForm): the field tree, filling values and drawing field appearances, finding tables and fields on printed forms, form profiles and the matching that fills from them, markup and revisions |
+| `atelier-pgp` | OpenPGP (RFC 9580) restricted to NIST-approved algorithms: version 6 keys on P-256 and P-384, messages sealed with AES-GCM, and the wrapper PDF that carries a protected document |
+| `atelier-ocr` | Reads the words in scanned pages, so they can be searched, copied and turned upright |
+| `atelier-print` | Sends pages to a printer: the system print spooler on Windows, `lp` elsewhere |
+| `atelier-fieldml` | Small learned models that read form labels: what each field asks for, which fields belong together, and whose they are. Not used by the app yet |
 | `atelier-view` | Viewer logic without a window: page layout, the tile grid and cache, text selection and search |
 | `atelier-script` | The form-script sandbox: a JavaScript engine (Boa) with only the form's values and Acrobat's form helpers, run in a helper process |
 | `atelier-app` | The viewer window (`atelier-viewer`), built on eframe (winit, wgpu and egui) |
