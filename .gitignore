@@ -6,3 +6,4 @@ __pycache__/
 /.idea/vcs.xml
 
 /dist/
+/.mcp.json
