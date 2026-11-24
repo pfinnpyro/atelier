@@ -3,6 +3,31 @@ use super::Viewer;
 use crate::worker::Job;
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 use std::collections::BTreeSet;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+    mpsc,
+};
+
+struct BlankReview {
+    document: u64,
+    generation: u64,
+    count: usize,
+    checked: usize,
+    unchecked: usize,
+    candidates: Vec<usize>,
+    selected: BTreeSet<usize>,
+    updates: mpsc::Receiver<Option<bool>>,
+    cancelled: Arc<AtomicBool>,
+    done: bool,
+    visible: bool,
+}
+
+impl Drop for BlankReview {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
+}
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum Mode {
@@ -46,6 +71,7 @@ pub(super) struct Organize {
     anchor: Option<usize>,
     dragging: Option<Vec<usize>>,
     generation: Option<u64>,
+    blanks: Option<BlankReview>,
     #[cfg(test)]
     cards: Vec<Rect>,
 }
@@ -89,6 +115,7 @@ impl Viewer {
     }
 
     pub(super) fn organize_window(&mut self, ctx: &egui::Context) {
+        self.blank_review(ctx);
         let mut dialog = std::mem::take(&mut self.organize);
         if dialog.mode.is_none() {
             self.organize = dialog;
@@ -237,6 +264,8 @@ impl Viewer {
         let mut print = false;
         let mut insert = false;
         let mut split = false;
+        let mut find_blanks = false;
+        let mut show_blanks = false;
         ui.add_space(10.0);
         ui.horizontal_wrapped(|ui| {
             ui.heading("Organize pages");
@@ -248,6 +277,11 @@ impl Viewer {
             split = ui
                 .add_enabled(count > 1, egui::Button::new("Split…"))
                 .clicked();
+            if self.organize.blanks.is_some() {
+                show_blanks = ui.button("Review blank pages…").clicked();
+            } else {
+                find_blanks = ui.button("Find blank pages…").clicked();
+            }
             if ui.button("Select all").clicked() {
                 self.organize.selected = (0..count).collect();
             }
@@ -526,6 +560,178 @@ impl Viewer {
         if split {
             self.show_organize(Mode::Split);
         }
+        if find_blanks {
+            self.find_blank_pages();
+        }
+        if show_blanks && let Some(review) = &mut self.organize.blanks {
+            review.visible = true;
+            review.selected = review
+                .candidates
+                .iter()
+                .copied()
+                .filter(|page| self.organize.selected.contains(page))
+                .collect();
+        }
+    }
+
+    fn find_blank_pages(&mut self) {
+        let Some(open) = &self.open else { return };
+        let doc = open.doc.clone();
+        let viewport = self.viewport;
+        let wake = self.ctx.clone();
+        let (sender, updates) = mpsc::channel();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let stop = cancelled.clone();
+        let scan = std::thread::Builder::new()
+            .name("blank-pages".into())
+            .spawn(move || {
+                for page in doc.pages().unwrap_or_default() {
+                    if stop.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let blank = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        blank_page(&doc, page)
+                    }))
+                    .ok()
+                    .flatten();
+                    if sender.send(blank).is_err() {
+                        break;
+                    }
+                    wake.request_repaint_of(viewport);
+                }
+                drop(sender);
+                wake.request_repaint_of(viewport);
+            });
+        if let Err(error) = scan {
+            self.error = Some(format!("Could not scan for blank pages: {error}"));
+            return;
+        }
+        self.organize.blanks = Some(BlankReview {
+            document: open.opened,
+            generation: open.generation,
+            count: open.layout.page_count(),
+            checked: 0,
+            unchecked: 0,
+            candidates: Vec::new(),
+            selected: BTreeSet::new(),
+            updates,
+            cancelled,
+            done: false,
+            visible: true,
+        });
+    }
+
+    fn blank_review(&mut self, ctx: &egui::Context) {
+        let Some(mut review) = self.organize.blanks.take() else {
+            return;
+        };
+        let matches = self.open.as_ref().is_some_and(|open| {
+            open.opened == review.document && open.generation == review.generation
+        });
+        if !matches || !self.organize.grid {
+            if !matches && self.organize.grid {
+                self.notice = Some("The document changed. Run the blank-page check again.".into());
+            }
+            return;
+        }
+        if !review.visible {
+            self.organize.blanks = Some(review);
+            return;
+        }
+        while !review.done {
+            match review.updates.try_recv() {
+                Ok(Some(true)) => {
+                    review.candidates.push(review.checked);
+                    review.selected.insert(review.checked);
+                    review.checked += 1;
+                }
+                Ok(Some(false)) => review.checked += 1,
+                Ok(None) => {
+                    review.checked += 1;
+                    review.unchecked += 1;
+                }
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    review.unchecked += review.count.saturating_sub(review.checked);
+                    review.done = true;
+                    if review.selected.len() == review.count {
+                        review.selected.remove(&0);
+                    }
+                }
+            }
+        }
+        let mut close = false;
+        let mut select = false;
+        let mut remove = false;
+        egui::Modal::new(egui::Id::unique("blank-pages-review")).show(ctx, |ui| {
+            ui.heading("Blank pages");
+            if review.done {
+                if review.candidates.is_empty() {
+                    ui.label("No likely blank pages found.");
+                } else {
+                    ui.label("Review the pages before removing them.");
+                }
+                if review.unchecked > 0 {
+                    ui.weak(format!(
+                        "{} pages could not be checked and will be kept.",
+                        review.unchecked
+                    ));
+                }
+            } else {
+                ui.label(format!(
+                    "Checked {} of {} pages",
+                    review.checked, review.count
+                ));
+                ui.spinner();
+            }
+            if review.done && !review.candidates.is_empty() {
+                egui::ScrollArea::vertical()
+                    .max_height(280.0)
+                    .show(ui, |ui| {
+                        for &page in &review.candidates {
+                            let mut selected = review.selected.contains(&page);
+                            if ui
+                                .checkbox(&mut selected, format!("Page {}", page + 1))
+                                .changed()
+                            {
+                                if selected {
+                                    review.selected.insert(page);
+                                } else {
+                                    review.selected.remove(&page);
+                                }
+                            }
+                        }
+                    });
+                if review.selected.len() == review.count {
+                    ui.weak("Keep at least one page.");
+                }
+            }
+            ui.horizontal(|ui| {
+                let has_selection = review.done && !review.selected.is_empty();
+                select = ui
+                    .add_enabled(has_selection, egui::Button::new("Select in organizer"))
+                    .clicked();
+                remove = ui
+                    .add_enabled(
+                        has_selection && review.selected.len() < review.count,
+                        egui::Button::new(format!("Remove {} selected", review.selected.len())),
+                    )
+                    .clicked();
+                close = ui
+                    .button(if review.done { "Close" } else { "Cancel" })
+                    .clicked();
+            });
+        });
+        if remove {
+            let pages: Vec<_> = review.selected.iter().copied().collect();
+            self.delete_pages(&pages);
+        } else if select {
+            self.organize.selected = review.selected.clone();
+            review.visible = false;
+            self.organize.blanks = Some(review);
+        } else if !close {
+            self.organize.blanks = Some(review);
+        }
     }
 
     fn split_pdf(&mut self, after: usize) {
@@ -585,6 +791,37 @@ impl Viewer {
     }
 }
 
+fn blank_page(doc: &atelier_syntax::Document, page: &atelier_syntax::Page) -> Option<bool> {
+    if page.dict.contains_key(b"AA") {
+        return Some(false);
+    }
+    if page.dict.contains_key(b"Annots") {
+        match doc.get_key(&page.dict, b"Annots").ok()? {
+            atelier_syntax::Object::Array(items) if items.is_empty() => {}
+            atelier_syntax::Object::Null => {}
+            _ => return Some(false),
+        }
+    }
+    if !atelier_render::extract_text(doc, page)
+        .ok()?
+        .glyphs
+        .is_empty()
+    {
+        return Some(false);
+    }
+    let long_side = page.crop_box.width().max(page.crop_box.height()).max(1.0);
+    let options = atelier_render::RenderOptions {
+        scale: (0.9_f64).min(900.0 / long_side),
+        ..Default::default()
+    };
+    let rendered = atelier_render::render_page(doc, page, &options).ok()?;
+    if !rendered.warnings.is_empty() {
+        return None;
+    }
+    let gray = atelier_view::gray_of_rgba(rendered.pixmap.data());
+    Some(gray.iter().filter(|&&value| value < 246).take(5).count() < 5)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -603,6 +840,58 @@ mod tests {
             },
         );
         output.textures_delta.clear();
+    }
+
+    #[test]
+    fn blank_page_review_keeps_text_drawings_and_annotations() {
+        use atelier_syntax::{Dict, Document, Object, Stream};
+
+        let doc = Document::open(super::super::quality_tests::fixture(4)).unwrap();
+        let pages = doc.pages().unwrap();
+        let mut changes = doc.update();
+        let drawing = changes.add(Object::Stream(Stream {
+            dict: Dict::new(),
+            data: Arc::from(&b"0.94 g 10 10 20 20 re f"[..]),
+        }));
+        for (index, page) in pages.iter().enumerate().skip(1) {
+            let mut dict = page.dict.clone();
+            dict.insert("Contents", Object::Null);
+            if index == 2 {
+                dict.insert("Annots", pages[0].dict.get(b"Annots").unwrap().clone());
+            }
+            if index == 3 {
+                dict.insert("Contents", Object::Reference(drawing));
+            }
+            changes.set(page.obj_ref.unwrap(), Object::Dict(dict));
+        }
+        let ctx = egui::Context::default();
+        let mut viewer = Viewer::blank(
+            ctx.clone(),
+            Settings {
+                check_updates: false,
+                ocr: false,
+                orient_on_open: false,
+                ..Settings::default()
+            },
+        );
+        viewer.open_bytes(changes.to_bytes().unwrap(), "Scan.pdf".into(), None);
+        viewer.toggle_page_grid();
+        viewer.find_blank_pages();
+        let started = std::time::Instant::now();
+        loop {
+            let mut output = ctx.run_ui(RawInput::default(), |_| viewer.blank_review(&ctx));
+            output.textures_delta.clear();
+            let review = viewer.organize.blanks.as_ref().unwrap();
+            if review.done {
+                assert_eq!(review.candidates, [1]);
+                break;
+            }
+            assert!(started.elapsed() < std::time::Duration::from_secs(10));
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        viewer.delete_pages(&[1]);
+        assert_eq!(viewer.open.as_ref().unwrap().layout.page_count(), 3);
+        assert!(viewer.is_dirty());
     }
 
     #[test]

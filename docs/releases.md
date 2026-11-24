@@ -1,6 +1,11 @@
 # Releases and GitHub updates
 
-## Current preview: 1.1.0-beta.7
+## Stable release: 1.2.0
+
+The workspace builds Atelier **1.2.0** from the stable tag `v1.2.0`.
+See [the release notes](release-notes-1.2.0.md) for user-facing changes.
+
+## Earlier preview: 1.1.0-beta.7
 
 The `prerelease` branch and `v1.1.0-beta.7` tag identify the review flight.
 Notes are in `release-notes-1.1.0-beta.7.md`; the earlier previews are `v1.1.0-beta.6` (`release-notes-1.1.0-beta.6.md`, built but not published), `v1.1.0-beta.5` (`release-notes-1.1.0-beta.5.md`), `v1.1.0-beta.4` (`release-notes-1.1.0-beta.4.md`), `v1.1.0-beta.3` (`release-notes-1.1.0-beta.3.md`), `v1.1.0-beta.2` (`release-notes-1.1.0-beta.2.md`) and
@@ -8,7 +13,7 @@ Notes are in `release-notes-1.1.0-beta.7.md`; the earlier previews are `v1.1.0-b
 matching version-specific notes file and attaches Windows x64 installer,
 portable binaries, macOS ARM64 app, Linux x64/ARM64 archives, and the combined
 SHA-256 manifest for newly built tags.
-The release must be published with GitHub's prerelease flag.
+Preview releases use GitHub's prerelease flag.
 
 
 ## FIPS packages
@@ -25,8 +30,8 @@ and Linux until a validated module is wired up there. Both variants build into t
 
 ## First official release: 1.0.0
 
-The first stable release is **1.0.0**; the current workspace version is
-**1.1.0-beta.7**. Previous 0.x versions are development releases. Release notes are in `release-notes-1.0.0.md`.
+The first stable release was **1.0.0**. Previous 0.x versions are development releases.
+Release notes are in `release-notes-1.0.0.md`.
 
 Shared RustRover configurations live in `.run/`:
 
@@ -236,8 +241,8 @@ draft first; published releases and their assets must remain immutable.
 
 | Channel | Version/tag | GitHub status | Audience |
 | --- | --- | --- | --- |
-| Stable | `1.0.0` / `v1.0.0` | Published release | Default |
-| Preview | `1.1.0-beta.7` / `v1.1.0-beta.7` | Pre-release | Opt-in testers |
+| Stable | `1.2.0` / `v1.2.0` | Published release | Default |
+| Preview | Version/tag with a prerelease suffix | Pre-release | Opt-in testers |
 
 The in-app setting already persists Stable or Preview. Stable selects newer
 stable versions; Preview selects the newest version across both channels using

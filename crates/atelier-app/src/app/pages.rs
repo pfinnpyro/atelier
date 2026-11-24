@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use atelier_ocr::models;
 use atelier_view::{Basis, Layout, PageGeom};
@@ -26,6 +26,10 @@ impl Viewer {
     /// [`Viewer::rebuild`], saying whether the document could be built.
     /// When it could not, the error is shown and the old document stays.
     pub(super) fn try_rebuild(&mut self, pages: &HashSet<usize>, turned: bool) -> bool {
+        self.rebuild_document(pages, turned, false)
+    }
+
+    fn rebuild_document(&mut self, pages: &HashSet<usize>, turned: bool, page_only: bool) -> bool {
         let keep_page = self.current_page();
         let Some(o) = &mut self.open else {
             return false;
@@ -77,7 +81,13 @@ impl Viewer {
         o.failed.retain(|k| !pages.contains(&k.page));
         // Work queued for the old document is dropped when it comes back.
         self.generation += 1;
-        o.generation = self.generation;
+        if page_only {
+            o.page_generations
+                .extend(pages.iter().map(|&page| (page, self.generation)));
+        } else {
+            o.generation = self.generation;
+            o.page_generations.clear();
+        }
         if turned {
             self.apply_fit();
             self.go_to_page(keep_page);
@@ -141,30 +151,49 @@ impl Viewer {
         } else {
             None
         };
+        self.start_run_with_models(quiet, turn, ocr);
+    }
+
+    fn start_run_with_models(
+        &mut self,
+        quiet: bool,
+        turn: bool,
+        models: Option<std::path::PathBuf>,
+    ) {
         let Some(o) = &mut self.open else { return };
         if o.orienting.is_some() {
             return;
         }
         let done = Arc::new(AtomicUsize::new(0));
-        let ocr = ocr.map(|dir| OcrRun {
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let cores = std::thread::available_parallelism().map_or(2, usize::from);
+        let limit = (cores / 2).clamp(1, 8);
+        let workers = match self.settings.ocr_workers {
+            0 if self.settings.memory == crate::memory::MemoryUse::Low => 1,
+            0 => (cores / 4).clamp(1, 4),
+            value => value.min(limit),
+        };
+        let ocr = models.map(|dir| OcrRun {
             dir,
             texts: o.ocr_texts.clone(),
             read: Arc::new(AtomicUsize::new(0)),
+            workers,
         });
         o.orienting = Some(Orienting {
             done: done.clone(),
+            cancelled: cancelled.clone(),
             total: o.layout.page_count(),
             quiet,
             turn,
             read: ocr.as_ref().map(|r| r.read.clone()),
-            turned: HashSet::new(),
-            from_image: 0,
-            from_ocr: 0,
+            ocr_pages: Default::default(),
+            turned: HashMap::new(),
         });
         let wake = self.ctx.clone();
+        let viewport = self.viewport;
         self.pool
-            .orient(o.doc.clone(), o.opened, done, ocr, move || {
-                wake.request_repaint()
+            .orient(o.doc.clone(), o.opened, done, cancelled, ocr, move || {
+                wake.request_repaint_of(viewport)
             });
         self.orient_progress();
     }
@@ -176,7 +205,8 @@ impl Viewer {
         };
         let done = run.done.load(Ordering::SeqCst).min(run.total);
         let page = (done + 1).min(run.total);
-        if run.read_count() > 0 {
+        if let Some(ocr_page) = run.ocr_pages.first() {
+            let page = ocr_page + 1;
             self.notice = Some(format!(
                 "Reading scanned pages with OCR: page {page} of {}…",
                 run.total
@@ -200,25 +230,23 @@ impl Viewer {
         }
         let mut now = HashSet::new();
         for &(p, r) in judged {
+            let before = o.session.rotation(p);
             if let Some((r, basis)) = r
-                && r != o.session.rotation(p)
+                && r != before
             {
-                o.session.rotate(p, i32::from(r));
-                now.insert(p);
-                if run.turned.insert(p) {
-                    match basis {
-                        Basis::Image => run.from_image += 1,
-                        Basis::Ocr => run.from_ocr += 1,
-                        Basis::Text => {}
+                if run.quiet {
+                    if !o.session.rotate_quietly(p, r) {
+                        continue;
                     }
+                } else {
+                    o.session.rotate(p, i32::from(r));
                 }
+                now.insert(p);
+                run.turned.entry(p).or_insert((before, basis));
             }
         }
         if now.is_empty() {
             return;
-        }
-        if run.quiet {
-            o.session.quiet_rotations();
         }
         // Where the view is: which page, and how far down it.
         let top = f64::from(self.scroll_to.unwrap_or(self.offset).y);
@@ -228,7 +256,7 @@ impl Viewer {
             .page_rect(page)
             .filter(|r| r.h > 0.0)
             .map(|r| ((top - r.y) / r.h, now.contains(&page)));
-        self.rebuild(&now, true);
+        self.rebuild_document(&now, true, true);
         // A page that turned under the reader starts again from its top,
         // which is what `rebuild` leaves; otherwise go back to the place.
         if let Some((down, false)) = place
@@ -241,19 +269,13 @@ impl Viewer {
         }
     }
 
-    /// Auto-orient has finished: turns whatever is left to turn and says
-    /// what was done.
+    /// Reports the completed run after its page results have been applied.
     pub(super) fn oriented(&mut self, opened: u64, rotations: &[Option<(u16, Basis)>]) {
         if self.open.as_ref().is_none_or(|o| o.opened != opened) {
             return;
         }
-        // Most pages turned as they were judged; this takes in any that
-        // were turned back by hand since, or judged before the run was
-        // being watched.
-        let all: Vec<_> = rotations.iter().copied().enumerate().collect();
-        self.turn_oriented(&all);
         let Some(o) = &mut self.open else { return };
-        let Some(run) = o.orienting.take() else {
+        let Some(mut run) = o.orienting.take() else {
             return;
         };
         let read = run.read_count();
@@ -261,7 +283,23 @@ impl Viewer {
             .iter()
             .filter(|r| !matches!(r, Some((_, Basis::Text | Basis::Ocr))))
             .count();
-        let (turned, from_image, from_ocr) = (&run.turned, run.from_image, run.from_ocr);
+        run.turned
+            .retain(|&page, (before, _)| o.session.rotation(page) != *before);
+        let turned = &run.turned;
+        let by = |basis| {
+            turned
+                .iter()
+                .filter(|&(&page, &(_, initial))| {
+                    rotations
+                        .get(page)
+                        .copied()
+                        .flatten()
+                        .map_or(initial, |(_, basis)| basis)
+                        == basis
+                })
+                .count()
+        };
+        let (from_image, from_ocr) = (by(Basis::Image), by(Basis::Ocr));
         let unknown = rotations.iter().filter(|r| r.is_none()).count();
         let mut msg = match turned.len() {
             0 => "Auto-orient: every page is already upright.".to_string(),
@@ -318,10 +356,6 @@ impl Viewer {
             }
             self.notice = Some(msg);
         }
-        // A search made while OCR was reading runs again to take it in.
-        if read > 0 && !self.search.query.is_empty() {
-            self.start_search(self.search.query.clone());
-        }
     }
 }
 
@@ -330,13 +364,19 @@ impl Viewer {
 /// the pages it has turned so far and what each turn went by.
 pub(super) struct Orienting {
     pub done: Arc<AtomicUsize>,
+    cancelled: Arc<AtomicBool>,
     pub total: usize,
     pub quiet: bool,
     pub turn: bool,
     pub read: Option<Arc<AtomicUsize>>,
-    turned: HashSet<usize>,
-    from_image: usize,
-    from_ocr: usize,
+    pub ocr_pages: std::collections::BTreeSet<usize>,
+    turned: HashMap<usize, (u16, Basis)>,
+}
+
+impl Drop for Orienting {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
 }
 
 impl Orienting {
@@ -404,17 +444,24 @@ impl Viewer {
             return;
         }
         let Some(o) = &mut self.open else { return };
+        if let Err(error) = o.doc.signature_write_policy().check(false) {
+            self.error = Some(error.to_string());
+            return;
+        }
         let Some(old) = o.session.delete_pages(pages) else {
             self.error = Some("A document needs at least one page, so the last ones stay.".into());
             return;
         };
         let keep = pages.iter().min().copied().unwrap_or(0);
         let old: Vec<Option<usize>> = old.into_iter().map(Some).collect();
+        let before = self.generation;
         self.rearranged(&old, Some(keep.min(old.len() - 1)));
+        if self.generation == before {
+            return;
+        }
         let n = pages.len();
         self.notice = Some(format!(
-            "Removed {n} {}. Save to keep the change; the removed pages are then gone from the \
-             file too.",
+            "Removed {n} {}. Save to keep the change.",
             if n == 1 { "page" } else { "pages" }
         ));
     }
@@ -576,6 +623,7 @@ impl Viewer {
         o.outline_asked = false;
         self.generation += 1;
         o.generation = self.generation;
+        o.page_generations.clear();
         o.opened = self.generation;
         self.selection = None;
         self.colors.reset();
@@ -633,13 +681,13 @@ mod orient_tests {
         let o = viewer.open.as_mut().unwrap();
         o.orienting = Some(Orienting {
             done: Arc::new(AtomicUsize::new(0)),
+            cancelled: Arc::new(AtomicBool::new(false)),
             total: 3,
             quiet,
             turn,
             read: None,
-            turned: HashSet::new(),
-            from_image: 0,
-            from_ocr: 0,
+            ocr_pages: Default::default(),
+            turned: HashMap::new(),
         });
     }
 
@@ -649,11 +697,126 @@ mod orient_tests {
     }
 
     #[test]
+    fn quiet_open_reports_ocr_before_any_page_finishes() {
+        let mut viewer = viewer();
+        begin(&mut viewer, true, true);
+        let run = viewer.open.as_mut().unwrap().orienting.as_mut().unwrap();
+        assert_eq!(run.done.load(Ordering::SeqCst), 0);
+        run.ocr_pages.insert(0);
+        viewer.orient_progress();
+        assert_eq!(
+            viewer.notice.as_deref(),
+            Some("Reading scanned pages with OCR: page 1 of 3…")
+        );
+    }
+
+    #[test]
+    fn automatic_read_gives_the_initial_preview_a_head_start() {
+        let mut viewer = viewer();
+        viewer.settings.orient_on_open = true;
+        viewer.open_bytes(PDF.to_vec(), "Another scan.pdf".into(), None);
+        let ctx = viewer.ctx.clone();
+        viewer.start_automatic_read(&ctx);
+        assert!(viewer.open.as_ref().unwrap().orienting.is_none());
+
+        viewer.open.as_mut().unwrap().automatic_read_at = Some(std::time::Instant::now());
+        viewer.start_automatic_read(&ctx);
+        let open = viewer.open.as_ref().unwrap();
+        assert!(open.orienting.is_some());
+        assert!(open.automatic_read_at.is_none());
+    }
+
+    #[test]
+    #[ignore = "requires the checksum-pinned models in ATELIER_OCR_TEST_MODELS"]
+    fn real_ocr_updates_the_first_page_and_search_before_later_pages_finish() {
+        use atelier_syntax::{Dict, Document, Name, ObjRef, Object, Stream};
+
+        let models = std::env::var_os("ATELIER_OCR_TEST_MODELS").unwrap();
+        let models = std::path::PathBuf::from(models);
+        assert!(atelier_ocr::models::installed(&models));
+        let text_pdf = Document::open(super::super::quality_tests::fixture(1)).unwrap();
+        let mut text_update = text_pdf.update();
+        text_update.set(ObjRef::new(5, 0), Object::Stream(Stream {
+            dict: Dict::new(),
+            data: Arc::from(&b"BT /Helv 24 Tf 12 135 Td (ATELIER) Tj 0 -35 Td (SCANNING) Tj 0 -35 Td (TEST PAGE) Tj ET"[..]),
+        }));
+        let text_pdf = Document::open(text_update.to_bytes().unwrap()).unwrap();
+        let options = atelier_render::RenderOptions {
+            scale: 2.0,
+            annotations: false,
+            ..Default::default()
+        };
+        let raster =
+            atelier_render::render_page(&text_pdf, &text_pdf.pages().unwrap()[0], &options)
+                .unwrap()
+                .pixmap;
+
+        let source = Document::open(super::super::quality_tests::fixture(8)).unwrap();
+        let mut scan_update = source.update();
+        let mut image = Dict::new();
+        image.insert("Type", Object::Name(Name::from("XObject")));
+        image.insert("Subtype", Object::Name(Name::from("Image")));
+        image.insert("Width", Object::Integer(raster.width() as i64));
+        image.insert("Height", Object::Integer(raster.height() as i64));
+        image.insert("BitsPerComponent", Object::Integer(8));
+        image.insert("ColorSpace", Object::Name(Name::from("DeviceGray")));
+        let scan = scan_update.add(Object::Stream(Stream {
+            dict: image,
+            data: atelier_view::gray_of_rgba(raster.data()).into(),
+        }));
+        scan_update.set(
+            ObjRef::new(5, 0),
+            Object::Stream(Stream {
+                dict: Dict::new(),
+                data: Arc::from(&b"q 200 0 0 200 0 0 cm /Im Do Q"[..]),
+            }),
+        );
+        for (index, page) in source.pages().unwrap().iter().enumerate() {
+            let mut images = Dict::new();
+            images.insert("Im", Object::Reference(scan));
+            let mut resources = page.resources.clone();
+            resources.insert("XObject", Object::Dict(images));
+            let mut dict = page.dict.clone();
+            dict.insert("Resources", Object::Dict(resources));
+            if index < 3 {
+                dict.insert("Rotate", Object::Integer(90 * (index as i64 + 1)));
+            }
+            scan_update.set(page.obj_ref.unwrap(), Object::Dict(dict));
+        }
+
+        let mut viewer = viewer();
+        viewer.open_bytes(scan_update.to_bytes().unwrap(), "Scans.pdf".into(), None);
+        viewer.start_search("atelier".into());
+        viewer.start_run_with_models(true, true, Some(models));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(35);
+        loop {
+            viewer.receive();
+            let open = viewer.open.as_ref().unwrap();
+            if (0..3).all(|page| {
+                open.session.rotation(page) == 0
+                    && viewer.search.hits.iter().any(|hit| hit.page == page)
+            }) {
+                assert!(open.orienting.is_some());
+                assert!(open.ocr_text(7).is_none());
+                assert!(open.layers_pending);
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "first scan did not publish in time: {:?}",
+                viewer.error
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    #[test]
     fn pages_turn_as_they_are_judged_not_at_the_end() {
         let mut viewer = viewer();
         begin(&mut viewer, false, true);
         let width = |v: &Viewer, p| v.open.as_ref().unwrap().layout.geom(p).unwrap().size().0;
         let (first, last) = (width(&viewer, 0), width(&viewer, 2));
+        let render_generation = viewer.open.as_ref().unwrap().generation;
 
         // The first page is judged sideways: it turns at once, and is laid
         // out again, while the run is still going.
@@ -662,17 +825,20 @@ mod orient_tests {
         assert!(viewer.open.as_ref().unwrap().orienting.is_some());
         assert_ne!(width(&viewer, 0), first);
         assert_eq!(width(&viewer, 2), last);
+        let open = viewer.open.as_ref().unwrap();
+        assert_ne!(open.page_generation(0), render_generation);
+        assert_eq!(open.page_generation(2), render_generation);
 
         // An upright page and one with nothing to go by change nothing.
-        let generation = viewer.open.as_ref().unwrap().generation;
+        let generation = viewer.generation;
         viewer.turn_oriented(&[(1, Some((0, Basis::Text))), (2, None)]);
         assert_eq!(rotations(&viewer), [90, 0, 0]);
-        assert_eq!(viewer.open.as_ref().unwrap().generation, generation);
+        assert_eq!(viewer.generation, generation);
 
         // Two judged in the same frame turn in one rebuild.
         viewer.turn_oriented(&[(1, Some((180, Basis::Ocr))), (2, Some((270, Basis::Text)))]);
         assert_eq!(rotations(&viewer), [90, 180, 270]);
-        assert_eq!(viewer.open.as_ref().unwrap().generation, generation + 1);
+        assert_eq!(viewer.generation, generation + 1);
 
         // The end of the run turns nothing more and counts every turn once.
         let opened = viewer.open.as_ref().unwrap().opened;
@@ -685,7 +851,7 @@ mod orient_tests {
             ],
         );
         assert_eq!(rotations(&viewer), [90, 180, 270]);
-        assert_eq!(viewer.open.as_ref().unwrap().generation, generation + 1);
+        assert_eq!(viewer.generation, generation + 1);
         assert!(viewer.open.as_ref().unwrap().orienting.is_none());
         assert_eq!(
             viewer.notice.as_deref(),

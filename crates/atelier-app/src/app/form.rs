@@ -36,6 +36,7 @@ pub(super) struct FormView {
 struct Editor {
     at: (usize, usize),
     text: String,
+    original: String,
     multiline: bool,
     focus_pending: bool,
     /// Its right-click menu is open; the menu takes focus from the box
@@ -59,7 +60,14 @@ enum EditMenu {
 
 impl FormView {
     pub(super) fn is_editing(&self) -> bool {
-        self.editor.is_some()
+        self.editor
+            .as_ref()
+            .is_some_and(|editor| editor.text != editor.original)
+    }
+
+    pub(super) fn draft_value(&self) -> Option<(usize, Value)> {
+        let editor = self.editor.as_ref().filter(|_| self.is_editing())?;
+        Some((editor.at.0, Value::Text(editor.text.clone())))
     }
 
     pub fn new(form: Form, doc: &atelier_syntax::Document) -> Self {
@@ -169,13 +177,12 @@ impl Viewer {
 
     pub(super) fn update_title(&self) {
         let Some(o) = &self.open else { return };
-        let dirty = o.session.is_dirty();
+        let dirty = o.has_unsaved_changes();
         let mark = if dirty { "• " } else { "" };
-        self.ctx
-            .send_viewport_cmd(egui::ViewportCommand::Title(format!(
-                "{mark}{} - Atelier",
-                o.name
-            )));
+        self.ctx.send_viewport_cmd_to(
+            self.viewport,
+            egui::ViewportCommand::Title(format!("{mark}{} - Atelier", o.name)),
+        );
     }
 
     /// The fillable, writable widget under a layout point.
@@ -276,9 +283,11 @@ impl Viewer {
                     return;
                 }
                 let f = &fv.form.fields[at.0];
+                let original = f.value.display();
                 fv.editor = Some(Editor {
                     at,
-                    text: f.value.display(),
+                    text: original.clone(),
+                    original,
                     multiline: f.has_flag(flags::MULTILINE),
                     focus_pending: true,
                     menu_open: false,

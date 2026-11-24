@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use eframe::egui::{self, Event, Key, ViewportCommand};
+use eframe::egui::{self, Event, Key};
 
 use super::Viewer;
 use super::commands::key_press;
@@ -55,7 +55,7 @@ impl Viewer {
         for item in crate::macos::take() {
             match item {
                 Incoming::Open(path) => self.mac.opened.push(path),
-                Incoming::Quit => self.ctx.send_viewport_cmd(ViewportCommand::Close),
+                Incoming::Quit => self.quit(),
                 Incoming::Menu(id) => match Command::from_id(&id) {
                     Some(Command::Undo) => raw.events.push(key_press(Key::Z, false)),
                     Some(Command::Redo) => raw.events.push(key_press(Key::Z, true)),
@@ -79,6 +79,25 @@ impl Viewer {
         for path in std::mem::take(&mut self.mac.opened) {
             self.open_path(&path);
         }
+        // What is picked from the menu bar is for the window in front; a
+        // window besides this one runs it in its own frame.
+        let ctx = self.ctx.clone();
+        let focused = self
+            .windows
+            .iter_mut()
+            .find(|w| ctx.input_for(w.id, |i| i.viewport().focused == Some(true)));
+        if let Some(w) = focused {
+            w.viewer.mac.commands.append(&mut self.mac.commands);
+        }
+        self.mac_commands();
+        let state = self.menu_state();
+        if let Some(bar) = &mut self.mac.menu_bar {
+            bar.sync(state);
+        }
+    }
+
+    /// Runs what was picked from the menu bar for this window.
+    pub(super) fn mac_commands(&mut self) {
         let commands = std::mem::take(&mut self.mac.commands);
         // While the unsaved-changes prompt is up, only quitting goes through,
         // as with the keyboard shortcuts.
@@ -86,10 +105,6 @@ impl Viewer {
             if self.confirm.is_none() || c == Command::Quit {
                 self.run_command(c);
             }
-        }
-        let state = self.menu_state();
-        if let Some(bar) = &mut self.mac.menu_bar {
-            bar.sync(state);
         }
     }
 

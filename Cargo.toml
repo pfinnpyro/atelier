@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "1.1.0-beta.8"
+version = "1.2.0"
 edition = "2024"
 rust-version = "1.85"
 publish = false
@@ -40,6 +40,43 @@ codegen-units = 1
 # The image codecs are unusably slow unoptimised; keep them fast in debug
 # builds and tests too.
 [profile.dev.package.atelier-filters]
+opt-level = 2
+
+# Keep the first page and OCR responsive in local viewer builds.
+[profile.dev.package.atelier-render]
+opt-level = 2
+
+[profile.dev.package.atelier-raster]
+opt-level = 2
+
+[profile.dev.package.atelier-syntax]
+opt-level = 2
+
+[profile.dev.package.atelier-view]
+opt-level = 2
+
+[profile.dev.package.atelier-ocr]
+opt-level = 2
+
+[profile.dev.package.ocrs]
+opt-level = 2
+
+[profile.dev.package.rten]
+opt-level = 2
+
+[profile.dev.package.rten-gemm]
+opt-level = 2
+
+[profile.dev.package.rten-imageproc]
+opt-level = 2
+
+[profile.dev.package.rten-simd]
+opt-level = 2
+
+[profile.dev.package.rten-tensor]
+opt-level = 2
+
+[profile.dev.package.rten-vecmath]
 opt-level = 2
 
 # Unlocking an encrypted profile hashes its passphrase hundreds of

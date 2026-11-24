@@ -13,7 +13,7 @@ use std::path::Path;
 
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams, TextItem};
 
-pub use page::{PageReading, read_page};
+pub use page::{PageReading, preview_orientation, read_page, read_page_with_hint};
 
 /// A loaded OCR engine. Loading takes a moment, so one is kept and shared.
 pub struct Engine {
@@ -63,6 +63,28 @@ const MAX_VOWEL_RUN: usize = 4;
 const MAX_CONSONANT_RUN: usize = 5;
 
 impl Engine {
+    fn read_likely_upright(
+        &self,
+        gray: &[u8],
+        width: usize,
+        height: usize,
+        turn: u16,
+    ) -> Result<Option<(Reading, usize)>, String> {
+        let (img, w, h) = turn_gray(gray, width, height, turn);
+        let lines = self.read(&img, w, h, None)?;
+        let score = Score::of(&lines[..lines.len().min(SAMPLE_LINES)]);
+        if score.sure() {
+            return Ok(Some((
+                Reading {
+                    turn,
+                    lines,
+                    size: (w, h),
+                },
+                score.good,
+            )));
+        }
+        Ok(None)
+    }
     /// Loads the models from `dir`, after checking their hashes.
     pub fn load(dir: &Path) -> Result<Engine, String> {
         let load = |i: usize| -> Result<rten::Model, String> {

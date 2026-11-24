@@ -95,6 +95,8 @@ results, sidebar, PKCS#12 identities and Windows CurrentUser/Personal signing.
   contexts from the AcroForm tree. Keep recognized structural backlinks separate and
   report unresolved, ambiguous or over-budget ownership as unknown. Contexts are
   conservative reachability, not exclusive ownership or a rendering/permission verdict.
+- [x] Summarize later form and annotation object changes next to signature verification.
+  Surface other objects, trailer changes and incomplete analysis separately.
 - [ ] Prove the complete reference effects of an edit and selectively allow DocMDP/FieldMDP-permitted
   edits. P=2/P=3 and unlocked fields are currently blocked conservatively too. Add native
   UI/independent-viewer acceptance checks; parser/write tests alone do not establish
@@ -155,9 +157,13 @@ tracked deletion is reversible and must never be represented as secure erasure.
 
 ### 3. Recovery and review
 
-- [ ] Atomically journal autosave/crash-recovery drafts against source revision fingerprints.
-- [ ] Detect changed/missing source documents; provide explicit restore/discard and stale-draft flows.
-- [ ] Test interruption, disk full, permissions, concurrent sessions and large documents.
+- [x] Checkpoint unencrypted PDFs atomically with source revision fingerprints. Include
+  applied edits, in-progress form text and pending ink. Open restored drafts in tabs
+  with no save destination, and report matching, changed or missing sources.
+- [x] Exercise process termination during a checkpoint, lock contention, failed writes,
+  read-only destinations and restoring after the source changes.
+- [ ] Test recovery with real disk exhaustion and across large and protected files.
+  Extend checkpoints to additional in-progress editors.
 - [ ] Extend existing comment states with a navigable/filterable list, replies, resolved
   workflows, stable modification history and exportable review summaries using standard metadata.
 

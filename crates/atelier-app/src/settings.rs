@@ -35,12 +35,39 @@ pub const TOOLBAR_ACTIONS: [&str; 6] = [
     "Organize",
 ];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MenuDisplay {
+    #[default]
+    Button,
+    Expandable,
+    TopBar,
+}
+
+impl MenuDisplay {
+    fn key(self) -> &'static str {
+        match self {
+            Self::Button => "button",
+            Self::Expandable => "expandable",
+            Self::TopBar => "top-bar",
+        }
+    }
+
+    fn parse(value: &str) -> Self {
+        match value {
+            "expandable" => Self::Expandable,
+            "top-bar" => Self::TopBar,
+            _ => Self::Button,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub review_author: String,
     pub certify_ink: bool,
     pub theme: String,
     pub toolbar_display: [ButtonDisplay; 6],
+    pub menu_display: MenuDisplay,
     /// Files open at Fit page (true) or Fit width.
     pub fit_page: bool,
     /// Turn sideways and upside-down pages upright when a file opens.
@@ -49,6 +76,8 @@ pub struct Settings {
     pub ocr: bool,
     /// Save the text OCR reads into the file, as invisible text.
     pub ocr_save: bool,
+    /// Maximum concurrent OCR pages, or zero for automatic.
+    pub ocr_workers: usize,
     /// The sidebar of page previews and the outline is shown.
     pub sidebar: bool,
     /// Look for a new version when Atelier starts.
@@ -73,10 +102,12 @@ impl Default for Settings {
             certify_ink: false,
             theme: "system".into(),
             toolbar_display: [ButtonDisplay::IconAndText; 6],
+            menu_display: MenuDisplay::default(),
             fit_page: true,
             orient_on_open: true,
             ocr: true,
             ocr_save: true,
+            ocr_workers: 0,
             sidebar: true,
             check_updates: true,
             // Someone running a preview build has chosen previews.
@@ -159,12 +190,14 @@ impl Settings {
                 "orient-on-open" => s.orient_on_open = on,
                 "ocr" => s.ocr = on,
                 "ocr-save" => s.ocr_save = on,
+                "ocr-workers" => s.ocr_workers = value.trim().parse::<usize>().unwrap_or(0).min(8),
                 "sidebar" => s.sidebar = on,
                 "check-updates" => s.check_updates = on,
                 "channel" => s.preview = value.trim() == "preview",
                 "memory" => s.memory = crate::memory::MemoryUse::parse(value),
                 "find" => s.find_floating = value.trim() != "sidebar",
                 "shortcut-glyphs" => s.shortcut_glyphs = on,
+                "menu-display" => s.menu_display = MenuDisplay::parse(value.trim()),
                 "check-mark" => {
                     s.check_mark = atelier_form::CheckMark::parse(value).unwrap_or_default();
                 }
@@ -193,6 +226,7 @@ impl Settings {
             if self.preview { "preview" } else { "stable" }
         );
         text.push_str(&format!("certify-ink = {}\n", self.certify_ink));
+        text.push_str(&format!("ocr-workers = {}\n", self.ocr_workers));
         text.push_str(&format!("check-mark = {}\n", self.check_mark.key()));
         text.push_str(&format!("memory = {}\n", self.memory.key()));
         text.push_str(&format!(
@@ -200,6 +234,7 @@ impl Settings {
             if self.find_floating { "bar" } else { "sidebar" }
         ));
         text.push_str(&format!("shortcut-glyphs = {}\n", self.shortcut_glyphs));
+        text.push_str(&format!("menu-display = {}\n", self.menu_display.key()));
         for (index, display) in self.toolbar_display.iter().enumerate() {
             text.push_str(&format!("toolbar-{index} = {}\n", display.key()));
         }
@@ -239,6 +274,7 @@ mod tests {
             orient_on_open: false,
             ocr: true,
             ocr_save: false,
+            ocr_workers: 3,
             sidebar: false,
             check_updates: false,
             preview: true,
@@ -246,6 +282,7 @@ mod tests {
             memory: crate::memory::MemoryUse::Low,
             find_floating: false,
             shortcut_glyphs: !cfg!(target_os = "macos"),
+            menu_display: MenuDisplay::TopBar,
         };
         assert_eq!(Settings::parse(&s.to_text()), s);
         assert_eq!(

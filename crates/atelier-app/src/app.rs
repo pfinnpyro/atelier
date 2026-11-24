@@ -37,6 +37,9 @@ mod pages;
 mod print;
 mod profiles;
 mod protect;
+#[cfg(test)]
+mod quality_tests;
+mod recovery;
 mod revisions;
 mod safety;
 mod scripts;
@@ -47,6 +50,7 @@ mod sidebar;
 mod signatures;
 mod tabs;
 mod updates;
+mod windows;
 #[cfg(windows)]
 mod windows_identity;
 
@@ -90,10 +94,12 @@ enum ZoomMode {
 
 /// An open file and everything known about it.
 struct Open {
+    recovery: recovery::Draft,
     signatures: signatures::Signatures,
     doc: Arc<Document>,
     name: String,
     generation: u64,
+    page_generations: HashMap<usize, u64>,
     layout: Layout,
     tiles: TileCache<TextureHandle>,
     failed: HashSet<TileKey>,
@@ -108,6 +114,7 @@ struct Open {
     /// Auto-orient is working out which way up the pages go: pages done
     /// so far, and how many there are.
     orienting: Option<pages::Orienting>,
+    automatic_read_at: Option<std::time::Instant>,
     /// The form, when the document has one.
     form: Option<FormView>,
     /// Small pictures of the pages for the sidebar.
@@ -153,6 +160,8 @@ enum Loaded {
     Failed(String),
 }
 
+type LoadResult = (PathBuf, Loaded);
+
 /// A save that finished writing on a thread of its own.
 struct Saved {
     /// The document as it was written.
@@ -186,6 +195,9 @@ struct Search {
 }
 
 pub struct Viewer {
+    recovery_queue: Vec<recovery::Candidate>,
+    recovery_restore: Option<recovery::Restore>,
+    recovery_tick_at: std::time::Instant,
     pool: Pool,
     ctx: egui::Context,
     open: Option<Open>,
@@ -211,6 +223,28 @@ pub struct Viewer {
     show_warnings: bool,
     /// A file waiting for its password.
     locked: Option<Locked>,
+    /// More files waiting for theirs, after it.
+    locked_next: std::collections::VecDeque<Locked>,
+    /// Files handed over by an Atelier started after this one.
+    incoming: Option<std::sync::mpsc::Receiver<Vec<PathBuf>>>,
+    /// A tab being dragged along the row or out of the window.
+    tab_drag: Option<tabs::TabDrag>,
+    menu_expanded: bool,
+    tab_strip: Option<tabs::TabStrip>,
+    tab_drop: Option<(usize, Pos2)>,
+    viewport: egui::ViewportId,
+    /// Tabs moving out to a window of their own, with where its corner
+    /// goes on screen.
+    leaving: Vec<(tabs::Parked, Option<Pos2>)>,
+    /// The other windows; only the first window has any.
+    windows: Vec<windows::Child>,
+    /// The windows' icon, for the ones opened later.
+    icon: Option<Arc<egui::IconData>>,
+    /// Quitting was asked for, in this window or another: every window
+    /// closes, not only this one.
+    quit: bool,
+    /// The settings all windows were last seen to share.
+    settings_seen: Option<Settings>,
     /// The unsaved-changes prompt is open for this.
     confirm: Option<Pending>,
     /// Closing was confirmed; let the window go.
@@ -232,6 +266,8 @@ pub struct Viewer {
     /// The open files in tab order; the one in front is `None`, its state
     /// being the viewer's own. Empty when no file is open.
     tabs: Vec<Option<tabs::Parked>>,
+    closed_tabs: Vec<tabs::ClosedTab>,
+    reopening: HashMap<PathBuf, tabs::ClosedTab>,
     recent: crate::recent::Recent,
     annotate: annotate::Annotate,
     security: security::SecurityUi,
@@ -239,8 +275,8 @@ pub struct Viewer {
     budgets: crate::memory::Budgets,
     /// Files being read, and how many.
     loaded: (
-        std::sync::mpsc::Sender<Loaded>,
-        std::sync::mpsc::Receiver<Loaded>,
+        std::sync::mpsc::Sender<LoadResult>,
+        std::sync::mpsc::Receiver<LoadResult>,
     ),
     loading: usize,
     /// Saves being written, and how many.
@@ -281,23 +317,67 @@ struct Locked {
 }
 
 impl Viewer {
-    pub fn new(cc: &eframe::CreationContext<'_>, path: Option<PathBuf>) -> Self {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        paths: Vec<PathBuf>,
+        primary: Option<crate::instance::Primary>,
+        icon: Option<Arc<egui::IconData>>,
+    ) -> Self {
         let mut v = Self::initialize(cc, Settings::load());
+        v.icon = icon;
         v.ctx.set_theme(match v.settings.theme.as_str() {
             "light" => egui::ThemePreference::Light,
             "dark" => egui::ThemePreference::Dark,
             _ => egui::ThemePreference::System,
         });
         crate::update::clean_up();
+        v.recovery_queue = recovery::discover();
         #[cfg(target_os = "macos")]
         v.start_mac();
         if v.settings.check_updates {
             v.updater.check(v.settings.preview, true, v.ctx.clone());
         }
-        if let Some(p) = path {
+        if let Some(primary) = primary {
+            let (tx, rx) = std::sync::mpsc::channel();
+            primary.serve(tx, v.ctx.clone());
+            v.incoming = Some(rx);
+        }
+        for p in paths {
             v.open_path(&p);
         }
         v
+    }
+
+    /// Opens the files handed over by another Atelier, and comes forward.
+    fn take_handovers(&mut self) {
+        let Some(rx) = &self.incoming else { return };
+        let batches: Vec<_> = rx.try_iter().collect();
+        if batches.is_empty() {
+            return;
+        }
+        let mut opened_files = false;
+        for paths in batches {
+            if paths.is_empty() {
+                self.open_empty_window();
+            } else {
+                opened_files = true;
+                for path in paths {
+                    self.open_path(&path);
+                }
+            }
+        }
+        if !opened_files {
+            return;
+        }
+        self.ctx
+            .send_viewport_cmd(ViewportCommand::Minimized(false));
+        self.ctx.send_viewport_cmd(ViewportCommand::Focus);
+        // Where the system will not let a window take the focus, the
+        // taskbar shows it wants attention instead.
+        self.ctx
+            .send_viewport_cmd(ViewportCommand::RequestUserAttention(
+                egui::UserAttentionType::Informational,
+            ));
     }
 
     fn initialize(cc: &eframe::CreationContext<'_>, settings: Settings) -> Self {
@@ -306,10 +386,22 @@ impl Viewer {
         // Ctrl +/- zoom the document, not the interface.
         ctx.options_mut(|o| o.zoom_with_keyboard = false);
         controls::style(&ctx);
+        Self::blank(ctx, settings)
+    }
+
+    /// A viewer with nothing open, for a window on `ctx`.
+    fn blank(ctx: egui::Context, settings: Settings) -> Self {
+        Self::blank_for(ctx, settings, egui::ViewportId::ROOT)
+    }
+
+    fn blank_for(ctx: egui::Context, settings: Settings, viewport: egui::ViewportId) -> Self {
         let wake = ctx.clone();
         let budgets = crate::memory::Budgets::of(settings.memory);
         atelier_render::set_image_cache_budget(budgets.images);
         Self {
+            recovery_queue: Vec::new(),
+            recovery_restore: None,
+            recovery_tick_at: std::time::Instant::now(),
             budgets,
             loaded: std::sync::mpsc::channel(),
             loading: 0,
@@ -322,7 +414,7 @@ impl Viewer {
             seen: (None, None),
             zoom_changed: None,
             last_scale: 0,
-            pool: Pool::new(move || wake.request_repaint()),
+            pool: Pool::new(move || wake.request_repaint_of(viewport)),
             ctx,
             open: None,
             generation: 0,
@@ -342,6 +434,18 @@ impl Viewer {
             selecting: false,
             show_warnings: false,
             locked: None,
+            locked_next: Default::default(),
+            incoming: None,
+            tab_drag: None,
+            menu_expanded: false,
+            tab_strip: None,
+            tab_drop: None,
+            viewport,
+            leaving: Vec::new(),
+            windows: Vec::new(),
+            icon: None,
+            quit: false,
+            settings_seen: None,
             confirm: None,
             closing: false,
             inspector: Inspector::default(),
@@ -356,6 +460,8 @@ impl Viewer {
             updater: updates::Updater::default(),
             sidebar: Sidebar::default(),
             tabs: Vec::new(),
+            closed_tabs: Vec::new(),
+            reopening: HashMap::new(),
             recent: crate::recent::Recent::load(),
             annotate: annotate::Annotate::default(),
             security: security::SecurityUi::default(),
@@ -374,18 +480,24 @@ impl Viewer {
             return;
         }
         let (path, name) = (path.to_path_buf(), display_name(path));
+        let request_path = path.clone();
         let (tx, wake) = (self.loaded.0.clone(), self.ctx.clone());
+        let viewport = self.viewport;
         let work = move || {
+            let path_for_result = path.clone();
             let loaded = match std::fs::read(&path) {
                 Ok(data) => Self::parse(data, name, Some(path)),
                 Err(e) => Loaded::Failed(format!("Could not read {}: {e}", path.display())),
             };
-            let _ = tx.send(loaded);
-            wake.request_repaint();
+            let _ = tx.send((path_for_result, loaded));
+            wake.request_repaint_of(viewport);
         };
         match std::thread::Builder::new().name("open".into()).spawn(work) {
             Ok(_) => self.loading += 1,
-            Err(e) => self.error = Some(format!("Could not start opening the file: {e}")),
+            Err(e) => {
+                self.reopening.remove(&request_path);
+                self.error = Some(format!("Could not start opening the file: {e}"));
+            }
         }
     }
 
@@ -411,28 +523,38 @@ impl Viewer {
 
     /// Takes in the files that finished loading.
     fn finish_loads(&mut self) {
-        while let Ok(loaded) = self.loaded.1.try_recv() {
+        while let Ok((request_path, loaded)) = self.loaded.1.try_recv() {
             self.loading = self.loading.saturating_sub(1);
             match loaded {
                 Loaded::Ready { doc, name, path } => {
                     // Opened twice in quick succession: show the first.
                     if let Some(i) = path.as_deref().and_then(|p| self.tab_with(p)) {
                         self.switch_to(i);
+                        self.reopening.remove(&request_path);
                     } else {
-                        self.install(*doc, name, path, None);
+                        self.install(*doc, name, path, None, None);
                     }
                 }
                 Loaded::Locked { data, name, path } => {
-                    self.locked = Some(Locked {
+                    let locked = Locked {
                         data,
                         name,
                         path,
                         password: String::new(),
                         wrong: false,
                         focus: true,
-                    });
+                    };
+                    // Several opened at once ask for their passwords in turn.
+                    if self.locked.is_some() {
+                        self.locked_next.push_back(locked);
+                    } else {
+                        self.locked = Some(locked);
+                    }
                 }
-                Loaded::Failed(e) => self.error = Some(e),
+                Loaded::Failed(e) => {
+                    self.reopening.remove(&request_path);
+                    self.error = Some(e);
+                }
             }
         }
     }
@@ -462,7 +584,7 @@ impl Viewer {
     }
 
     fn is_dirty(&self) -> bool {
-        self.annotate.has_pending_ink() || self.open.as_ref().is_some_and(|o| o.session.is_dirty())
+        self.annotate.has_pending_ink() || self.open.as_ref().is_some_and(Open::has_unsaved_changes)
     }
 
     fn open_with_password(
@@ -499,7 +621,7 @@ impl Viewer {
                 return;
             }
         };
-        self.install(doc, name, path, readers);
+        self.install(doc, name, path, readers, None);
     }
 
     /// Shows a parsed document in a new tab. `readers` is who the file is
@@ -511,6 +633,7 @@ impl Viewer {
         name: String,
         path: Option<PathBuf>,
         readers: Option<atelier_pgp::Readers>,
+        recovered: Option<recovery::Draft>,
     ) {
         // A file protected with OpenPGP is a cover page around the real
         // document, which is opened in its place once decrypted.
@@ -550,12 +673,16 @@ impl Viewer {
         self.generation += 1;
         let warnings = doc.warnings().into_iter().collect();
         let doc = Arc::new(doc);
+        let restored = recovered.is_some();
         let mut open = Open {
+            recovery: recovered.unwrap_or_else(|| recovery::Draft::new(path.as_deref(), &doc)),
             signatures: Default::default(),
             safety: safety::Safety::new(doc.clone()),
             session: Session::new(doc.clone()),
             opened: self.generation,
             orienting: None,
+            automatic_read_at: (!restored && (self.settings.orient_on_open || self.ocr_ready()))
+                .then(|| std::time::Instant::now() + std::time::Duration::from_millis(500)),
             thumbs: HashMap::new(),
             thumb_stale: HashSet::new(),
             outline: None,
@@ -565,6 +692,7 @@ impl Viewer {
             doc,
             name,
             generation: self.generation,
+            page_generations: HashMap::new(),
             layout: Layout::new(pages, 1.0),
             tiles: TileCache::new(self.budgets.tiles),
             failed: HashSet::new(),
@@ -579,6 +707,10 @@ impl Viewer {
         };
         Self::load_form(&mut open);
         let blocked = open.scripts.as_ref().map_or(0, |s| s.runnable().len());
+        let reopening = open
+            .path
+            .as_ref()
+            .and_then(|path| self.reopening.remove(path));
         self.open = Some(open);
         self.inspector.reset();
         self.sidebar.reset();
@@ -602,6 +734,22 @@ impl Viewer {
         self.selection = None;
         self.selecting = false;
         self.apply_fit();
+        if let Some(closed) = reopening {
+            self.restore_closed_tab(closed);
+        }
+    }
+
+    fn start_automatic_read(&mut self, ctx: &egui::Context) {
+        let Some(open) = &mut self.open else { return };
+        let Some(deadline) = open.automatic_read_at else {
+            return;
+        };
+        let now = std::time::Instant::now();
+        if open.tiles.bytes() == 0 && now < deadline {
+            ctx.request_repaint_after(deadline - now);
+            return;
+        }
+        open.automatic_read_at = None;
         if self.settings.orient_on_open {
             self.start_orient(true);
         } else if self.ocr_ready() {
@@ -611,11 +759,12 @@ impl Viewer {
     }
 
     fn pick_file(&mut self) {
-        if let Some(path) = rfd::FileDialog::new()
+        let paths = rfd::FileDialog::new()
             .add_filter("PDF documents", &["pdf"])
             .add_filter("All files", &["*"])
-            .pick_file()
-        {
+            .pick_files()
+            .unwrap_or_default();
+        for path in paths {
             self.open_path(&path);
         }
     }
@@ -634,7 +783,8 @@ impl Viewer {
         // Reject pending restricted edits before consuming ink/editor buffers or
         // presenting a save dialog. An unchanged copy is still safe to save.
         if let Some(o) = &self.open {
-            let pending = self.is_dirty()
+            let pending = o.session.is_dirty()
+                || self.annotate.has_pending_ink()
                 || o.layers_pending
                 || o.form.as_ref().is_some_and(|f| f.is_editing());
             if pending && let Err(error) = o.doc.signature_write_policy().check(false) {
@@ -668,6 +818,15 @@ impl Viewer {
             }
         };
         let Some(path) = path else { return };
+        self.write_save(path, to, then);
+    }
+
+    fn write_save(&mut self, path: PathBuf, to: SaveTo, then: Option<Pending>) {
+        let Some(o) = &self.open else { return };
+        if self.saving > 0 {
+            self.error = Some("Wait for the current save to finish.".into());
+            return;
+        }
         // A document opened from a protected file is sealed again for
         // the same readers, and is never written out in the clear here.
         // The sealing is done now; only the writing is left to the thread.
@@ -734,6 +893,8 @@ impl Viewer {
             }
             // The changes are saved somewhere, so closing need not ask again.
             o.session.saved(o.doc.clone());
+            o.recovery
+                .saved(saved.to != SaveTo::Copy, o.path.as_deref(), &o.doc);
             if saved.to == SaveTo::Copy {
                 self.notice = Some(format!("Saved a copy as {name}."));
             }
@@ -791,6 +952,8 @@ impl Viewer {
             return;
         };
         if choice == 2 {
+            // Quitting stops here too, with every window left open.
+            self.quit = false;
             return;
         }
         if choice == 0 {
@@ -810,8 +973,8 @@ impl Viewer {
             Pending::Close => {
                 // Not saving drops the changes; other tabs may have some
                 // too.
-                if let Some(o) = &mut self.open {
-                    o.session.revert();
+                if let Some(i) = self.active_tab() {
+                    self.close_tab(i);
                 }
                 if self.show_unsaved_tab() {
                     self.confirm = Some(Pending::Close);
@@ -938,12 +1101,13 @@ impl Viewer {
     pub(super) fn start_search(&mut self, query: String) {
         let Some(o) = &self.open else { return };
         let wake = self.ctx.clone();
+        let viewport = self.viewport;
         let id = self.pool.search(
             o.doc.clone(),
             o.generation,
             query.clone(),
             o.ocr_texts.clone(),
-            move || wake.request_repaint(),
+            move || wake.request_repaint_of(viewport),
         );
         self.search = Search {
             query,
@@ -1021,7 +1185,7 @@ impl Viewer {
                     size,
                     rgba,
                     warnings,
-                } if generation == o.generation => {
+                } if generation == o.page_generation(key.page) => {
                     // Drop tiles for a zoom we have since left, unless they
                     // are previews or can stand in for the wanted one.
                     if key.scale_milli != scale_key(o.layout.zoom(), ppp)
@@ -1048,7 +1212,7 @@ impl Viewer {
                     generation,
                     key,
                     error,
-                } if generation == o.generation => {
+                } if generation == o.page_generation(key.page) => {
                     o.failed.insert(key);
                     o.warnings.insert(format!("Page {}: {error}", key.page + 1));
                 }
@@ -1057,32 +1221,31 @@ impl Viewer {
                     page,
                     text,
                 } if generation == o.generation => {
-                    o.text.insert(page, text);
+                    o.text.insert(page, o.ocr_text(page).unwrap_or(text));
                 }
                 Done::SearchHits {
                     generation,
                     search,
                     page,
-                    hits,
+                    mut hits,
                     text,
                 } if generation == o.generation && search == self.search.id => {
-                    // Kept for the pages with hits, to draw and reveal them.
-                    if !hits.is_empty() {
-                        o.text.entry(page).or_insert(text);
+                    let text = if let Some(ocr) = o.ocr_text(page) {
+                        hits = page_hits(&ocr, page, &self.search.query);
+                        Some(ocr)
+                    } else {
+                        text
+                    };
+                    if let Some(text) = text
+                        && !hits.is_empty()
+                    {
+                        o.text.insert(page, text);
                     }
                     self.search.pages_done = page + 1;
-                    let first_new = self.search.hits.len();
-                    self.search
-                        .hits
-                        .extend(hits.into_iter().map(|glyphs| SearchMatch { page, glyphs }));
-                    // Jump to the first hit at or after the page in view.
-                    if self.search.current.is_none()
-                        && self.search.hits.len() > first_new
-                        && page >= o.layout.page_at_y(f64::from(self.offset.y))
-                    {
-                        self.search.current = Some(first_new);
-                        reveal = Some(first_new);
-                    }
+                    reveal = self
+                        .search
+                        .replace_page(page, hits, o.layout.page_at_y(f64::from(self.offset.y)))
+                        .or(reveal);
                 }
                 Done::SearchEnded { generation, search }
                     if generation == o.generation && search == self.search.id =>
@@ -1099,7 +1262,7 @@ impl Viewer {
                     page,
                     size,
                     rgba,
-                } if generation == o.generation => {
+                } if generation == o.page_generation(page) => {
                     let image = egui::ColorImage::from_rgba_premultiplied(size, &rgba);
                     let tex = self.ctx.load_texture(
                         format!("thumb{page}"),
@@ -1125,29 +1288,52 @@ impl Viewer {
                     generation,
                     page,
                     rotation,
-                } if generation == o.opened => oriented_pages.push((page, rotation)),
+                } if generation == o.opened => {
+                    if let Some(run) = &mut o.orienting {
+                        run.ocr_pages.remove(&page);
+                    }
+                    oriented_pages.push((page, rotation));
+                }
+                Done::OrientationPreviews { opened, rotations } if opened == o.opened => {
+                    oriented_pages.extend(rotations.into_iter().enumerate().filter_map(
+                        |(page, rotation)| {
+                            rotation.map(|rotation| {
+                                (page, Some((rotation, atelier_view::Basis::Image)))
+                            })
+                        },
+                    ));
+                }
                 Done::Oriented {
                     generation,
                     rotations,
-                } => oriented = Some((generation, rotations)),
+                } if generation == o.opened => oriented = Some((generation, rotations)),
                 Done::OcrPage { opened, page } if opened == o.opened => {
-                    // Its text is now what OCR read.
-                    o.text.remove(&page);
-                    if self.settings.ocr_save {
-                        let read = o
-                            .ocr_texts
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .get(&page)
-                            .cloned();
-                        if let Some(text) = read {
+                    if let Some(text) = o.ocr_text(page) {
+                        if !self.search.query.is_empty() {
+                            let hits = page_hits(&text, page, &self.search.query);
+                            reveal = self
+                                .search
+                                .replace_page(
+                                    page,
+                                    hits,
+                                    o.layout.page_at_y(f64::from(self.offset.y)),
+                                )
+                                .or(reveal);
+                        }
+                        o.text.insert(page, text.clone());
+                        if self.settings.ocr_save && !o.session.has_text_layer(page) {
                             o.session.set_text_layer(page, text);
                             o.layers_pending = true;
                         }
                     }
                 }
-                Done::OcrFailed { error } => {
-                    self.error = Some(format!("OCR is off for now: {error}"));
+                Done::OcrStarted { opened, page } if opened == o.opened => {
+                    if let Some(run) = &mut o.orienting {
+                        run.ocr_pages.insert(page);
+                    }
+                }
+                Done::OcrFailed { opened, error } if opened == o.opened => {
+                    self.error = Some(error);
                 }
                 Done::Probed {
                     generation,
@@ -1196,7 +1382,9 @@ impl Viewer {
         } else {
             self.orient_progress();
         }
-        if let Some(i) = reveal {
+        if reveal.is_some()
+            && let Some(i) = self.search.current
+        {
             self.reveal_hit(i);
         }
     }
@@ -1257,7 +1445,7 @@ impl Viewer {
             self.run_search(false);
         }
         if shortcut(Key::Q) {
-            ctx.send_viewport_cmd(ViewportCommand::Close);
+            self.quit();
         }
         if shortcut(Key::Comma) {
             self.window = Some(Window::Settings);
@@ -1370,15 +1558,50 @@ impl Viewer {
     // ----- Panels -------------------------------------------------------
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
+        use crate::settings::MenuDisplay;
+
+        let display =
+            if cfg!(target_os = "macos") && self.settings.menu_display == MenuDisplay::TopBar {
+                MenuDisplay::Button
+            } else {
+                self.settings.menu_display
+            };
+        if display != MenuDisplay::Expandable
+            || (self.menu_expanded
+                && !egui::Popup::is_any_open(ui.ctx())
+                && ui.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Escape)))
+        {
+            self.menu_expanded = false;
+        }
         ui.spacing_mut().interact_size.y = controls::HEIGHT;
+        if display == MenuDisplay::TopBar {
+            self.horizontal_menu(ui);
+        }
         ui.horizontal_wrapped(|ui| {
             ui.set_row_height(controls::HEIGHT);
-            crate::chrome::traffic_light_space(ui, self.traffic_light_width());
-            // The menu bar has these on macOS.
-            if !self.native_menu_bar() {
+            if display != MenuDisplay::TopBar {
+                crate::chrome::traffic_light_space(ui, self.traffic_light_width());
+            }
+            if display == MenuDisplay::Expandable {
+                let label = if self.menu_expanded {
+                    "Collapse menu"
+                } else {
+                    "Expand menu"
+                };
+                if crate::icons::button(ui, crate::icons::Icon::Menu, label)
+                    .on_hover_text(label)
+                    .clicked()
+                {
+                    self.menu_expanded = !self.menu_expanded;
+                }
+                if self.menu_expanded {
+                    self.horizontal_menu(ui);
+                    return;
+                }
+            } else if display == MenuDisplay::Button && !self.native_menu_bar() {
                 self.main_menu(ui);
             }
-            self.toolbar_buttons(ui);
+            self.toolbar_buttons(ui, display != MenuDisplay::TopBar);
         });
     }
 
@@ -1414,7 +1637,7 @@ impl Viewer {
     }
 
     /// The toolbar's buttons after the menu.
-    fn toolbar_buttons(&mut self, ui: &mut egui::Ui) {
+    fn toolbar_buttons(&mut self, ui: &mut egui::Ui, window_chrome: bool) {
         if ui
             .add(
                 crate::icons::Icon::Sidebar
@@ -1596,7 +1819,9 @@ impl Viewer {
             self.toggle_page_grid();
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            crate::chrome::window_buttons(ui);
+            if window_chrome {
+                crate::chrome::window_buttons(ui);
+            }
             if ui
                 .add(
                     crate::icons::Icon::SidebarRight
@@ -1620,7 +1845,9 @@ impl Viewer {
                 self.annotate.toggle_comments();
             }
             self.status_tray(ui);
-            crate::chrome::drag_space(ui);
+            if window_chrome {
+                crate::chrome::drag_space(ui);
+            }
             if let Some(o) = &self.open
                 && !o.warnings.is_empty()
             {
@@ -1640,12 +1867,23 @@ impl Viewer {
     /// update on offer, an error, a notice. Each opens what it stands
     /// for, so nothing has to sit over the page to be noticed.
     fn status_tray(&mut self, ui: &mut egui::Ui) {
-        if self.loading > 0 || self.saving > 0 {
-            let what = if self.saving > 0 {
-                "Saving…"
-            } else {
-                "Opening…"
-            };
+        let ocr = self
+            .open
+            .as_ref()
+            .and_then(|o| o.orienting.as_ref())
+            .and_then(|run| {
+                run.ocr_pages
+                    .first()
+                    .map(|page| format!("OCR is reading page {} of {}", page + 1, run.total))
+            });
+        let what = if self.saving > 0 {
+            Some("Saving…".into())
+        } else if self.loading > 0 {
+            Some("Opening…".into())
+        } else {
+            ocr
+        };
+        if let Some(what) = what {
             ui.add(egui::Spinner::new().size(16.0)).on_hover_text(what);
         }
         self.update_tray(ui);
@@ -1884,7 +2122,9 @@ impl Viewer {
                 });
             });
         if cancel || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            self.locked = None;
+            if let Some(path) = self.locked.take().and_then(|locked| locked.path) {
+                self.reopening.remove(&path);
+            }
         } else if submit && let Some(locked) = self.locked.take() {
             let password = locked.password;
             self.open_with_password(locked.data, locked.name, &password, locked.path);
@@ -2190,13 +2430,27 @@ impl Viewer {
         let mut jobs = Vec::new();
         let tile_job = |(key, page_px): (TileKey, (usize, usize))| Job::Tile {
             doc: o.doc.clone(),
-            generation: o.generation,
+            generation: o.page_generation(key.page),
             key,
             page_px,
         };
         let needed = |o: &Open, k: &TileKey| {
             (!o.tiles.contains(k) || o.stale.contains(k)) && !o.failed.contains(k)
         };
+        if o.tiles.bytes() == 0 {
+            // Let the first preview get through before sharper tiles, thumbnails
+            // and neighboring pages compete to decode the same scan.
+            let first = (current_scale > PREVIEW_SCALE)
+                .then(|| tiles_at_scale(&o.layout, view, PREVIEW_SCALE))
+                .into_iter()
+                .flatten()
+                .chain(wanted.iter().copied())
+                .find(|(key, _)| needed(o, key));
+            if let Some(first) = first {
+                self.pool.set_jobs(vec![tile_job(first)]);
+                return;
+            }
+        }
         let mut queued: HashSet<TileKey> = HashSet::new();
         let mut add_tiles = |jobs: &mut Vec<Job>, tiles: Vec<(TileKey, (usize, usize))>| {
             for t in tiles {
@@ -2238,8 +2492,26 @@ impl Viewer {
         if previews {
             add_tiles(&mut jobs, tiles_at_scale(&o.layout, view, PREVIEW_SCALE));
         }
+        let early = (o.automatic_read_at.is_some()
+            || o.orienting.as_ref().is_some_and(|run| run.turn))
+        .then(|| {
+            o.layout
+                .page_rect(o.layout.page_count().saturating_sub(1).min(2))
+        })
+        .flatten()
+        .map(|last| last.bottom() - view.y)
+        .filter(|height| *height > 0.0 && *height <= 4.0 * view.h)
+        .map(|height| ViewRect::new(view.x, view.y, view.w, height));
+        if current_scale > PREVIEW_SCALE
+            && let Some(early) = early
+        {
+            add_tiles(&mut jobs, tiles_at_scale(&o.layout, early, PREVIEW_SCALE));
+        }
         if !settling {
             add_tiles(&mut jobs, wanted.clone());
+            if let Some(early) = early {
+                add_tiles(&mut jobs, tiles_for_view(&o.layout, early, f64::from(ppp)));
+            }
         }
         let mut pages: Vec<usize> = o.layout.visible_pages(view.y, view.bottom()).collect();
         if let Some(sel) = self.selection {
@@ -2271,7 +2543,7 @@ impl Viewer {
                 if let Some(g) = o.layout.geom(page) {
                     jobs.push(Job::Thumb {
                         doc: o.doc.clone(),
-                        generation: o.generation,
+                        generation: o.page_generation(page),
                         page,
                         scale: sidebar::thumb_scale(g.size(), f64::from(ppp)),
                     });
@@ -2435,8 +2707,26 @@ impl eframe::App for Viewer {
         let ctx = ui.ctx().clone();
         #[cfg(target_os = "macos")]
         self.mac_frame();
-        let dropped = ctx.input(|i| i.raw.dropped_files.first().cloned());
-        if let Some(f) = dropped {
+        self.root_close(&ctx);
+        self.take_handovers();
+        self.window_ui(ui, Some(frame));
+        self.show_windows(&ctx);
+    }
+}
+
+impl Viewer {
+    /// One window's frame: its toolbar, tabs, pages and dialogs. `frame`
+    /// is there for the first window only.
+    fn window_ui(&mut self, ui: &mut egui::Ui, frame: Option<&mut eframe::Frame>) {
+        let ctx = ui.ctx().clone();
+        self.viewport = ctx.viewport_id();
+        // Edits picked from a menu in a window that has no input hook of
+        // its own.
+        if !self.injected.is_empty() {
+            ctx.input_mut(|i| i.events.append(&mut self.injected));
+        }
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        for f in dropped {
             if f.path().is_file() {
                 self.open_path(f.path());
             } else {
@@ -2446,15 +2736,14 @@ impl eframe::App for Viewer {
                 }
             }
         }
-        if ctx.input(|i| i.viewport().close_requested()) && !self.closing && self.show_unsaved_tab()
-        {
-            ctx.send_viewport_cmd(ViewportCommand::CancelClose);
-            self.confirm = Some(Pending::Close);
-        }
         crate::chrome::resize_edges(&ctx);
         self.finish_loads();
+        if self.locked.is_none() {
+            self.locked = self.locked_next.pop_front();
+        }
         self.finish_saves();
         self.receive();
+        self.start_automatic_read(&ctx);
         if self.confirm.is_none() {
             self.annot_keys(&ctx);
             self.tab_keys(&ctx);
@@ -2470,7 +2759,9 @@ impl eframe::App for Viewer {
             ui.add_space(2.0);
         });
         #[cfg(target_os = "macos")]
-        self.place_traffic_lights(frame, title_bar);
+        if let Some(frame) = frame {
+            self.place_traffic_lights(frame, title_bar);
+        }
         #[cfg(not(target_os = "macos"))]
         let _ = (frame, title_bar);
         self.organize_window(&ctx);
@@ -2511,6 +2802,8 @@ impl eframe::App for Viewer {
         self.download_progress(&ctx);
         self.pad_window(&ctx);
         self.confirm_window(&ctx);
+        self.recovery_window(&ctx);
+        self.checkpoint_recovery(&ctx);
         self.poll_signatures(&ctx);
         self.security_window(&ctx);
     }
@@ -2518,13 +2811,87 @@ impl eframe::App for Viewer {
 
 /// Writes a file next to `path` and moves it over `path`.
 fn write_replacing(path: &Path, data: &[u8]) -> std::io::Result<()> {
-    let mut tmp = path.as_os_str().to_owned();
-    tmp.push(".atelier-saving");
-    let tmp = PathBuf::from(tmp);
-    std::fs::write(&tmp, data)?;
-    std::fs::rename(&tmp, path).inspect_err(|_| {
-        let _ = std::fs::remove_file(&tmp);
-    })
+    use std::io::Write;
+    write_replacing_with(path, |file| file.write_all(data))
+}
+
+fn write_replacing_with(
+    path: &Path,
+    write: impl FnOnce(&mut std::fs::File) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    let nonce = getrandom::u64().map_err(|error| std::io::Error::other(error.to_string()))?;
+    let tmp = path.with_file_name(format!(".atelier-saving-{nonce:016x}"));
+    let mut file = std::fs::File::create_new(&tmp)?;
+    let result = write(&mut file).and_then(|()| file.sync_all());
+    drop(file);
+    result
+        .and_then(|()| std::fs::rename(&tmp, path))
+        .inspect_err(|_| {
+            let _ = std::fs::remove_file(&tmp);
+        })
+}
+
+impl Open {
+    fn page_generation(&self, page: usize) -> u64 {
+        self.page_generations
+            .get(&page)
+            .copied()
+            .unwrap_or(self.generation)
+    }
+
+    fn ocr_text(&self, page: usize) -> Option<Arc<PageText>> {
+        self.ocr_texts
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&page)
+            .cloned()
+    }
+
+    fn has_unsaved_changes(&self) -> bool {
+        self.recovery.restored()
+            || self.session.is_dirty()
+            || self.form.as_ref().is_some_and(|form| form.is_editing())
+    }
+}
+
+fn page_hits(text: &PageText, page: usize, query: &str) -> Vec<std::ops::Range<usize>> {
+    atelier_view::find_in_page(text, page, query)
+        .into_iter()
+        .map(|hit| hit.glyphs)
+        .collect()
+}
+
+impl Search {
+    fn replace_page(
+        &mut self,
+        page: usize,
+        hits: Vec<std::ops::Range<usize>>,
+        visible_page: usize,
+    ) -> Option<usize> {
+        let start = self.hits.partition_point(|hit| hit.page < page);
+        let end = start + self.hits[start..].partition_point(|hit| hit.page == page);
+        let count = hits.len();
+        self.hits.splice(
+            start..end,
+            hits.into_iter().map(|glyphs| SearchMatch { page, glyphs }),
+        );
+        self.current = self.current.and_then(|i| {
+            if i < start {
+                Some(i)
+            } else if i >= end {
+                Some(i - (end - start) + count)
+            } else if count > 0 {
+                Some(start + (i - start).min(count - 1))
+            } else {
+                None
+            }
+        });
+        if self.current.is_none() && count > 0 && (page >= visible_page || self.done) {
+            self.current = Some(start);
+            return self.current;
+        }
+        None
+    }
 }
 
 /// Whether a point lies inside a glyph box.

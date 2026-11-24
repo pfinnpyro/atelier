@@ -75,6 +75,41 @@ pub struct RevisionDelta {
     pub trailer_keys: Vec<String>,
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct RevisionClassification {
+    pub form_updates: usize,
+    pub annotation_updates: usize,
+    pub unclassified_objects: usize,
+    pub unclassified_trailer: bool,
+}
+
+impl RevisionDelta {
+    /// Summarizes recognizable object changes for display alongside verification.
+    /// This classification must never be used to authorize edits.
+    pub fn classification(&self) -> RevisionClassification {
+        let mut summary = RevisionClassification {
+            unclassified_trailer: self.trailer_keys.iter().any(|key| {
+                !matches!(
+                    key.as_str(),
+                    "/Prev" | "/Size" | "/XRefStm" | "/W" | "/Index" | "/Length"
+                )
+            }),
+            ..Default::default()
+        };
+        for change in &self.objects {
+            match change.category {
+                ChangeCategory::FormValue | ChangeCategory::FormAppearance => {
+                    summary.form_updates += 1;
+                }
+                ChangeCategory::Annotation => summary.annotation_updates += 1,
+                ChangeCategory::CrossReference => {}
+                _ => summary.unclassified_objects += 1,
+            }
+        }
+        summary
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SignedRevisionChanges {
     pub signed_revision_len: usize,
@@ -351,16 +386,24 @@ fn category(
             if d.is_type(b"Catalog") || d.is_type(b"Pages") {
                 return DocumentStructure;
             }
-            if d.get(b"FT").is_some()
-                && !keys.is_empty()
-                && keys.iter().all(|k| matches!(k.as_str(), "/V" | "/I"))
+            let widget = d
+                .get(b"Subtype")
+                .and_then(Object::as_name)
+                .is_some_and(|n| *n == b"Widget");
+            let field = d
+                .get(b"FT")
+                .and_then(Object::as_name)
+                .is_some_and(|n| matches!(n.0.as_slice(), b"Tx" | b"Btn" | b"Ch"));
+            if field
+                && keys.iter().any(|key| matches!(key.as_str(), "/V" | "/I"))
+                && keys.iter().all(|key| {
+                    matches!(key.as_str(), "/V" | "/I")
+                        || widget && matches!(key.as_str(), "/AP" | "/AS")
+                })
             {
                 return FormValue;
             }
-            if d.get(b"Subtype")
-                .and_then(Object::as_name)
-                .is_some_and(|n| *n == b"Widget")
-            {
+            if widget {
                 return if !keys.is_empty()
                     && keys.iter().all(|k| matches!(k.as_str(), "/AP" | "/AS"))
                 {

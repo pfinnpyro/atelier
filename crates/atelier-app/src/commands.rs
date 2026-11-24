@@ -13,7 +13,10 @@ pub enum Command {
     Open,
     OpenRecent(usize),
     ClearRecent,
+    #[cfg(windows)]
+    ShowInExplorer,
     CloseTab,
+    ReopenClosedTab,
     Save,
     SaveAs,
     SaveCopy,
@@ -96,6 +99,7 @@ impl Command {
                 | Open
                 | OpenRecent(_)
                 | ClearRecent
+                | ReopenClosedTab
                 | Undo
                 | Redo
                 | Cut
@@ -149,8 +153,11 @@ pub const MENUS: &[MenuDef] = &[
         entries: &[
             Item(C::Open, "Open…", "Mod+O"),
             Recent,
+            #[cfg(windows)]
+            Item(C::ShowInExplorer, "Show in File Explorer", ""),
             Separator,
             Item(C::CloseTab, "Close Tab", "Mod+W"),
+            Item(C::ReopenClosedTab, "Reopen Closed Tab", "Mod+Shift+T"),
             Item(C::Save, "Save", "Mod+S"),
             Item(C::SaveAs, "Save As…", "Mod+Shift+S"),
             Item(C::SaveCopy, "Save a Copy…", ""),

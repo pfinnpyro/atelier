@@ -527,6 +527,27 @@ impl Session {
         self.history.pending.clear();
     }
 
+    /// Applies one automatic turn without changing an existing manual turn
+    /// or clearing pending revision work.
+    pub fn rotate_quietly(&mut self, page: usize, degrees: u16) -> bool {
+        let Some(&slot) = self.order.get(page) else {
+            return false;
+        };
+        let original = self.original_rotation(slot);
+        let rotation = degrees % 360 / 90 * 90;
+        if self.rotations.get(&slot) != self.quiet.get(&slot) || rotation == self.rotation(page) {
+            return false;
+        }
+        if rotation == original {
+            self.rotations.remove(&slot);
+            self.quiet.remove(&slot);
+        } else {
+            self.rotations.insert(slot, rotation);
+            self.quiet.insert(slot, rotation);
+        }
+        true
+    }
+
     /// Moves `pages` (current indices) so they sit together, in their
     /// current order, before the page now at `to` (or at the end when
     /// `to` is the page count). Returns, for each new page, the index it
