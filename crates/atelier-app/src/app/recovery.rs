@@ -263,6 +263,8 @@ impl Draft {
                     let result = edits.apply(document).and_then(|edited| {
                         write_draft(&entry.path(), source.as_ref(), edited.data())
                     });
+                    // Release the worker's ownership before reporting completion.
+                    drop(entry);
                     let _ = tx.send(result);
                 }
                 wake.request_repaint();
