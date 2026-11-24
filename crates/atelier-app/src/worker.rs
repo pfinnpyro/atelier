@@ -3,12 +3,12 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
-use atelier_ocr::{Engine, read_page};
+use atelier_ocr::{Engine, preview_orientation, read_page_with_hint};
 use atelier_render::{
     PageText, Probed, RenderOptions, SpotColor, extract_text, probe_color, render_page,
     render_region, spot_colors,
@@ -56,6 +56,7 @@ pub struct OcrRun {
     pub texts: OcrTexts,
     /// Pages read so far.
     pub read: Arc<AtomicUsize>,
+    pub workers: usize,
 }
 
 /// Work for the pool. Each job carries the document it is for, so a job
@@ -140,7 +141,7 @@ pub enum Done {
         search: u64,
         page: usize,
         hits: Vec<std::ops::Range<usize>>,
-        text: Arc<PageText>,
+        text: Option<Arc<PageText>>,
     },
     SearchEnded {
         generation: u64,
@@ -177,8 +178,17 @@ pub enum Done {
         opened: u64,
         page: usize,
     },
+    OcrStarted {
+        opened: u64,
+        page: usize,
+    },
+    OrientationPreviews {
+        opened: u64,
+        rotations: [Option<u16>; 3],
+    },
     /// The OCR models could not be loaded.
     OcrFailed {
+        opened: u64,
         error: String,
     },
     /// A picked colour.
@@ -312,7 +322,7 @@ impl Pool {
                 .clamp(1, 6)
                 .min(pages.len().max(1));
             let next = AtomicUsize::new(0);
-            type Found = (usize, Vec<std::ops::Range<usize>>, Arc<PageText>);
+            type Found = (usize, Vec<std::ops::Range<usize>>, Option<Arc<PageText>>);
             let (found_tx, found_rx) = channel::<Found>();
             thread::scope(|s| {
                 for _ in 0..threads {
@@ -325,13 +335,14 @@ impl Pool {
                             // A page that panics the reader has no hits.
                             let read = std::panic::AssertUnwindSafe(|| {
                                 let text = page_text(doc, i, page, ocr);
-                                let hits = find_in_page(&text, i, query)
+                                let hits: Vec<_> = find_in_page(&text, i, query)
                                     .into_iter()
                                     .map(|m| m.glyphs)
                                     .collect();
                                 (hits, text)
                             });
                             let (hits, text) = std::panic::catch_unwind(read).unwrap_or_default();
+                            let text = (!hits.is_empty()).then_some(text);
                             if found_tx.send((i, hits, text)).is_err() {
                                 break;
                             }
@@ -342,6 +353,9 @@ impl Pool {
                 let mut waiting = std::collections::BTreeMap::new();
                 let mut want = 0;
                 for (i, hits, text) in found_rx {
+                    if current.load(Ordering::SeqCst) != id {
+                        break;
+                    }
                     waiting.insert(i, (hits, text));
                     while let Some((hits, text)) = waiting.remove(&want) {
                         let _ = tx.send(Done::SearchHits {
@@ -374,76 +388,176 @@ impl Pool {
         id
     }
 
-    /// Works out which way up each page reads, on threads of its own.
-    /// `done` counts the pages finished, for showing progress.
+    /// Prioritizes the first three pages and publishes each result as it arrives.
     pub fn orient(
         &self,
         doc: Arc<Document>,
         generation: u64,
         done: Arc<AtomicUsize>,
+        cancelled: Arc<AtomicBool>,
         ocr: Option<OcrRun>,
         wake: impl Fn() + Send + Sync + 'static,
     ) {
         let tx = self.done_tx.clone();
         let engine = self.engine.clone();
-        let _ = thread::Builder::new().name("orient".into()).spawn(move || {
+        let spawn = thread::Builder::new().name("orient".into()).spawn(move || {
+            let pages = doc.pages().unwrap_or_default();
+            let first = pages.len().min(3);
+            let early = if let Some(run) = &ocr {
+                let guessed = Mutex::new([None; 3]);
+                run_page_workers(0..first, run.workers, &cancelled, |index| {
+                    let page = &pages[index];
+                    let hint = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        let text = extract_text(&doc, page).unwrap_or_default();
+                        if little_text(&text) {
+                            preview_orientation(&doc, page).ok().flatten()
+                        } else {
+                            upright_rotation(&text)
+                        }
+                    }))
+                    .ok()
+                    .flatten();
+                    if let Some(rotation) = hint
+                        && !cancelled.load(Ordering::Relaxed)
+                    {
+                        guessed.lock().unwrap_or_else(|e| e.into_inner())[index] = Some(rotation);
+                    }
+                });
+                guessed.into_inner().unwrap_or_else(|e| e.into_inner())
+            } else {
+                [None; 3]
+            };
+            if cancelled.load(Ordering::Relaxed) {
+                return;
+            }
+            if early.iter().any(Option::is_some) {
+                let _ = tx.send(Done::OrientationPreviews {
+                    opened: generation,
+                    rotations: early,
+                });
+                wake();
+            }
             let ocr = ocr.and_then(|run| match load_engine(&engine, &run) {
                 Ok(e) => Some((e, run)),
                 Err(error) => {
-                    let _ = tx.send(Done::OcrFailed { error });
+                    let _ = tx.send(Done::OcrFailed {
+                        opened: generation,
+                        error: format!("OCR could not start: {error}"),
+                    });
+                    wake();
                     None
                 }
             });
-            let count = doc.pages().map_or(0, <[_]>::len);
-            let next = AtomicUsize::new(0);
-            let results = Mutex::new(vec![None; count]);
-            let cores = thread::available_parallelism().map_or(2, |n| n.get());
-            // OCR spreads each page over the cores itself and takes a lot of
-            // memory per page, so fewer pages go at once.
-            let threads = if ocr.is_some() {
-                (cores / 2).clamp(1, 4)
-            } else {
-                cores.clamp(1, 8)
-            };
-            thread::scope(|s| {
-                for _ in 0..threads {
-                    s.spawn(|| {
-                        let Ok(pages) = doc.pages() else { return };
-                        loop {
-                            let i = next.fetch_add(1, Ordering::SeqCst);
-                            let Some(page) = pages.get(i) else { break };
-                            // A page that panics the renderer is left as it is.
-                            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                let ocr = ocr.as_ref().map(|(e, run)| (&**e, run));
-                                orient_page(&doc, i, page, ocr, &|| {
-                                    let _ = tx.send(Done::OcrPage {
-                                        opened: generation,
-                                        page: i,
-                                    });
-                                    wake();
-                                })
-                            }))
-                            .ok()
-                            .flatten();
-                            results.lock().unwrap_or_else(|e| e.into_inner())[i] = r;
-                            let _ = tx.send(Done::OrientedPage {
-                                generation,
-                                page: i,
-                                rotation: r,
-                            });
-                            done.fetch_add(1, Ordering::SeqCst);
-                            wake();
-                        }
-                    });
+            let rotations = Mutex::new(vec![None; pages.len()]);
+            let previous = AtomicUsize::new(early[0].map_or(360, usize::from));
+            let read_page = |index: usize| {
+                if cancelled.load(Ordering::Relaxed) {
+                    return;
                 }
-            });
-            let rotations = results.into_inner().unwrap_or_else(|e| e.into_inner());
+                let page = &pages[index];
+                let ocr = ocr.as_ref().map(|(engine, run)| (engine.as_ref(), run));
+                let hint = previous.load(Ordering::Relaxed);
+                let early_hint = early.get(index).copied().flatten();
+                let hint = early_hint.or_else(|| (hint < 360).then_some(hint as u16));
+                let mut read = false;
+                let rotation = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    orient_page(
+                        &doc,
+                        index,
+                        page,
+                        ocr,
+                        hint,
+                        &|| {
+                            let _ = tx.send(Done::OcrStarted {
+                                opened: generation,
+                                page: index,
+                            });
+                            wake();
+                        },
+                        &mut |result| {
+                            if cancelled.load(Ordering::Relaxed) {
+                                return;
+                            }
+                            match result {
+                                Ok(text) => {
+                                    if let Some(text) = text
+                                        && let Some((_, run)) = ocr
+                                    {
+                                        run.texts
+                                            .lock()
+                                            .unwrap_or_else(|e| e.into_inner())
+                                            .insert(index, Arc::new(text));
+                                        run.read.fetch_add(1, Ordering::SeqCst);
+                                    }
+                                    read = true;
+                                }
+                                Err(error) => {
+                                    let _ = tx.send(Done::OcrFailed {
+                                        opened: generation,
+                                        error: format!(
+                                            "OCR could not read page {}: {error}",
+                                            index + 1
+                                        ),
+                                    });
+                                }
+                            }
+                        },
+                    )
+                }))
+                .ok()
+                .flatten();
+                if cancelled.load(Ordering::Relaxed) {
+                    return;
+                }
+                if read
+                    && tx
+                        .send(Done::OcrPage {
+                            opened: generation,
+                            page: index,
+                        })
+                        .is_err()
+                {
+                    return;
+                }
+                if index == 0
+                    && let Some((angle, Basis::Ocr | Basis::Text)) = rotation
+                {
+                    previous.store(usize::from(angle), Ordering::Relaxed);
+                }
+                rotations.lock().unwrap_or_else(|e| e.into_inner())[index] = rotation;
+                if tx
+                    .send(Done::OrientedPage {
+                        generation,
+                        page: index,
+                        rotation,
+                    })
+                    .is_err()
+                {
+                    return;
+                }
+                done.fetch_add(1, Ordering::SeqCst);
+                wake();
+            };
+            let workers = ocr.as_ref().map_or(1, |(_, run)| run.workers);
+            for range in [0..first, first..pages.len()] {
+                run_page_workers(range, workers, &cancelled, read_page);
+            }
+            if cancelled.load(Ordering::Relaxed) {
+                return;
+            }
+            let rotations = rotations.into_inner().unwrap_or_else(|e| e.into_inner());
             let _ = tx.send(Done::Oriented {
                 generation,
                 rotations,
             });
             wake();
         });
+        if spawn.is_err() {
+            let _ = self.done_tx.send(Done::Oriented {
+                generation,
+                rotations: Vec::new(),
+            });
+        }
     }
 
     /// Reads the outline on its own thread: the bookmarks, or when there
@@ -742,6 +856,28 @@ fn work(job: Job) -> Done {
     }
 }
 
+fn run_page_workers(
+    range: std::ops::Range<usize>,
+    workers: usize,
+    cancelled: &AtomicBool,
+    process: impl Fn(usize) + Sync,
+) {
+    let next = AtomicUsize::new(range.start);
+    thread::scope(|scope| {
+        for _ in 0..workers.min(range.len()) {
+            scope.spawn(|| {
+                while !cancelled.load(Ordering::Relaxed) {
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    if index >= range.end {
+                        break;
+                    }
+                    process(index);
+                }
+            });
+        }
+    });
+}
+
 /// The OCR engine, loaded once and then kept.
 fn load_engine(cache: &Mutex<Option<Arc<Engine>>>, run: &OcrRun) -> Result<Arc<Engine>, String> {
     let mut slot = cache.lock().unwrap_or_else(|e| e.into_inner());
@@ -761,7 +897,9 @@ fn orient_page(
     index: usize,
     page: &Page,
     ocr: Option<(&Engine, &OcrRun)>,
-    read: &dyn Fn(),
+    hint: Option<u16>,
+    started: &dyn Fn(),
+    read: &mut dyn FnMut(Result<Option<PageText>, String>),
 ) -> Option<(u16, Basis)> {
     let text = extract_text(doc, page).unwrap_or_default();
     if let Some(r) = upright_rotation(&text) {
@@ -777,16 +915,19 @@ fn orient_page(
             .get(&index)
             .cloned();
         if let Some(t) = known {
-            return upright_rotation(&t).map(|r| (r, Basis::Ocr));
+            read(Ok(None));
+            return upright_rotation(&t)
+                .map(|r| (r, Basis::Ocr))
+                .or_else(|| upright_page(doc, page));
         }
-        if let Ok(Some(reading)) = read_page(engine, doc, page) {
-            run.texts
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .insert(index, Arc::new(reading.text));
-            run.read.fetch_add(1, Ordering::SeqCst);
-            read();
-            return Some((reading.rotate, Basis::Ocr));
+        started();
+        match read_page_with_hint(engine, doc, page, hint) {
+            Ok(Some(reading)) => {
+                read(Ok(Some(reading.text)));
+                return Some((reading.rotate, Basis::Ocr));
+            }
+            Ok(None) => {}
+            Err(error) => read(Err(error)),
         }
     }
     upright_page(doc, page)

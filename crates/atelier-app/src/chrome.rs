@@ -18,6 +18,22 @@ pub fn integrated_mac() -> bool {
     cfg!(target_os = "macos") && !native_titlebar()
 }
 
+/// A window of Atelier's, with the given icon. Every window has the same
+/// app id, so the desktop shows them together.
+pub fn window(icon: Option<std::sync::Arc<egui::IconData>>) -> egui::ViewportBuilder {
+    let mut builder = egui::ViewportBuilder::default()
+        .with_title("Atelier")
+        .with_app_id("org.atelier.Viewer")
+        .with_inner_size([1100.0, 800.0])
+        // Keep the viewer chrome usable, including at high display scaling.
+        .with_min_inner_size([800.0, 600.0])
+        .with_drag_and_drop(true);
+    if let Some(icon) = icon {
+        builder = builder.with_icon(icon);
+    }
+    viewport(builder)
+}
+
 pub fn viewport(builder: egui::ViewportBuilder) -> egui::ViewportBuilder {
     if custom_windows() {
         builder.with_decorations(false)

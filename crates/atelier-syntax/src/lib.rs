@@ -41,7 +41,8 @@ pub use signature::{PreparedSignature, SignatureInspection};
 pub use signature_policy::SignatureWritePolicy;
 
 pub use revision_changes::{
-    ChangeCategory, ChangeKind, ObjectDelta, RevisionDelta, SignedRevisionChanges,
+    ChangeCategory, ChangeKind, ObjectDelta, RevisionClassification, RevisionDelta,
+    SignedRevisionChanges,
 };
 
 pub use reference_effects::ReferenceImpact;

@@ -259,7 +259,7 @@ impl Viewer {
     }
 
     fn appearance_settings(&mut self, ui: &mut egui::Ui) {
-        use crate::settings::ButtonDisplay;
+        use crate::settings::{ButtonDisplay, MenuDisplay};
         let s = &mut self.settings;
         ui.heading("Theme");
         egui::widgets::global_theme_preference_buttons(ui);
@@ -278,6 +278,23 @@ impl Viewer {
             "Save As reads {}",
             crate::commands::shortcut_text("Mod+Shift+S", s.shortcut_glyphs)
         ));
+        section(ui, "Menu layout");
+        ui.horizontal_wrapped(|ui| {
+            let button = if cfg!(target_os = "macos") {
+                "Default menu"
+            } else {
+                "Menu button"
+            };
+            ui.selectable_value(&mut s.menu_display, MenuDisplay::Button, button);
+            ui.selectable_value(
+                &mut s.menu_display,
+                MenuDisplay::Expandable,
+                "Expandable menu",
+            );
+            if !cfg!(target_os = "macos") {
+                ui.selectable_value(&mut s.menu_display, MenuDisplay::TopBar, "Top menu bar");
+            }
+        });
         section(ui, "Toolbar buttons");
         const MODES: [(ButtonDisplay, &str); 3] = [
             (ButtonDisplay::IconOnly, "Icons"),
@@ -348,6 +365,20 @@ impl Viewer {
             "When you save, the words are added as invisible text, the way scanners \
                  make searchable PDFs, so other apps can search and copy them too.",
         );
+        ui.add_enabled_ui(s.ocr, |ui| {
+            egui::ComboBox::from_label("Maximum OCR pages at once")
+                .selected_text(if s.ocr_workers == 0 {
+                    "Auto".into()
+                } else {
+                    s.ocr_workers.to_string()
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut s.ocr_workers, 0, "Auto");
+                    for workers in 1..=8 {
+                        ui.selectable_value(&mut s.ocr_workers, workers, workers.to_string());
+                    }
+                });
+        });
     }
 
     fn performance_settings(&mut self, ui: &mut egui::Ui) {

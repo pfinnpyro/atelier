@@ -353,9 +353,8 @@ pub fn gray_of_rgba(rgba: &[u8]) -> Vec<u8> {
             );
             // Composite over white, then weigh the channels as the eye does.
             let w = 255 - a;
-            ((r + w) * 299 + (g + w) * 587 + (b + w) * 114) as f64 / 1000.0
+            (((r + w) * 299 + (g + w) * 587 + (b + w) * 114 + 500) / 1000).min(255) as u8
         })
-        .map(|v| v.round().clamp(0.0, 255.0) as u8)
         .collect()
 }
 

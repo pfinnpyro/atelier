@@ -191,11 +191,11 @@ pub(super) fn document_tab(
         egui::pos2(rect.right() - 17.0, rect.center().y),
         Vec2::splat(24.0),
     );
-    let tab = response(
-        ui,
+    // Tabs are dragged to put them in another order or out of the window.
+    let tab = ui.interact(
         rect.with_max_x(close_rect.left()),
         ui.auto_id_with(("document-tab", id)),
-        label,
+        egui::Sense::click_and_drag(),
     );
     tab.widget_info(|| {
         egui::WidgetInfo::selected(egui::Role::Tab, ui.is_enabled(), selected, label)

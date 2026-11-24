@@ -1,7 +1,7 @@
 //! Running what the menus hold, on every platform: the macOS menu bar
 //! and the menu button elsewhere both come here.
 
-use eframe::egui::{self, Event, Key, Modifiers, ViewportCommand};
+use eframe::egui::{self, Event, Key, Modifiers};
 
 use super::annotate::Tool;
 use super::settings_window::Window;
@@ -49,6 +49,9 @@ impl Viewer {
             Command::SideBySide => open && !self.organize.grid,
             Command::PreviousTab | Command::NextTab => self.tabs.len() > 1,
             Command::ClearRecent => !self.recent.files.is_empty(),
+            Command::ReopenClosedTab => !self.closed_tabs.is_empty(),
+            #[cfg(windows)]
+            Command::ShowInExplorer => self.open.as_ref().is_some_and(|o| o.path.is_some()),
             c => open || !c.needs_document(),
         }
     }
@@ -98,7 +101,7 @@ impl Viewer {
                 self.updater.dismissed = false;
                 self.window = Some(Window::About);
             }
-            Command::Quit => self.ctx.send_viewport_cmd(ViewportCommand::Close),
+            Command::Quit => self.quit(),
             Command::Open => self.pick_file(),
             Command::OpenRecent(i) => {
                 if let Some(path) = self.recent.files.get(i).cloned() {
@@ -106,6 +109,13 @@ impl Viewer {
                 }
             }
             Command::ClearRecent => self.recent.clear(),
+            #[cfg(windows)]
+            Command::ShowInExplorer => {
+                if let Some(path) = self.open.as_ref().and_then(|o| o.path.clone()) {
+                    self.reveal_path(&path);
+                }
+            }
+            Command::ReopenClosedTab => self.reopen_closed_tab(),
             Command::CloseTab => {
                 if let Some(active) = self.active_tab() {
                     self.request_close_tab(active);
@@ -195,29 +205,61 @@ impl Viewer {
         }
     }
 
+    #[cfg(windows)]
+    pub(super) fn reveal_path(&mut self, path: &std::path::Path) {
+        if let Err(error) = show_in_explorer(path) {
+            self.error = Some(format!(
+                "Could not show {} in File Explorer: {error}",
+                path.display()
+            ));
+        }
+    }
+
     /// The menu behind the button at the start of the toolbar, for
     /// platforms without a menu bar: the same menus, as submenus.
     pub(super) fn main_menu(&mut self, ui: &mut egui::Ui) {
         let mut picked = None;
-        ui.menu_button(
-            crate::icons::Icon::Menu
-                .image()
-                .tint(ui.visuals().text_color()),
-            |ui| {
-                ui.set_min_width(190.0);
-                for def in MENUS {
-                    ui.menu_button(def.title, |ui| {
-                        self.menu_entries(ui, def.entries, &mut picked);
-                    });
-                }
-                ui.separator();
-                self.menu_entries(ui, APP, &mut picked);
-            },
-        )
-        .response
-        .on_hover_text("Menu");
+        let response = ui
+            .menu_button(
+                crate::icons::Icon::Menu
+                    .image()
+                    .tint(ui.visuals().text_color()),
+                |ui| {
+                    ui.set_min_width(190.0);
+                    for def in MENUS {
+                        ui.menu_button(def.title, |ui| {
+                            self.menu_entries(ui, def.entries, &mut picked);
+                        });
+                    }
+                    ui.separator();
+                    self.menu_entries(ui, APP, &mut picked);
+                },
+            )
+            .response
+            .on_hover_text("Menu");
+        response
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Menu"));
         if let Some(c) = picked {
             self.run_command(c);
+        }
+    }
+
+    pub(super) fn horizontal_menu(&mut self, ui: &mut egui::Ui) {
+        let mut picked = None;
+        egui::MenuBar::new().ui(ui, |ui| {
+            for def in MENUS {
+                ui.menu_button(def.title, |ui| {
+                    self.menu_entries(ui, def.entries, &mut picked)
+                });
+            }
+            ui.menu_button("Atelier", |ui| self.menu_entries(ui, APP, &mut picked));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                crate::chrome::window_buttons(ui);
+                crate::chrome::drag_space(ui);
+            });
+        });
+        if let Some(command) = picked {
+            self.run_command(command);
         }
     }
 
@@ -267,4 +309,56 @@ impl Viewer {
             }
         }
     }
+}
+
+#[cfg(windows)]
+fn show_in_explorer(path: &std::path::Path) -> std::io::Result<()> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::process::CommandExt;
+
+    let path = std::path::absolute(path)?;
+    let (target, select) = if path.is_file() {
+        (path.as_path(), true)
+    } else if let Some(folder) = path.parent().filter(|folder| folder.is_dir()) {
+        (folder, false)
+    } else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "The containing folder is unavailable",
+        ));
+    };
+    let target = explorer_path(target);
+    if target.encode_wide().any(|unit| unit == u16::from(b'"')) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "File Explorer cannot open this path",
+        ));
+    }
+    // Explorer reads comma-delimited switches from the raw command line.
+    let mut argument = OsString::from(if select { "/select,\"" } else { "\"" });
+    argument.push(target);
+    argument.push("\"");
+    std::process::Command::new("explorer.exe")
+        .raw_arg(argument)
+        .spawn()?;
+    Ok(())
+}
+
+#[cfg(windows)]
+pub(super) fn explorer_path(path: &std::path::Path) -> std::borrow::Cow<'_, std::ffi::OsStr> {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use std::path::{Component, Prefix};
+
+    // Recent files are canonicalized with Win32's verbatim prefix.
+    let Some(Component::Prefix(prefix)) = path.components().next() else {
+        return path.as_os_str().into();
+    };
+    let (mut wide, skip) = match prefix.kind() {
+        Prefix::VerbatimDisk(_) => (Vec::new(), 4),
+        Prefix::VerbatimUNC(..) => (vec![u16::from(b'\\'); 2], 8),
+        _ => return path.as_os_str().into(),
+    };
+    wide.extend(path.as_os_str().encode_wide().skip(skip));
+    std::ffi::OsString::from_wide(&wide).into()
 }

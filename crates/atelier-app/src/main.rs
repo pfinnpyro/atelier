@@ -9,6 +9,7 @@ mod cng;
 mod commands;
 mod default_app;
 mod icons;
+mod instance;
 mod keys;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -29,6 +30,15 @@ use std::sync::Arc;
 /// The argument that starts Atelier as the helper that runs form scripts.
 pub const SCRIPT_HELPER: &str = "--form-script";
 
+/// The files Atelier was started with. Old macOS versions pass a process
+/// serial number to apps that Finder starts; it is not a file.
+fn launch_paths(args: impl IntoIterator<Item = std::ffi::OsString>) -> Vec<PathBuf> {
+    args.into_iter()
+        .filter(|a| !a.to_string_lossy().starts_with("-psn_"))
+        .map(PathBuf::from)
+        .collect()
+}
+
 fn main() -> eframe::Result {
     if std::env::args_os()
         .nth(1)
@@ -37,32 +47,26 @@ fn main() -> eframe::Result {
         script_helper();
         return Ok(());
     }
-    let icon = load_icon();
-    // Old macOS versions pass a process serial number to apps that Finder
-    // starts; it is not a file.
-    let path = std::env::args_os()
-        .nth(1)
-        .filter(|a| !a.to_string_lossy().starts_with("-psn_"))
-        .map(PathBuf::from);
+    let paths = launch_paths(std::env::args_os().skip(1));
+    let primary = match instance::claim() {
+        instance::Claim::Primary(p) => Some(p),
+        // File launches open tabs. An empty launch requests another window.
+        instance::Claim::Taken if instance::hand_over(&paths) => {
+            return Ok(());
+        }
+        _ => None,
+    };
+    let icon = Arc::new(load_icon());
     #[cfg(target_os = "macos")]
     macos::listen_for_apple_events();
     let options = eframe::NativeOptions {
-        viewport: chrome::viewport(
-            eframe::egui::ViewportBuilder::default()
-                .with_title("Atelier")
-                .with_app_id("org.atelier.Viewer")
-                .with_inner_size([1100.0, 800.0])
-                // Keep the viewer chrome usable, including at high display scaling.
-                .with_min_inner_size([800.0, 600.0])
-                .with_drag_and_drop(true)
-                .with_icon(Arc::new(icon)),
-        ),
+        viewport: chrome::window(Some(icon.clone())),
         ..Default::default()
     };
     eframe::run_native(
         "Atelier",
         options,
-        Box::new(move |cc| Ok(Box::new(app::Viewer::new(cc, path)))),
+        Box::new(move |cc| Ok(Box::new(app::Viewer::new(cc, paths, primary, Some(icon))))),
     )
 }
 
@@ -100,5 +104,16 @@ fn load_icon() -> eframe::egui::IconData {
         rgba: l.into_raw(),
         width,
         height,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_every_file() {
+        let paths = launch_paths(["a.pdf", "b.pdf", "-psn_0_1"].map(Into::into));
+        assert_eq!(paths, [PathBuf::from("a.pdf"), PathBuf::from("b.pdf")]);
     }
 }

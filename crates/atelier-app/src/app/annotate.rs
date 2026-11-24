@@ -156,6 +156,30 @@ impl Annotate {
     pub(super) fn has_pending_ink(&self) -> bool {
         !self.strokes.is_empty() || self.drawing.is_some()
     }
+
+    pub(super) fn draft_ink(&self) -> Option<(usize, NewAnnot)> {
+        let page = self.strokes_page?;
+        let mut strokes = self.strokes.clone();
+        strokes.extend(
+            self.drawing
+                .iter()
+                .filter(|stroke| stroke.len() >= 2)
+                .cloned(),
+        );
+        if strokes.is_empty() {
+            return None;
+        }
+        Some((
+            page,
+            NewAnnot {
+                markup: Markup::Ink {
+                    strokes,
+                    width: self.width,
+                },
+                color: self.ink,
+            },
+        ))
+    }
     /// Drops work in progress, as when another file comes forward.
     pub fn reset(&mut self) {
         self.tool = Tool::Select;

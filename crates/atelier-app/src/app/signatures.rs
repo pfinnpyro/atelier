@@ -242,8 +242,21 @@ fn show_revision_changes(
         );
     }
     for (index, revision) in changes.revisions.iter().enumerate() {
+        let summary = revision.classification();
+        let trailer = if summary.unclassified_trailer {
+            ", unclassified trailer changes"
+        } else {
+            ""
+        };
         ui.collapsing(
-            format!("Later revision {}: {} object changes", index + 1, revision.objects.len()),
+            format!(
+                "Later revision {}: {} form, {} annotation, {} other/unknown{}",
+                index + 1,
+                summary.form_updates,
+                summary.annotation_updates,
+                summary.unclassified_objects,
+                trailer,
+            ),
             |ui| {
                 ui.label(format!("Cross-reference offset: {}", revision.xref_offset));
                 if !revision.trailer_keys.is_empty() {

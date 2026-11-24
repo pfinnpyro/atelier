@@ -122,6 +122,7 @@ impl Viewer {
         let status = self.updater.status();
         if matches!(status, Status::Ready(Installed::InstallerRunning)) {
             self.closing = true;
+            self.quit = true;
             ctx.send_viewport_cmd(ViewportCommand::Close);
             return;
         }
@@ -254,6 +255,7 @@ impl Viewer {
                     match update::restart(file.as_deref()) {
                         Ok(()) => {
                             self.closing = true;
+                            self.quit = true;
                             ui.ctx().send_viewport_cmd(ViewportCommand::Close);
                         }
                         Err(e) => self.error = Some(format!("Could not restart: {e}")),
