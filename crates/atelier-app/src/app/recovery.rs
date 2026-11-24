@@ -81,7 +81,8 @@ impl Entry {
 
 impl Drop for Entry {
     fn drop(&mut self) {
-        if self.discard.load(Ordering::SeqCst) {
+        let discard = self.discard.load(Ordering::SeqCst);
+        if discard {
             let _ = fs::remove_file(self.path());
             if let Ok(files) = fs::read_dir(&self.directory) {
                 for file in files.flatten() {
@@ -94,7 +95,12 @@ impl Drop for Entry {
                     }
                 }
             }
-            drop(self.lock.take());
+        }
+        if let Some(lock) = self.lock.take() {
+            // A forked child may still have the descriptor open until it execs.
+            let _ = lock.unlock();
+        }
+        if discard {
             let _ = fs::remove_file(self.directory.join("lock"));
             let _ = fs::remove_dir(&self.directory);
         }
@@ -693,8 +699,13 @@ mod tests {
             })
             .is_err()
         );
+        // On Unix a child can briefly inherit the lock descriptor while spawning.
+        #[cfg(unix)]
+        let inherited = entry.lock.as_ref().unwrap().try_clone().unwrap();
         drop(entry);
         let entry = Entry::lock(draft_dir.clone()).unwrap();
+        #[cfg(unix)]
+        drop(inherited);
         let mut file = File::open(entry.path()).unwrap();
         let stored = read_header(&mut file).unwrap().unwrap();
         let mut bytes = Vec::new();
