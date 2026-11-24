@@ -332,8 +332,8 @@ mod tests {
     #[test]
     fn a_tab_moves_to_another_window_and_back_as_it_was() {
         let mut first = viewer();
-        first.open_with_password(PDF.to_vec(), "a.pdf".into(), "", None);
-        first.open_with_password(PDF.to_vec(), "b.pdf".into(), "", None);
+        first.open_bytes(PDF.to_vec(), "a.pdf".into(), None);
+        first.open_bytes(PDF.to_vec(), "b.pdf".into(), None);
         first.open.as_mut().unwrap().layers_pending = true;
         assert_eq!(names(&first), ["a.pdf", "[b.pdf]"]);
 
