@@ -1,9 +1,10 @@
 # Releases and GitHub updates
 
-## Stable release: 1.2.0
+## Stable release: 1.2.1
 
-The workspace builds Atelier **1.2.0** from the stable tag `v1.2.0`.
-See [the release notes](release-notes-1.2.0.md) for user-facing changes.
+The workspace builds Atelier **1.2.1** from the stable tag `v1.2.1`.
+See the [1.2.1 release notes](release-notes-1.2.1.md) and
+[1.2.0 release notes](release-notes-1.2.0.md) for user-facing changes.
 
 ## Earlier preview: 1.1.0-beta.7
 
@@ -241,7 +242,7 @@ draft first; published releases and their assets must remain immutable.
 
 | Channel | Version/tag | GitHub status | Audience |
 | --- | --- | --- | --- |
-| Stable | `1.2.0` / `v1.2.0` | Published release | Default |
+| Stable | `1.2.1` / `v1.2.1` | Published release | Default |
 | Preview | Version/tag with a prerelease suffix | Pre-release | Opt-in testers |
 
 The in-app setting already persists Stable or Preview. Stable selects newer
