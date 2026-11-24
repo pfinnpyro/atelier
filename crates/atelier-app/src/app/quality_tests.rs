@@ -1,7 +1,7 @@
 use super::*;
 use atelier_form::{Form, Markup, NewAnnot, Review, Value};
 use atelier_raster::Point;
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
 fn viewer() -> Viewer {
@@ -233,9 +233,8 @@ fn saved_forms_comments_and_ink_reopen_and_render_independently() {
         "Review comment"
     );
 
-    if reader_available("pdftotext")
-        && let Ok(text) = Command::new("pdftotext").arg(&path).arg("-").output()
-    {
+    if reader_available("pdftotext") {
+        let text = reader_output(Command::new("pdftotext").arg(&path).arg("-")).unwrap();
         assert!(
             text.status.success(),
             "{}",
@@ -245,19 +244,20 @@ fn saved_forms_comments_and_ink_reopen_and_render_independently() {
     }
     let preview = temp.0.join("preview");
     let poppler = reader_available("pdftoppm");
-    if poppler
-        && let Ok(raster) = Command::new("pdftoppm")
-            .args(["-r", "72", "-png", "-singlefile"])
-            .arg(&path)
-            .arg(&preview)
-            .output()
-    {
+    if poppler {
+        let raster = reader_output(
+            Command::new("pdftoppm")
+                .args(["-r", "72", "-png", "-singlefile"])
+                .arg(&path)
+                .arg(&preview),
+        )
+        .unwrap();
         assert!(
             raster.status.success(),
             "{}",
             String::from_utf8_lossy(&raster.stderr)
         );
-    } else if cfg!(windows) {
+    } else if cfg!(windows) && std::env::var_os("ATELIER_QA_WINDOWS_PDF").is_some() {
         render_with_windows_pdf(&path, &preview.with_extension("png"));
     }
     if preview.with_extension("png").exists() {
@@ -284,10 +284,28 @@ fn saved_forms_comments_and_ink_reopen_and_render_independently() {
 }
 
 fn reader_available(tool: &str) -> bool {
-    Command::new(tool)
-        .arg("-v")
-        .output()
-        .is_ok_and(|run| run.status.success())
+    reader_output(Command::new(tool).arg("-v")).is_ok_and(|run| run.status.success())
+}
+
+fn reader_output(command: &mut Command) -> std::io::Result<Output> {
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while child.try_wait()?.is_none() {
+        if Instant::now() >= deadline {
+            child.kill()?;
+            child.wait()?;
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "PDF reader timed out",
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    child.wait_with_output()
 }
 
 fn render_with_windows_pdf(path: &Path, output: &Path) {
@@ -322,12 +340,13 @@ $inputStream = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($stre
 $output = [IO.File]::Create($env:ATELIER_QA_PREVIEW)
 try { $inputStream.CopyTo($output) } finally { $output.Dispose(); $inputStream.Dispose(); $page.Dispose() }
 "#;
-    let render = Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", script])
-        .env("ATELIER_QA_PDF", path)
-        .env("ATELIER_QA_PREVIEW", output)
-        .output()
-        .unwrap();
+    let render = reader_output(
+        Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", script])
+            .env("ATELIER_QA_PDF", path)
+            .env("ATELIER_QA_PREVIEW", output),
+    )
+    .unwrap();
     assert!(
         render.status.success(),
         "{}",
