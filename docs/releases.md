@@ -6,6 +6,11 @@ The workspace builds Atelier **1.2.2** from the stable tag `v1.2.2`.
 See the [1.2.2 release notes](release-notes-1.2.2.md) and
 [1.2.1 release notes](release-notes-1.2.1.md) for user-facing changes.
 
+## Preview: 1.2.3-beta.1
+
+The [1.2.3 beta 1 notes](release-notes-1.2.3-beta.1.md) describe the Secure
+Redaction color and transparency fixes.
+
 ## Earlier preview: 1.1.0-beta.7
 
 The `prerelease` branch and `v1.1.0-beta.7` tag identify the review flight.

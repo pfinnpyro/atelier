@@ -1,7 +1,7 @@
-use super::{add_box, add_point, line, nums, read_operation, unsupported};
+use super::{add_box, add_point, color::Paint, line, nums, read_operation, unsupported};
 use crate::font::PdfFont;
 use atelier_raster::{Point, Transform};
-use atelier_syntax::{Document, Object, Parser, Rect, Result, read_inline_image};
+use atelier_syntax::{Dict, Document, Object, Parser, Rect, Result, read_inline_image};
 
 pub(super) struct Procedure {
     pub matrix: Transform,
@@ -22,10 +22,12 @@ pub(super) fn procedure(
     font: &PdfFont,
     code: u32,
     width: f64,
+    page_resources: &Dict,
 ) -> Result<Procedure> {
-    let Some((matrix, Some(proc), _)) = font.type3(code) else {
+    let Some((matrix, Some(proc), resources)) = font.type3(code) else {
         return Err(unsupported("A Type 3 glyph has no verifiable procedure"));
     };
+    let resources = resources.unwrap_or(page_resources);
     if matrix.a <= 0.0 || matrix.d <= 0.0 || matrix.b != 0.0 || matrix.c != 0.0 {
         return Err(unsupported("Unsupported Type 3 font matrix"));
     }
@@ -83,9 +85,10 @@ pub(super) fn procedure(
                 }
                 values.to_vec()
             }
-            b"g" | b"G" if kind == b"d0" => nums::<1>(&args)?.to_vec(),
-            b"rg" | b"RG" if kind == b"d0" => nums::<3>(&args)?.to_vec(),
-            b"k" | b"K" if kind == b"d0" => nums::<4>(&args)?.to_vec(),
+            b"g" | b"G" | b"rg" | b"RG" | b"k" | b"K" if kind == b"d0" => {
+                content.push_str(&Paint::device(doc, resources, op, &args)?.command);
+                continue;
+            }
             b"w" => {
                 let [width] = nums(&args)?;
                 state.width = Some(width);

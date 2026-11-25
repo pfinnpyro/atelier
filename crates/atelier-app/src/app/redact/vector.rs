@@ -265,6 +265,12 @@ pub(super) fn vector_copy(source: &Document, marks: &Marks) -> Result<Arc<[u8]>>
         );
         dictionary.insert("Rotate", Object::Integer(i64::from(page.rotate)));
         dictionary.insert("Resources", Object::Dict(clean.resources));
+        if let Some(group) = clean.group {
+            dictionary.insert("Group", Object::Dict(group));
+        }
+        if let Some(unit) = clean.user_unit {
+            dictionary.insert("UserUnit", Object::Real(unit));
+        }
         dictionary.insert("Contents", Object::Reference(stream));
         let page = update.add(Object::Dict(dictionary.clone()));
         expected.push(ExpectedPage {
@@ -344,6 +350,138 @@ mod tests {
         if let Some(path) = std::env::var_os(variable) {
             std::fs::write(path, bytes).unwrap();
         }
+    }
+
+    #[test]
+    fn page_groups_default_color_spaces_and_blending_survive_secure_redaction() {
+        let content = b"0.55 g 4 4 190 190 re f
+q /OriginalTransparency gs /OriginalPalette cs 1 scn 20 80 120 50 re f Q
+0 g BT /Helv 12 Tf 14 100 Td (Keep    PRIVATE    Visible) Tj ET";
+        let input = with_resource(&source(content), "ColorSpace", "DefaultGray", |_| {
+            let mut params = Dict::new();
+            params.insert("Gamma", Object::Integer(2));
+            params.insert(
+                "WhitePoint",
+                Object::Array([0.9505, 1.0, 1.089].map(Object::Real).to_vec()),
+            );
+            Object::Array(vec![name("CalGray"), Object::Dict(params)])
+        });
+        let input = with_resource(&input, "ColorSpace", "OriginalPalette", |_| {
+            Object::Array(vec![
+                name("Indexed"),
+                name("DeviceRGB"),
+                Object::Integer(2),
+                Object::String(atelier_syntax::PdfString {
+                    bytes: [
+                        b"\x00\x00\x00\x10\xa0\xe0".as_slice(),
+                        b"secret-palette-payload",
+                    ]
+                    .concat(),
+                    hex: true,
+                }),
+            ])
+        });
+        let input = with_resource(&input, "ExtGState", "OriginalTransparency", |_| {
+            let mut dict = Dict::new();
+            dict.insert("Type", name("ExtGState"));
+            dict.insert("ca", Object::Real(0.43));
+            dict.insert("CA", Object::Real(0.62));
+            dict.insert(
+                "BM",
+                Object::Array(vec![name("UnrecognizedBlend"), name("Multiply")]),
+            );
+            dict.insert("SMask", name("None"));
+            Object::Dict(dict)
+        });
+        let mut update = input.update();
+        let mut page = input.pages().unwrap()[0].dict.clone();
+        let mut group = Dict::new();
+        group.insert("Type", name("Group"));
+        group.insert("S", name("Transparency"));
+        group.insert("CS", name("DeviceRGB"));
+        group.insert("I", Object::Bool(true));
+        group.insert("K", Object::Bool(false));
+        group.insert("PrivateMetadata", name("secret-group-payload"));
+        page.insert("Group", Object::Reference(update.add(Object::Dict(group))));
+        page.insert("UserUnit", Object::Real(1.25));
+        update.set(
+            input.pages().unwrap()[0].obj_ref.unwrap(),
+            Object::Dict(page),
+        );
+        let input = Document::open(update.to_bytes().unwrap()).unwrap();
+        let page = &input.pages().unwrap()[0];
+        let glyphs = atelier_render::extract_text(&input, page).unwrap().glyphs;
+        let start = glyphs.iter().position(|g| g.text == "P").unwrap();
+        let mark = egui::Rect::from_min_max(
+            egui::pos2(glyphs[start].quad[0].x as f32 / 200.0, 0.4),
+            egui::pos2(glyphs[start + 6].quad[1].x as f32 / 200.0, 0.55),
+        );
+        let bytes = vector_copy(&input, &Marks::from([(0, vec![mark])])).unwrap();
+        export_qa_pdf("ATELIER_QA_TRANSPARENCY_REDACTED_PDF", &bytes);
+        for marker in [
+            "secret-palette-payload",
+            "secret-group-payload",
+            "OriginalTransparency",
+            "OriginalPalette",
+            "UnrecognizedBlend",
+        ] {
+            assert!(
+                !bytes.windows(marker.len()).any(|w| w == marker.as_bytes()),
+                "{marker}"
+            );
+        }
+        let copy = Document::open(bytes).unwrap();
+        let output_page = &copy.pages().unwrap()[0];
+        let group = output_page.dict.get(b"Group").unwrap().as_dict().unwrap();
+        assert_eq!(group.get(b"CS"), Some(&name("DeviceRGB")));
+        assert_eq!(group.get(b"I"), Some(&Object::Bool(true)));
+        assert_eq!(group.get(b"K"), Some(&Object::Bool(false)));
+        assert_eq!(output_page.dict.get(b"UserUnit"), Some(&Object::Real(1.25)));
+        assert!(!output_page.resources.contains_key(b"ColorSpace"));
+        let object = copy.get_key(&output_page.resources, b"ExtGState").unwrap();
+        let states = object.as_dict().unwrap();
+        assert_eq!(states.len(), 1);
+        let state = states.get(b"G0").unwrap().as_dict().unwrap();
+        assert_eq!(state.get(b"BM"), Some(&name("Multiply")));
+        assert_eq!(state.get(b"ca"), Some(&Object::Real(0.43)));
+        let selected = atelier_render::extract_text(&copy, output_page)
+            .unwrap()
+            .plain_text();
+        assert!(
+            selected.contains("Keep")
+                && selected.contains("Visible")
+                && !selected.contains("PRIVATE")
+        );
+        let options = atelier_render::RenderOptions {
+            scale: 1.0,
+            ..Default::default()
+        };
+        let before = atelier_render::render_page(&input, page, &options).unwrap();
+        let after = atelier_render::render_page(&copy, output_page, &options).unwrap();
+        for (x, y) in [(40, 76), (129, 91), (150, 120), (50, 140)] {
+            let source_pixel = before.pixmap.pixel(x, y);
+            assert_ne!(source_pixel, [0, 0, 0, 255]);
+            assert_eq!(source_pixel, after.pixmap.pixel(x, y));
+        }
+        let x = (mark.center().x * 200.0) as usize;
+        assert_eq!(after.pixmap.pixel(x, 100), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn redaction_rejects_soft_masks_it_cannot_rebuild() {
+        let input = with_resource(
+            &source(b"/Mask gs 20 30 40 50 re f"),
+            "ExtGState",
+            "Mask",
+            |_| {
+                let mut state = Dict::new();
+                state.insert("SMask", Object::Dict(Dict::new()));
+                Object::Dict(state)
+            },
+        );
+        let mark = egui::Rect::from_min_max(egui::pos2(0.6, 0.6), egui::pos2(0.8, 0.8));
+        let error = vector_copy(&input, &Marks::from([(0, vec![mark])])).unwrap_err();
+        assert!(error.to_string().contains("/SMask"));
     }
 
     #[test]

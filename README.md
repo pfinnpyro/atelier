@@ -231,8 +231,12 @@ selection becomes one or more marks.
 images, embedded outline fonts including Identity-V vertical text, and
 Type 3 fonts with supported vector and inline stencil glyphs. It removes
 glyphs and image pixels that overlap marks and reconstructs the visible
-parts of crossing axis-aligned filled rectangles. Export stops on unsupported
-content. **Export page images** is available for complex pages. Both modes
+parts of crossing axis-aligned filled rectangles. Page transparency groups,
+supported blend modes, opacity, and solid color overrides are supported.
+Non-device color overrides and blend spaces are resolved to RGB without
+carrying the source profiles into the copy. Export stops on unsupported
+content such as graphics-state soft masks. **Export page images** is available
+for complex pages. Both modes
 rebuild the PDF and omit attachments, forms, annotations, document metadata,
 and revision history. Before saving, Atelier reopens the copy and verifies
 the generated objects and marked regions.

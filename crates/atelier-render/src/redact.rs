@@ -10,8 +10,10 @@ use atelier_syntax::{
 
 use crate::font::PdfFont;
 
+mod color;
 mod fonts;
 mod images;
+mod transparency;
 mod type3;
 
 // Store a vertical glyph in a horizontal output font with a counter-rotation.
@@ -23,6 +25,8 @@ pub struct RedactedPage {
     pub content: Vec<u8>,
     pub resources: Dict,
     pub asset_streams: Vec<ObjRef>,
+    pub group: Option<Dict>,
+    pub user_unit: Option<f64>,
 }
 
 struct Assets<'a, 'doc> {
@@ -178,9 +182,9 @@ fn add_box(bounds: &mut Option<Rect>, matrix: Transform, rect: Rect) -> Result<(
 #[derive(Clone)]
 struct State {
     ctm: Transform,
-    fill: String,
-    image_fill: atelier_raster::Color,
-    stroke: String,
+    fill: color::Paint,
+    stroke: color::Paint,
+    effects: transparency::Effects,
     width: f64,
     cap: f64,
     join: f64,
@@ -194,13 +198,13 @@ struct State {
     rise: f64,
 }
 
-impl Default for State {
-    fn default() -> Self {
-        Self {
+impl State {
+    fn new(doc: &Document, resources: &Dict) -> Result<Self> {
+        Ok(Self {
             ctm: Transform::IDENTITY,
-            fill: "0 g\n".into(),
-            image_fill: atelier_raster::Color::rgb(0.0, 0.0, 0.0),
-            stroke: "0 G\n".into(),
+            fill: color::Paint::device(doc, resources, b"g", &[Object::Integer(0)])?,
+            stroke: color::Paint::device(doc, resources, b"G", &[Object::Integer(0)])?,
+            effects: transparency::Effects::default(),
             width: 1.0,
             cap: 0.0,
             join: 0.0,
@@ -212,7 +216,7 @@ impl Default for State {
             scale: 100.0,
             leading: 0.0,
             rise: 0.0,
-        }
+        })
     }
 }
 
@@ -244,6 +248,7 @@ struct Rewriter<'a, 'out, 'doc> {
     fonts: Vec<Font>,
     font_map: HashMap<Vec<u8>, usize>,
     images: Dict,
+    effects: transparency::UsedEffects,
     procedure_bytes: usize,
     assets: Assets<'out, 'doc>,
     out: String,
@@ -384,9 +389,10 @@ impl Rewriter<'_, '_, '_> {
         }
         self.out.push_str("q\n");
         self.out.push_str(&line(b"cm", &self.state.ctm.to_array()));
-        self.out.push_str(&self.state.fill);
+        self.effects.emit(&self.state.effects, &mut self.out);
+        self.out.push_str(&self.state.fill.command);
         if matches!(&self.fonts[id].kind, fonts::Kind::Type3(_)) {
-            self.out.push_str(&self.state.stroke);
+            self.out.push_str(&self.state.stroke.command);
         }
         self.out.push_str("BT\n");
         let resource = fonts::resource_name(id, subset);
@@ -482,7 +488,13 @@ impl Rewriter<'_, '_, '_> {
                 let procedure = match self.fonts[id].procedures.entry(code) {
                     std::collections::hash_map::Entry::Occupied(entry) => entry.get().clone(),
                     std::collections::hash_map::Entry::Vacant(entry) => {
-                        let procedure = type3::procedure(self.doc, &font, code, glyph.width)?;
+                        let procedure = type3::procedure(
+                            self.doc,
+                            &font,
+                            code,
+                            glyph.width,
+                            &self.page.resources,
+                        )?;
                         self.procedure_bytes += procedure.content.len();
                         if self.procedure_bytes > 16 * 1024 * 1024 {
                             return Err(unsupported(
@@ -600,7 +612,11 @@ impl Rewriter<'_, '_, '_> {
             }
             b"TL" => [self.state.leading] = nums(args)?,
             b"Ts" => [self.state.rise] = nums(args)?,
-            b"g" | b"rg" | b"k" => self.set_fill(op, args)?,
+            b"g" | b"rg" | b"k" | b"G" | b"RG" | b"K" | b"cs" | b"CS" | b"sc" | b"SC" | b"scn"
+            | b"SCN" => self.set_color(op, args)?,
+            b"gs" => {
+                transparency::Effects::apply(&mut self.state, self.doc, &self.page.resources, args)?
+            }
             b"Tr" if nums::<1>(args)? == [0.0] => {}
             b"Tj" | b"'" => {
                 let [value] = args else {
@@ -723,7 +739,8 @@ impl Rewriter<'_, '_, '_> {
             if single_rect && !strokes && axis_aligned {
                 if let Some(visible) = bounds.intersect(&self.page.crop_box) {
                     self.out.push_str("q\n");
-                    self.out.push_str(&self.state.fill);
+                    self.effects.emit(&self.state.effects, &mut self.out);
+                    self.out.push_str(&self.state.fill.command);
                     for p in cut_rectangle(visible, self.regions)? {
                         self.out
                             .push_str(&line(b"re", &[p.x0, p.y0, p.width(), p.height()]));
@@ -739,9 +756,10 @@ impl Rewriter<'_, '_, '_> {
         }
         self.out.push_str("q\n");
         self.out.push_str(&line(b"cm", &self.state.ctm.to_array()));
-        self.out.push_str(&self.state.fill);
+        self.effects.emit(&self.state.effects, &mut self.out);
+        self.out.push_str(&self.state.fill.command);
         if strokes {
-            self.out.push_str(&self.state.stroke);
+            self.out.push_str(&self.state.stroke.command);
             for (op, value) in [
                 (b"w", self.state.width),
                 (b"J", self.state.cap),
@@ -818,10 +836,11 @@ impl Rewriter<'_, '_, '_> {
             b"J" => [self.state.cap] = nums(args)?,
             b"j" => [self.state.join] = nums(args)?,
             b"M" => [self.state.miter] = nums(args)?,
-            b"g" | b"rg" | b"k" => self.set_fill(op, args)?,
-            b"G" => self.state.stroke = line(op, &nums::<1>(args)?),
-            b"RG" => self.state.stroke = line(op, &nums::<3>(args)?),
-            b"K" => self.state.stroke = line(op, &nums::<4>(args)?),
+            b"g" | b"rg" | b"k" | b"G" | b"RG" | b"K" | b"cs" | b"CS" | b"sc" | b"SC" | b"scn"
+            | b"SCN" => self.set_color(op, args)?,
+            b"gs" => {
+                transparency::Effects::apply(&mut self.state, self.doc, &self.page.resources, args)?
+            }
             b"Do" => self.image_xobject(args)?,
             b"m" | b"l" => self.path_line(op, &nums::<2>(args)?)?,
             b"c" => self.path_line(op, &nums::<6>(args)?)?,
@@ -866,22 +885,18 @@ impl Rewriter<'_, '_, '_> {
         Ok(())
     }
 
-    fn set_fill(&mut self, op: &[u8], args: &[Object]) -> Result<()> {
-        let values = match op {
-            b"g" => nums::<1>(args)?.to_vec(),
-            b"rg" => nums::<3>(args)?.to_vec(),
-            _ => nums::<4>(args)?.to_vec(),
+    fn set_color(&mut self, op: &[u8], args: &[Object]) -> Result<()> {
+        let stroke = op[0].is_ascii_uppercase();
+        let paint = if stroke {
+            &mut self.state.stroke
+        } else {
+            &mut self.state.fill
         };
-        self.state.fill = line(op, &values);
-        self.state.image_fill =
-            crate::colorspace::device(self.doc, &self.page.resources, values.len())
-                .to_rgb(
-                    &values
-                        .iter()
-                        .map(|&v| v.clamp(0.0, 1.0) as f32)
-                        .collect::<Vec<_>>(),
-                )
-                .ok_or_else(|| unsupported("Unsupported image stencil color"))?;
+        *paint = match op {
+            b"cs" | b"CS" => color::Paint::named(self.doc, &self.page.resources, args, stroke)?,
+            b"sc" | b"SC" | b"scn" | b"SCN" => paint.operands(args, stroke)?,
+            _ => color::Paint::device(self.doc, &self.page.resources, op, args)?,
+        };
         Ok(())
     }
 
@@ -961,7 +976,7 @@ impl Rewriter<'_, '_, '_> {
             self.page,
             image,
             self.state.ctm,
-            self.state.image_fill,
+            self.state.fill.rgb,
             self.regions
                 .iter()
                 .copied()
@@ -972,6 +987,7 @@ impl Rewriter<'_, '_, '_> {
         self.images.insert(Name::from(name.as_str()), image);
         self.out.push_str("q\n");
         self.out.push_str(&line(b"cm", &self.state.ctm.to_array()));
+        self.effects.emit(&self.state.effects, &mut self.out);
         writeln!(self.out, "/{name} Do\nQ").unwrap();
         Ok(())
     }
@@ -985,14 +1001,8 @@ pub fn redact_page_content(
     regions: &[Rect],
     output: &mut Update<'_>,
 ) -> Result<RedactedPage> {
-    if page.dict.contains_key(b"Group")
-        || page.dict.contains_key(b"UserUnit")
-        || page.resources.contains_key(b"ColorSpace")
-    {
-        return Err(unsupported(
-            "Page color overrides and transparency groups are unsupported",
-        ));
-    }
+    let group = transparency::page_group(doc, page)?;
+    let user_unit = transparency::user_unit(doc, page)?;
     let content = page.contents(doc)?;
     if content.len() > 16 * 1024 * 1024 {
         return Err(unsupported(
@@ -1003,7 +1013,7 @@ pub fn redact_page_content(
         doc,
         page,
         regions,
-        state: State::default(),
+        state: State::new(doc, &page.resources)?,
         stack: Vec::new(),
         path: String::new(),
         path_bounds: None,
@@ -1016,6 +1026,7 @@ pub fn redact_page_content(
         fonts: Vec::new(),
         font_map: HashMap::new(),
         images: Dict::new(),
+        effects: transparency::UsedEffects::default(),
         procedure_bytes: 0,
         assets: Assets {
             output,
@@ -1059,9 +1070,12 @@ pub fn redact_page_content(
     if !state.images.is_empty() {
         resources.insert("XObject", Object::Dict(state.images));
     }
+    state.effects.write(&mut resources);
     Ok(RedactedPage {
         content: state.out.into_bytes(),
         resources,
         asset_streams: state.assets.streams,
+        group,
+        user_unit,
     })
 }
