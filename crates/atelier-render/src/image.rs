@@ -318,7 +318,11 @@ pub fn decode(
 
 /// A soft mask (gray samples are alpha) or a stencil /Mask (1-bit, where 1
 /// means masked out unless Decode says otherwise), as an alpha plane.
-fn mask_alpha(doc: &Document, stream: &Stream, stencil: bool) -> Option<(usize, usize, Vec<u8>)> {
+pub(crate) fn mask_alpha(
+    doc: &Document,
+    stream: &Stream,
+    stencil: bool,
+) -> Option<(usize, usize, Vec<u8>)> {
     let decoded = doc.decode_stream(stream).ok()?;
     let codec = run_codec(&decoded.data, decoded.image_filter.as_ref()).ok()?;
     // A JPEG mask must be gray to be a usable alpha plane.

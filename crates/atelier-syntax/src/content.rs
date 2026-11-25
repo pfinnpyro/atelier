@@ -3,7 +3,7 @@
 
 use crate::lexer::{is_regular, is_whitespace};
 use crate::parser::find;
-use crate::{Dict, Name, Object, Parser, Token};
+use crate::{Dict, Error, Name, Object, Parser, Result, Token};
 
 /// One operator with its operands. For `BI ... ID ... EI` the operator is `BI`
 /// and `inline_image` holds the dictionary and the raw (still encoded) data.
@@ -12,6 +12,108 @@ pub struct Operation<'a> {
     pub operator: &'a [u8],
     pub operands: Vec<Object>,
     pub inline_image: Option<(Dict, Vec<u8>)>,
+}
+
+/// Reads an inline image after BI, requiring a definite data boundary.
+/// A guessed EI inside binary image data could turn private bytes into operators.
+pub fn read_inline_image(parser: &mut Parser<'_>) -> Result<(Dict, Vec<u8>)> {
+    let invalid = || Error::Structure("Inline image has no verifiable data boundary".into());
+    let mut dict = Dict::new();
+    loop {
+        match parser.lexer().next_token()? {
+            Some(Token::Keyword(b"ID")) => break,
+            Some(Token::Name(key)) if dict.len() < 64 && !dict.contains_key(&key) => {
+                dict.insert(Name(key), parser.parse_object()?);
+            }
+            _ => return Err(invalid()),
+        }
+    }
+    let pos = parser.pos();
+    let data = parser.lexer().data();
+    if !data.get(pos).is_some_and(|&b| is_whitespace(b)) {
+        return Err(invalid());
+    }
+    let start = if data.get(pos..pos + 2) == Some(b"\r\n") {
+        pos + 2
+    } else {
+        pos + 1
+    };
+    let tail = &data[start..];
+    let filter = match dict.get(b"F").or_else(|| dict.get(b"Filter")) {
+        Some(Object::Array(a)) => a.first(),
+        filter => filter,
+    };
+    let length = match filter {
+        None => uncompressed_length(&dict),
+        Some(Object::Name(name)) => match name.as_bytes() {
+            b"Fl" | b"FlateDecode" => atelier_filters::zlib_member_length(tail, 100_000_000),
+            b"AHx" | b"ASCIIHexDecode" => tail.iter().position(|&b| b == b'>').map(|n| n + 1),
+            b"A85" | b"ASCII85Decode" => find(tail, b"~>", 0).map(|n| n + 2),
+            b"RL" | b"RunLengthDecode" => run_length_end(tail),
+            b"DCT" | b"DCTDecode" => jpeg_end(tail),
+            _ => return Err(Error::Unsupported("Unsupported inline image filter".into())),
+        },
+        _ => return Err(invalid()),
+    }
+    .filter(|&n| n <= tail.len())
+    .ok_or_else(invalid)?;
+    let end = start + length;
+    if !data.get(end).is_some_and(|&b| is_whitespace(b)) || !ends_with_ei(data, end) {
+        return Err(invalid());
+    }
+    let after = skip_ei(data, end);
+    let image = data[start..end].to_vec();
+    parser.lexer().set_pos(after);
+    Ok((dict, image))
+}
+
+fn run_length_end(data: &[u8]) -> Option<usize> {
+    let mut at = 0;
+    loop {
+        let control = *data.get(at)?;
+        at += 1;
+        match control {
+            128 => return Some(at),
+            0..=127 => at += usize::from(control) + 1,
+            _ => at += 1,
+        }
+    }
+}
+
+fn jpeg_end(data: &[u8]) -> Option<usize> {
+    let mut at = 2;
+    let mut scan = false;
+    if !data.starts_with(b"\xff\xd8") {
+        return None;
+    }
+    loop {
+        if scan {
+            at = find(data, b"\xff", at)?;
+        }
+        if *data.get(at)? != 0xff {
+            return None;
+        }
+        while data.get(at) == Some(&0xff) {
+            at += 1;
+        }
+        let marker = *data.get(at)?;
+        at += 1;
+        match marker {
+            0x00 | 0xd0..=0xd7 if scan => continue,
+            0xd9 => return Some(at),
+            0x01 => continue,
+            0x02..=0xfe => {
+                let length =
+                    usize::from(u16::from_be_bytes(data.get(at..at + 2)?.try_into().ok()?));
+                if length < 2 {
+                    return None;
+                }
+                at += length;
+                scan = marker == 0xda;
+            }
+            _ => return None,
+        }
+    }
 }
 
 /// Iterates over the operations of a decoded content stream. Malformed input
@@ -140,7 +242,10 @@ fn uncompressed_length(dict: &Dict) -> Option<usize> {
         };
         (bpc, comps)
     };
-    (w * comps * bpc).div_ceil(8).checked_mul(h)
+    w.checked_mul(comps)?
+        .checked_mul(bpc)?
+        .div_ceil(8)
+        .checked_mul(h)
 }
 
 fn ends_with_ei(data: &[u8], mut pos: usize) -> bool {

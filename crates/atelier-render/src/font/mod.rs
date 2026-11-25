@@ -840,6 +840,10 @@ impl PdfFont {
         map
     }
 
+    pub(crate) fn has_embedded_program(&self) -> bool {
+        self.program.is_some() && !self.substituted
+    }
+
     /// The outline of a glyph in text space (1.0 = font size), cached.
     pub fn outline(&self, gid: u32) -> Option<Arc<Path>> {
         if let Some(hit) = read(&self.outlines).get(&gid) {

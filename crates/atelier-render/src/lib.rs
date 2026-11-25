@@ -14,6 +14,7 @@ mod interp;
 mod lines;
 mod pattern;
 mod probe;
+mod redact;
 mod shading;
 mod text;
 
@@ -26,4 +27,5 @@ pub use interp::{
 };
 pub use lines::{PageGraphics, PageLine};
 pub use probe::{Paint, PaintKind, Probed, SpotColor, spot_colors};
+pub use redact::{RedactedPage, redact_page_content};
 pub use text::{PageText, TextGlyph};

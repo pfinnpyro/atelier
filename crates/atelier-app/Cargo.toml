@@ -22,6 +22,7 @@ fips = ["dep:windows-sys", "atelier-pgp/fips"]
 
 [dependencies]
 atelier-crypto.workspace = true
+atelier-filters.workspace = true
 atelier-form.workspace = true
 atelier-pgp.workspace = true
 atelier-raster.workspace = true
