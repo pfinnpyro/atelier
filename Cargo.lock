@@ -381,10 +381,11 @@ dependencies = [
 
 [[package]]
 name = "atelier-app"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "arboard",
  "atelier-crypto",
+ "atelier-filters",
  "atelier-form",
  "atelier-ocr",
  "atelier-pgp",
@@ -410,7 +411,7 @@ dependencies = [
 
 [[package]]
 name = "atelier-cli"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "atelier-filters",
  "atelier-form",
@@ -423,33 +424,33 @@ dependencies = [
 
 [[package]]
 name = "atelier-color"
-version = "1.2.1"
+version = "1.2.2"
 
 [[package]]
 name = "atelier-crypto"
-version = "1.2.1"
+version = "1.2.2"
 
 [[package]]
 name = "atelier-fieldml"
-version = "1.2.1"
+version = "1.2.2"
 
 [[package]]
 name = "atelier-filters"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "miniz_oxide 0.8.9",
 ]
 
 [[package]]
 name = "atelier-font"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "atelier-raster",
 ]
 
 [[package]]
 name = "atelier-form"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "atelier-filters",
  "atelier-raster",
@@ -459,7 +460,7 @@ dependencies = [
 
 [[package]]
 name = "atelier-ocr"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "atelier-crypto",
  "atelier-raster",
@@ -472,7 +473,7 @@ dependencies = [
 
 [[package]]
 name = "atelier-pgp"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "atelier-crypto",
  "atelier-syntax",
@@ -482,18 +483,18 @@ dependencies = [
 
 [[package]]
 name = "atelier-print"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "atelier-raster"
-version = "1.2.1"
+version = "1.2.2"
 
 [[package]]
 name = "atelier-render"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "atelier-color",
  "atelier-filters",
@@ -505,14 +506,14 @@ dependencies = [
 
 [[package]]
 name = "atelier-script"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "boa_engine",
 ]
 
 [[package]]
 name = "atelier-syntax"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "atelier-crypto",
  "atelier-filters",
@@ -522,7 +523,7 @@ dependencies = [
 
 [[package]]
 name = "atelier-view"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "atelier-crypto",
  "atelier-raster",

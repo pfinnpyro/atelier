@@ -40,6 +40,7 @@ mod protect;
 #[cfg(test)]
 mod quality_tests;
 mod recovery;
+mod redact;
 mod revisions;
 mod safety;
 mod scripts;
@@ -208,6 +209,7 @@ pub struct Viewer {
     zoom_mode: ZoomMode,
     zoom_input: String,
     organize: organize::Organize,
+    redaction: Option<redact::Redaction>,
     /// The scroll offset as of the last frame.
     offset: Vec2,
     /// The page view's size as of the last frame.
@@ -423,6 +425,7 @@ impl Viewer {
             zoom_mode: ZoomMode::FitWidth,
             zoom_input: String::new(),
             organize: organize::Organize::default(),
+            redaction: None,
             offset: Vec2::ZERO,
             view_size: Vec2::new(800.0, 600.0),
             scroll_to: None,
@@ -1402,6 +1405,9 @@ impl Viewer {
         let shift = ctx.input(|i| i.modifiers.shift);
         let pressed = |k| ctx.input(|i| i.key_pressed(k));
         let copy = ctx.input(|i| i.events.iter().any(|e| matches!(e, Event::Copy)));
+        if !typing && self.redaction.is_some() && shortcut(Key::Z) {
+            self.undo_redaction_mark();
+        }
         if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::S)) {
             self.save(SaveTo::As);
         }
@@ -2192,6 +2198,10 @@ impl Viewer {
             self.offset = viewport.min.to_vec2();
             let (rect, response) = ui.allocate_exact_size(content, Sense::click_and_drag());
             self.draw_pages(ui, rect.min, viewport);
+            if self.redaction.is_some() {
+                self.pointer(ui, &response, rect.min);
+                return;
+            }
             self.draw_fields(ui, rect.min);
             self.draw_hotspots(ui, rect.min);
             self.draw_pick(ui, rect.min);
@@ -2421,6 +2431,9 @@ impl Viewer {
                     }
                 }
             }
+            if let Some(redaction) = &self.redaction {
+                redaction.paint(&page_painter, page, page_rect);
+            }
         }
 
         // Ask the workers for what is missing, most urgent first: sharp
@@ -2592,7 +2605,9 @@ impl Viewer {
             self.zoom_by(f64::from(zoom_delta).sqrt(), anchor);
         }
 
-        if self.detect_pointer(ui, response, origin) {
+        if self.redaction_pointer(ui, response, to_layout)
+            || self.detect_pointer(ui, response, origin)
+        {
             return;
         }
         let at = response
@@ -2767,6 +2782,7 @@ impl Viewer {
         self.organize_window(&ctx);
         self.tab_bar(ui);
         self.update_tick(&ctx);
+        self.redaction_bar(ui);
         self.tool_bar(ui);
         self.fields_bar(ui);
         self.safety_notice(ui);

@@ -155,6 +155,7 @@ impl Viewer {
     /// Clears what belongs to the file that was in front.
     pub(super) fn after_switch(&mut self) {
         self.organize = Default::default();
+        self.redaction = None;
         self.selecting = false;
         self.menu = None;
         self.annotate.reset();

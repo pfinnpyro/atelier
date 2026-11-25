@@ -21,7 +21,7 @@ mod wrapper;
 mod write;
 mod xref;
 
-pub use content::{ContentParser, Operation};
+pub use content::{ContentParser, Operation, read_inline_image};
 pub use crypt::Access;
 pub use decode::{DecodedStream, ImageFilter};
 pub use document::Document;

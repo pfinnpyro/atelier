@@ -222,6 +222,21 @@ Move to start/end, rotate and export work on the selected pages.
 - **Export…** saves the selected pages as a separate PDF.
 - **Print selected…** opens the Print dialog on the selected pages.
 
+Use **File → Secure Redaction…** to open the redaction toolbar on
+the main canvas. Drag an area, select text, click an image, or mark detected
+table cells while using the usual zoom, pan, and page navigation. Each
+selection becomes one or more marks.
+
+**Preserve text and vectors** rebuilds supported image objects and inline
+images, embedded outline fonts including Identity-V vertical text, and
+Type 3 fonts with supported vector and inline stencil glyphs. It removes
+glyphs and image pixels that overlap marks and reconstructs the visible
+parts of crossing axis-aligned filled rectangles. Export stops on unsupported
+content. **Export page images** is available for complex pages. Both modes
+rebuild the PDF and omit attachments, forms, annotations, document metadata,
+and revision history. Before saving, Atelier reopens the copy and verifies
+the generated objects and marked regions.
+
 The navigation sidebar retains page previews, outline, thumbnail spreads,
 selection, rotation and deletion. Find (Ctrl/Cmd+F or the main menu) reveals
 search. **Side by side** in the toolbar pairs pages in the main document view.

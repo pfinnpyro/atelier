@@ -47,6 +47,7 @@ impl Viewer {
             Command::Fields => self.open.as_ref().is_some_and(|o| o.form.is_some()),
             Command::AutoOrient => self.open.as_ref().is_some_and(|o| o.orienting.is_none()),
             Command::SideBySide => open && !self.organize.grid,
+            Command::RedactCopy => open,
             Command::PreviousTab | Command::NextTab => self.tabs.len() > 1,
             Command::ClearRecent => !self.recent.files.is_empty(),
             Command::ReopenClosedTab => !self.closed_tabs.is_empty(),
@@ -176,6 +177,7 @@ impl Viewer {
                 self.apply_fit();
             }
             Command::SideBySide => self.toggle_facing(),
+            Command::RedactCopy => self.open_redaction(),
             Command::Organize => self.toggle_page_grid(),
             Command::PreviousPage => self.go_to_page(page.saturating_sub(1)),
             Command::NextPage => self.go_to_page(page + 1),

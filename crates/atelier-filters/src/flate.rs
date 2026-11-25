@@ -45,41 +45,71 @@ pub fn decode_flate(data: &[u8]) -> Result<Vec<u8>> {
 /// Decodes raw DEFLATE data.
 pub fn inflate(data: &[u8]) -> Result<Vec<u8>> {
     let mut out = Vec::with_capacity(data.len().saturating_mul(4));
-    match inflate_into(data, &mut out) {
-        Ok(()) => Ok(out),
+    match inflate_into(data, &mut out, usize::MAX) {
+        Ok(_) => Ok(out),
         Err(reason) => Err(FilterError::new(FILTER, reason, out)),
     }
 }
 
-fn inflate_into(data: &[u8], out: &mut Vec<u8>) -> std::result::Result<(), &'static str> {
+/// Finds the end of a single zlib member, validating its checksum. The rest of
+/// the input can contain PDF operators, so it must not be treated as compressed data.
+pub fn zlib_member_length(data: &[u8], max_output: usize) -> Option<usize> {
+    let [cmf, flg, body @ ..] = data else {
+        return None;
+    };
+    if cmf & 0x0f != 8
+        || cmf >> 4 > 7
+        || flg & 0x20 != 0
+        || (u16::from(*cmf) << 8 | u16::from(*flg)) % 31 != 0
+    {
+        return None;
+    }
+    let mut output = Vec::new();
+    let length = inflate_into(body, &mut output, max_output).ok()?;
+    let checksum = u32::from_be_bytes(body.get(length..length + 4)?.try_into().ok()?);
+    (checksum == crate::adler32(&output)).then_some(2 + length + 4)
+}
+
+fn inflate_into(
+    data: &[u8],
+    out: &mut Vec<u8>,
+    max_output: usize,
+) -> std::result::Result<usize, &'static str> {
     let mut br = BitReader::new(data);
     let mut fixed: Option<(Huffman, Huffman)> = None;
     loop {
         let last = br.bits(1)? == 1;
         match br.bits(2)? {
-            0 => stored_block(&mut br, out)?,
+            0 => stored_block(&mut br, out, max_output)?,
             1 => {
                 let (lit, dist) = fixed.get_or_insert_with(fixed_tables);
-                codes(&mut br, out, lit, dist)?;
+                codes(&mut br, out, lit, dist, max_output)?;
             }
             2 => {
                 let (lit, dist) = dynamic_tables(&mut br)?;
-                codes(&mut br, out, &lit, &dist)?;
+                codes(&mut br, out, &lit, &dist, max_output)?;
             }
             _ => return Err("invalid block type"),
         }
         if last {
-            return Ok(());
+            return Ok(br.pos - (br.count / 8) as usize);
         }
     }
 }
 
-fn stored_block(br: &mut BitReader, out: &mut Vec<u8>) -> std::result::Result<(), &'static str> {
+fn stored_block(
+    br: &mut BitReader,
+    out: &mut Vec<u8>,
+    max_output: usize,
+) -> std::result::Result<(), &'static str> {
     br.align_to_byte();
     let len = br.bits(16)?;
     let nlen = br.bits(16)?;
     if len != !nlen & 0xffff {
         return Err("stored block length check failed");
+    }
+    if len as usize > max_output - out.len() {
+        return Err("output limit exceeded");
     }
     out.reserve(len as usize);
     for _ in 0..len {
@@ -93,15 +123,20 @@ fn codes(
     out: &mut Vec<u8>,
     lit: &Huffman,
     dist: &Huffman,
+    max_output: usize,
 ) -> std::result::Result<(), &'static str> {
     loop {
         let sym = lit.decode(br)?;
         match sym {
-            0..=255 => out.push(sym as u8),
+            0..=255 if out.len() < max_output => out.push(sym as u8),
+            0..=255 => return Err("output limit exceeded"),
             256 => return Ok(()),
             257..=285 => {
                 let i = usize::from(sym - 257);
                 let len = usize::from(LEN_BASE[i]) + br.bits(u32::from(LEN_EXTRA[i]))? as usize;
+                if len > max_output - out.len() {
+                    return Err("output limit exceeded");
+                }
                 let d = usize::from(dist.decode(br)?);
                 if d >= 30 {
                     return Err("invalid distance symbol");

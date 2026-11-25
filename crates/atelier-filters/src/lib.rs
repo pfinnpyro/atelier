@@ -22,7 +22,7 @@ pub use asciihex::decode_ascii_hex;
 pub use ccitt::{CcittParams, decode_ccitt};
 pub use dct::{DecodedJpeg, decode_dct};
 pub use deflate::{adler32, encode_flate};
-pub use flate::{decode_flate, inflate};
+pub use flate::{decode_flate, inflate, zlib_member_length};
 pub use jbig2::decode_jbig2;
 pub use jpx::{DecodedJpx, JpxColor, decode_jpx};
 pub use lzw::decode_lzw;
